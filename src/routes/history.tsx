@@ -1,55 +1,57 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Search, Filter, Check, Clock, X, FileText, MinusCircle } from "lucide-react";
+import { Search, Check, Clock, X, FileText, Trash2 } from "lucide-react";
+import { useAttendance, type AttendanceStatus } from "@/lib/tracker-store";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "היסטוריה — המעקב שלי" }] }),
   component: HistoryPage,
 });
 
-type S = "present" | "late" | "absent" | "excused" | "none";
-const rows: { date: string; status: S; note?: string }[] = [
-  { date: "2026-06-05", status: "present" },
-  { date: "2026-06-04", status: "present" },
-  { date: "2026-06-03", status: "late", note: "תחבורה ציבורית" },
-  { date: "2026-06-02", status: "present" },
-  { date: "2026-06-01", status: "excused", note: "תור רפואי" },
-  { date: "2026-05-31", status: "present" },
-  { date: "2026-05-30", status: "present" },
-  { date: "2026-05-29", status: "absent", note: "מחלה" },
-  { date: "2026-05-28", status: "present" },
-  { date: "2026-05-27", status: "present" },
-  { date: "2026-05-26", status: "late" },
-  { date: "2026-05-25", status: "present" },
-];
-
-const meta: Record<S, { label: string; icon: typeof Check; color: string }> = {
-  present: { label: "נוכח",   icon: Check,       color: "text-status-present" },
-  late:    { label: "איחור",  icon: Clock,       color: "text-status-late" },
-  absent:  { label: "נעדר",   icon: X,           color: "text-status-absent" },
-  excused: { label: "מוצדק",  icon: FileText,    color: "text-status-excused" },
-  none:    { label: "ללא",    icon: MinusCircle, color: "text-status-none" },
+const meta: Record<AttendanceStatus, { label: string; icon: typeof Check; color: string }> = {
+  present: { label: "נוכח",   icon: Check,    color: "text-status-present" },
+  late:    { label: "איחור",  icon: Clock,    color: "text-status-late" },
+  absent:  { label: "נעדר",   icon: X,        color: "text-status-absent" },
+  excused: { label: "מוצדק",  icon: FileText, color: "text-status-excused" },
 };
 
+const filters: { key: "all" | AttendanceStatus; label: string }[] = [
+  { key: "all", label: "הכל" },
+  { key: "present", label: "נוכח" },
+  { key: "late", label: "איחור" },
+  { key: "absent", label: "נעדר" },
+  { key: "excused", label: "מוצדק" },
+];
+
 function HistoryPage() {
+  const { records, remove } = useAttendance();
   const [q, setQ] = useState("");
-  const filtered = rows.filter((r) => r.date.includes(q) || (r.note ?? "").includes(q));
+  const [filter, setFilter] = useState<"all" | AttendanceStatus>("all");
+
+  const filtered = records.filter((r) =>
+    (filter === "all" || r.status === filter) &&
+    (r.date.includes(q) || (r.note ?? "").includes(q))
+  );
 
   return (
-    <AppShell title="היסטוריה" subtitle="כל הרישומים שלך">
-      <div className="card-surface p-4 mb-4 flex items-center gap-3">
-        <div className="flex-1 relative">
+    <AppShell title="היסטוריה" subtitle={`${records.length} רישומים סה״כ`}>
+      <div className="card-surface p-4 mb-4 space-y-3">
+        <div className="relative">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <input
-            value={q} onChange={(e) => setQ(e.target.value)}
+          <input value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="חיפוש לפי תאריך או הערה..."
-            className="w-full rounded-md border border-input bg-card pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+            className="w-full rounded-md border border-input bg-card pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
         </div>
-        <button className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-accent">
-          <Filter className="size-4" /> סינון
-        </button>
+        <div className="flex flex-wrap gap-1">
+          {filters.map((f) => (
+            <button key={f.key} onClick={() => setFilter(f.key)}
+              className={`px-3 py-1.5 rounded-md text-xs transition ${filter === f.key ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground border border-border"}`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="card-surface overflow-hidden">
@@ -59,6 +61,7 @@ function HistoryPage() {
               <th className="text-right px-4 py-3 font-medium">תאריך</th>
               <th className="text-right px-4 py-3 font-medium">סטטוס</th>
               <th className="text-right px-4 py-3 font-medium">הערה</th>
+              <th className="px-4 py-3 w-12"></th>
             </tr>
           </thead>
           <tbody>
@@ -74,6 +77,12 @@ function HistoryPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{r.note ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => { remove(r.date); toast("הרישום נמחק"); }}
+                      className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
