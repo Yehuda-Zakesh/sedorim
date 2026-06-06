@@ -102,7 +102,7 @@ function AuditPage() {
                     )}
                   </div>
                   {e.detail && <p className="text-xs text-muted-foreground mt-0.5">{e.detail}</p>}
-                  {(e.oldValue || e.newValue) && (
+                  {(e.oldValue !== undefined || e.newValue !== undefined) && (
                     <details className="mt-1 text-xs text-muted-foreground">
                       <summary className="cursor-pointer select-none hover:text-foreground">פרטי שינוי</summary>
                       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
