@@ -1,15 +1,25 @@
 import type { ReactNode } from "react";
-import { Moon, Sun, Monitor } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Moon, Sun, Monitor, Keyboard } from "lucide-react";
 import { AppSidebar } from "./app-sidebar";
+import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
+import { applyAppearance, useSettings, isOnboarded } from "@/lib/settings-store";
+import { useGlobalShortcuts } from "@/lib/shortcuts";
+import { OnboardingWizard } from "./onboarding-wizard";
 
 export function AppShell({ title, subtitle, actions, children }: {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-  children: ReactNode;
+  title: string; subtitle?: string; actions?: ReactNode; children: ReactNode;
 }) {
   const { theme, setTheme } = useTheme();
+  useSettings(); // re-render on settings change
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+  useEffect(() => { applyAppearance(); }, []);
+  useEffect(() => { setNeedsOnboarding(!isOnboarded()); }, []);
+  useGlobalShortcuts(() => setHelpOpen((v) => !v));
+
   const cycle = () => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
   const label = theme === "light" ? "בהיר" : theme === "dark" ? "כהה" : "מערכת";
@@ -22,17 +32,16 @@ export function AppShell({ title, subtitle, actions, children }: {
           <div className="flex items-center justify-between gap-4 px-6 py-3.5">
             <div>
               <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-              {subtitle && (
-                <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
-              )}
+              {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
             </div>
             <div className="flex items-center gap-2">
               {actions}
-              <button
-                onClick={cycle}
-                title={`ערכת נושא: ${label}`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition"
-              >
+              <button onClick={() => setHelpOpen(true)} title="קיצורי מקלדת (?)"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition">
+                <Keyboard className="size-4" />
+              </button>
+              <button onClick={cycle} title={`ערכת נושא: ${label}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition">
                 <Icon className="size-4" />
                 <span className="hidden sm:inline">{label}</span>
               </button>
@@ -41,6 +50,8 @@ export function AppShell({ title, subtitle, actions, children }: {
         </header>
         <main className="flex-1 p-6">{children}</main>
       </div>
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {needsOnboarding && <OnboardingWizard onComplete={() => setNeedsOnboarding(false)} />}
     </div>
   );
 }

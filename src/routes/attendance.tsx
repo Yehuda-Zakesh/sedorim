@@ -26,8 +26,12 @@ function AttendancePage() {
 
   const save = () => {
     if (!selected) return;
-    upsert({ date: today, status: selected, note: note.trim() || undefined });
-    toast.success("הרישום נשמר", { description: today });
+    try {
+      upsert({ date: today, status: selected, note: note.trim() || undefined });
+      toast.success("הרישום נשמר", { description: today });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בשמירה");
+    }
   };
 
   const recent = records.slice(0, 6);
