@@ -20,13 +20,15 @@ function LearningPage() {
   const thisMonth = items.filter((i) => i.date.startsWith(monthPrefix)).length;
 
   const handleAdd = () => {
-    if (!topic.trim()) {
-      toast.error("יש להזין נושא");
-      return;
+    if (!topic.trim()) { toast.error("יש להזין נושא"); return; }
+    if (minutes > 360 && !confirm("משך לימוד ארוך מהרגיל (מעל 6 שעות). להמשיך?")) return;
+    try {
+      add({ id: Date.now().toString(), topic: topic.trim(), date: todayISO(), minutes });
+      setTopic(""); setMinutes(60);
+      toast.success("השיעור נוסף");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בשמירה");
     }
-    add({ id: Date.now().toString(), topic: topic.trim(), date: todayISO(), minutes });
-    setTopic(""); setMinutes(60);
-    toast.success("השיעור נוסף");
   };
 
   return (

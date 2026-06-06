@@ -64,8 +64,10 @@ function CalendarPage() {
 
   const setStatus = (s: AttendanceStatus) => {
     if (!selectedDate) return;
-    upsert({ date: selectedDate, status: s, note: selectedRec?.note });
-    toast.success(`עודכן ל${labelOf(s)}`, { description: selectedDate });
+    try {
+      upsert({ date: selectedDate, status: s, note: selectedRec?.note });
+      toast.success(`עודכן ל${labelOf(s)}`, { description: selectedDate });
+    } catch (e) { toast.error(e instanceof Error ? e.message : "שגיאה"); }
   };
 
   const clear = () => {

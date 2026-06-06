@@ -1,16 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard,
-  ClipboardCheck,
-  CalendarDays,
-  History,
-  BookOpen,
-  BarChart3,
-  FileText,
-  Search,
-  ShieldCheck,
-  Settings,
-  DatabaseBackup,
+  LayoutDashboard, ClipboardCheck, CalendarDays, History, BookOpen,
+  BarChart3, Sparkles, FileText, Search, ShieldCheck, Settings, DatabaseBackup,
 } from "lucide-react";
 
 const navItems = [
@@ -20,6 +11,7 @@ const navItems = [
   { to: "/history", label: "היסטוריה", icon: History },
   { to: "/learning", label: "לימוד נוסף", icon: BookOpen },
   { to: "/statistics", label: "סטטיסטיקות", icon: BarChart3 },
+  { to: "/insights", label: "תובנות חכמות", icon: Sparkles },
   { to: "/reports", label: "דוחות", icon: FileText },
   { to: "/search", label: "חיפוש", icon: Search },
   { to: "/audit", label: "יומן ביקורת", icon: ShieldCheck },

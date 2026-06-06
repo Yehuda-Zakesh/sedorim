@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import { logAudit } from "./audit-store";
+import { validateAttendance, validateLearning } from "./validators";
+import { maybeAutoBackup, createSnapshot } from "./auto-backup";
+import { getSettings } from "./settings-store";
 
 export type AttendanceStatus = "present" | "late" | "absent" | "excused";
 
@@ -6,6 +10,7 @@ export type AttendanceRecord = {
   date: string;     // YYYY-MM-DD
   status: AttendanceStatus;
   note?: string;
+  tags?: string[];
 };
 
 export type LearningItem = {
@@ -13,6 +18,7 @@ export type LearningItem = {
   topic: string;
   date: string;
   minutes: number;
+  tags?: string[];
 };
 
 const ATT_KEY = "tracker.attendance.v1";
@@ -57,12 +63,22 @@ function save<T>(key: string, value: T) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* noop */ }
 }
 
-// Simple pub-sub so multiple components stay in sync within one tab
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
 
-let attendance = load(ATT_KEY, seedAttendance);
-let learning = load(LRN_KEY, seedLearning);
+let attendance: AttendanceRecord[] = load(ATT_KEY, seedAttendance);
+let learning: LearningItem[] = load(LRN_KEY, seedLearning);
+
+function snapshotIfConfigured() {
+  if (typeof window === "undefined") return;
+  const s = getSettings();
+  if (!s.data.autoBackupBeforeOps) return;
+  createSnapshot({ attendance, learning }, "before-op");
+}
+
+export class ValidationError extends Error {
+  constructor(message: string) { super(message); this.name = "ValidationError"; }
+}
 
 export function useAttendance() {
   const [, force] = useState(0);
@@ -75,13 +91,38 @@ export function useAttendance() {
   return {
     records: attendance,
     upsert(rec: AttendanceRecord) {
+      const v = validateAttendance(rec);
+      if (!v.ok) {
+        logAudit("data.validation_failed", { recordId: rec.date, detail: v.error, newValue: rec });
+        throw new ValidationError(v.error);
+      }
+      const prev = attendance.find((r) => r.date === rec.date);
+      if (!prev) snapshotIfConfigured();
       attendance = [rec, ...attendance.filter((r) => r.date !== rec.date)]
         .sort((a, b) => (a.date < b.date ? 1 : -1));
       save(ATT_KEY, attendance);
+      logAudit(prev ? "attendance.update" : "attendance.create", {
+        recordId: rec.date, oldValue: prev, newValue: rec,
+      });
+      maybeAutoBackup({ attendance, learning });
       emit();
     },
     remove(date: string) {
+      const prev = attendance.find((r) => r.date === date);
+      if (!prev) return;
+      snapshotIfConfigured();
       attendance = attendance.filter((r) => r.date !== date);
+      save(ATT_KEY, attendance);
+      logAudit("attendance.delete", { recordId: date, oldValue: prev });
+      emit();
+    },
+    replaceAll(records: AttendanceRecord[]) {
+      const cleaned: AttendanceRecord[] = [];
+      for (const r of records) {
+        const v = validateAttendance(r);
+        if (v.ok) cleaned.push(r);
+      }
+      attendance = cleaned.sort((a, b) => (a.date < b.date ? 1 : -1));
       save(ATT_KEY, attendance);
       emit();
     },
@@ -99,17 +140,40 @@ export function useLearning() {
   return {
     items: learning,
     add(item: LearningItem) {
+      const v = validateLearning(item);
+      if (!v.ok) {
+        logAudit("data.validation_failed", { recordId: item.id, detail: v.error, newValue: item });
+        throw new ValidationError(v.error);
+      }
       learning = [item, ...learning];
       save(LRN_KEY, learning);
+      logAudit("learning.create", { recordId: item.id, newValue: item });
+      maybeAutoBackup({ attendance, learning });
       emit();
     },
     remove(id: string) {
+      const prev = learning.find((i) => i.id === id);
+      if (!prev) return;
       learning = learning.filter((i) => i.id !== id);
+      save(LRN_KEY, learning);
+      logAudit("learning.delete", { recordId: id, oldValue: prev });
+      emit();
+    },
+    replaceAll(items: LearningItem[]) {
+      const cleaned: LearningItem[] = [];
+      for (const it of items) {
+        const v = validateLearning(it);
+        if (v.ok) cleaned.push(it);
+      }
+      learning = cleaned;
       save(LRN_KEY, learning);
       emit();
     },
   };
 }
+
+export function getAttendanceSnapshot() { return attendance; }
+export function getLearningSnapshot() { return learning; }
 
 // Aggregations
 export function inMonth(records: AttendanceRecord[], year: number, month: number) {
@@ -142,4 +206,11 @@ export function currentStreak(records: AttendanceRecord[]) {
 export function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function allTags(records: AttendanceRecord[], lessons: LearningItem[]): string[] {
+  const set = new Set<string>();
+  for (const r of records) (r.tags || []).forEach((t) => set.add(t));
+  for (const l of lessons) (l.tags || []).forEach((t) => set.add(t));
+  return [...set].sort();
 }
