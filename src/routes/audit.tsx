@@ -109,13 +109,13 @@ function AuditPage() {
                         {e.oldValue !== undefined && (
                           <div className="rounded border border-border p-2 bg-muted/30">
                             <div className="text-[10px] font-medium mb-1">ערך קודם</div>
-                            <pre className="text-[10px] whitespace-pre-wrap break-all">{JSON.stringify(e.oldValue, null, 1)}</pre>
+                            <pre className="text-[10px] whitespace-pre-wrap break-all">{JSON.stringify(e.oldValue, null, 1) as string}</pre>
                           </div>
                         )}
                         {e.newValue !== undefined && (
                           <div className="rounded border border-border p-2 bg-muted/30">
                             <div className="text-[10px] font-medium mb-1">ערך חדש</div>
-                            <pre className="text-[10px] whitespace-pre-wrap break-all">{JSON.stringify(e.newValue, null, 1)}</pre>
+                            <pre className="text-[10px] whitespace-pre-wrap break-all">{JSON.stringify(e.newValue, null, 1) as string}</pre>
                           </div>
                         )}
                       </div>

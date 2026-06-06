@@ -14,6 +14,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as LearningRouteImport } from './routes/learning'
+import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as BackupRouteImport } from './routes/backup'
@@ -44,6 +45,11 @@ const ReportsRoute = ReportsRouteImport.update({
 const LearningRoute = LearningRouteImport.update({
   id: '/learning',
   path: '/learning',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/backup': typeof BackupRoute
   '/calendar': typeof CalendarRoute
   '/history': typeof HistoryRoute
+  '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
@@ -97,6 +104,7 @@ export interface FileRoutesByTo {
   '/backup': typeof BackupRoute
   '/calendar': typeof CalendarRoute
   '/history': typeof HistoryRoute
+  '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
@@ -111,6 +119,7 @@ export interface FileRoutesById {
   '/backup': typeof BackupRoute
   '/calendar': typeof CalendarRoute
   '/history': typeof HistoryRoute
+  '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/calendar'
     | '/history'
+    | '/insights'
     | '/learning'
     | '/reports'
     | '/search'
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/calendar'
     | '/history'
+    | '/insights'
     | '/learning'
     | '/reports'
     | '/search'
@@ -152,6 +163,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/calendar'
     | '/history'
+    | '/insights'
     | '/learning'
     | '/reports'
     | '/search'
@@ -166,6 +178,7 @@ export interface RootRouteChildren {
   BackupRoute: typeof BackupRoute
   CalendarRoute: typeof CalendarRoute
   HistoryRoute: typeof HistoryRoute
+  InsightsRoute: typeof InsightsRoute
   LearningRoute: typeof LearningRoute
   ReportsRoute: typeof ReportsRoute
   SearchRoute: typeof SearchRoute
@@ -208,6 +221,13 @@ declare module '@tanstack/react-router' {
       path: '/learning'
       fullPath: '/learning'
       preLoaderRoute: typeof LearningRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/history': {
@@ -262,6 +282,7 @@ const rootRouteChildren: RootRouteChildren = {
   BackupRoute: BackupRoute,
   CalendarRoute: CalendarRoute,
   HistoryRoute: HistoryRoute,
+  InsightsRoute: InsightsRoute,
   LearningRoute: LearningRoute,
   ReportsRoute: ReportsRoute,
   SearchRoute: SearchRoute,
