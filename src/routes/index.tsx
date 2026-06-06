@@ -1,15 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import {
-  Users, UserCheck, UserX, Clock, TrendingUp, AlertTriangle,
+  UserCheck, Clock, TrendingUp, AlertTriangle,
   CalendarCheck, BookOpen, ChevronLeft, Sparkles, Bell,
+  Flame, Target, CalendarPlus, FileDown, DatabaseBackup,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "לוח בקרה — מערכת נוכחות" },
-      { name: "description", content: "סקירה כללית של נוכחות תלמידים, התראות והכנסות יומיות" },
+      { title: "לוח בקרה — המעקב שלי" },
+      { name: "description", content: "מעקב אישי אחר נוכחות, רצפים והתקדמות" },
     ],
   }),
   component: Dashboard,
@@ -18,10 +19,10 @@ export const Route = createFileRoute("/")({
 const hebrewDate = "כ״ב סיון תשפ״ו · 6 ביוני 2026";
 
 const kpis = [
-  { label: "סה״כ תלמידים", value: "184", delta: "+4 החודש", icon: Users, tone: "primary" as const },
-  { label: "נוכחים היום", value: "162", delta: "88% מהכיתה", icon: UserCheck, tone: "success" as const },
-  { label: "איחורים", value: "9", delta: "+2 מאתמול", icon: Clock, tone: "warning" as const },
-  { label: "נעדרים", value: "13", delta: "5 ללא הצדקה", icon: UserX, tone: "destructive" as const },
+  { label: "נוכחות החודש", value: "92%", delta: "+3% מהחודש שעבר", icon: UserCheck, tone: "success" as const },
+  { label: "ימים רצופים", value: "14", delta: "השיא שלך: 21", icon: Flame, tone: "warning" as const },
+  { label: "איחורים החודש", value: "2", delta: "מתוך יעד: עד 3", icon: Clock, tone: "info" as const },
+  { label: "יעד חודשי", value: "95%", delta: "נותרו 3 ימים", icon: Target, tone: "primary" as const },
 ];
 
 const toneStyles: Record<string, string> = {
@@ -40,11 +41,10 @@ function Dashboard() {
       actions={
         <button className="inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition">
           <CalendarCheck className="size-4" />
-          רישום נוכחות מהיר
+          רישום נוכחות להיום
         </button>
       }
     >
-      {/* KPI Row */}
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {kpis.map((k) => (
           <div key={k.label} className="card-surface p-5">
@@ -62,33 +62,31 @@ function Dashboard() {
         ))}
       </section>
 
-      {/* Reminder banner */}
       <div className="mt-5 card-surface p-4 flex items-center gap-3 border-r-4 border-r-info">
         <div className="size-9 rounded-md bg-info/10 text-info grid place-items-center">
           <Bell className="size-4" />
         </div>
         <div className="flex-1">
-          <div className="text-sm font-semibold">תזכורת: סגירת נוכחות לחודש</div>
-          <p className="text-xs text-muted-foreground mt-0.5">נותרו 3 ימים לסגירת דוח הנוכחות החודשי. ודאו השלמת רישומים חסרים.</p>
+          <div className="text-sm font-semibold">לא רשמת נוכחות להיום</div>
+          <p className="text-xs text-muted-foreground mt-0.5">סמן את הסטטוס היומי שלך כדי לשמור על רצף הרישומים.</p>
         </div>
         <button className="text-xs text-info hover:underline inline-flex items-center gap-1">
-          להשלמה <ChevronLeft className="size-3" />
+          לרישום <ChevronLeft className="size-3" />
         </button>
       </div>
 
       <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Attendance breakdown */}
         <div className="card-surface p-5 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold">סטטוס נוכחות יומי</h2>
-            <span className="text-xs text-muted-foreground">היום</span>
+            <h2 className="text-sm font-semibold">פילוח החודש</h2>
+            <span className="text-xs text-muted-foreground">סיון תשפ״ו</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {[
-              { label: "נוכח", value: 162, color: "var(--status-present)" },
-              { label: "איחור", value: 9, color: "var(--status-late)" },
-              { label: "נעדר", value: 8, color: "var(--status-absent)" },
-              { label: "מוצדק", value: 5, color: "var(--status-excused)" },
+              { label: "נוכח", value: 18, color: "var(--status-present)" },
+              { label: "איחור", value: 2, color: "var(--status-late)" },
+              { label: "נעדר", value: 1, color: "var(--status-absent)" },
+              { label: "מוצדק", value: 1, color: "var(--status-excused)" },
               { label: "ללא רישום", value: 0, color: "var(--status-none)" },
             ].map((s) => (
               <div key={s.label} className="rounded-lg border border-border p-3">
@@ -101,33 +99,29 @@ function Dashboard() {
             ))}
           </div>
 
-          {/* mini bar */}
           <div className="mt-5">
-            <div className="text-xs text-muted-foreground mb-2">מגמת נוכחות שבועית</div>
+            <div className="text-xs text-muted-foreground mb-2">אחוז נוכחות לפי שבוע</div>
             <div className="flex items-end gap-2 h-28">
-              {[82, 88, 85, 90, 87, 91, 88].map((v, i) => (
+              {[88, 92, 100, 90, 95].map((v, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1">
                   <div className="w-full rounded-t-md bg-primary/80" style={{ height: `${v}%` }} />
-                  <span className="text-[10px] text-muted-foreground">
-                    {["א", "ב", "ג", "ד", "ה", "ו", "ש"][i]}
-                  </span>
+                  <span className="text-[10px] text-muted-foreground">שבוע {i + 1}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Alerts */}
         <div className="card-surface p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold">התראות פעילות</h2>
-            <span className="text-xs text-destructive font-medium">3 חדשות</span>
+            <h2 className="text-sm font-semibold">תזכורות אישיות</h2>
+            <span className="text-xs text-info font-medium">2 פעילות</span>
           </div>
           <ul className="space-y-3">
             {[
-              { icon: AlertTriangle, tone: "destructive", title: "5 תלמידים מעל מכסת היעדרות", desc: "נדרשת התייחסות מיידית" },
-              { icon: Clock, tone: "warning", title: "ריבוי איחורים בכיתה י׳1", desc: "9 איחורים השבוע" },
-              { icon: BookOpen, tone: "info", title: "סבב לימוד נוסף החל", desc: "הקצאת חדרים פתוחה" },
+              { icon: AlertTriangle, tone: "warning", title: "מתקרב למכסת איחורים", desc: "עוד איחור אחד יחרוג מהיעד" },
+              { icon: BookOpen, tone: "info", title: "לימוד נוסף — מחר 18:00", desc: "שיעור משלים שנקבע" },
+              { icon: CalendarPlus, tone: "success", title: "סיימת שבוע מלא", desc: "המשך כך לשמירה על הרצף" },
             ].map((a, i) => (
               <li key={i} className="flex gap-3">
                 <div className={`size-8 rounded-md grid place-items-center shrink-0 ${toneStyles[a.tone]}`}>
@@ -143,25 +137,24 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Smart insights + Quick actions */}
       <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card-surface p-5 lg:col-span-2 bg-gradient-to-l from-primary/5 to-transparent">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="size-4 text-primary" />
-            <h2 className="text-sm font-semibold">תובנות חכמות</h2>
+            <h2 className="text-sm font-semibold">תובנות אישיות</h2>
           </div>
           <ul className="space-y-2 text-sm">
             <li className="flex items-start gap-2">
               <TrendingUp className="size-4 text-success mt-0.5 shrink-0" />
-              <span>שיעור הנוכחות עלה ב־<b className="tabular-nums">3.2%</b> לעומת החודש הקודם.</span>
+              <span>הנוכחות שלך עלתה ב־<b className="tabular-nums">3%</b> לעומת החודש הקודם.</span>
             </li>
             <li className="flex items-start gap-2">
               <AlertTriangle className="size-4 text-warning mt-0.5 shrink-0" />
-              <span>זוהתה מגמת איחורים גוברת בימי ראשון — מומלץ לבחון את שעת הפתיחה.</span>
+              <span>רוב האיחורים שלך מתרחשים בימי ראשון — שווה לבדוק את שגרת הבוקר.</span>
             </li>
             <li className="flex items-start gap-2">
               <BookOpen className="size-4 text-info mt-0.5 shrink-0" />
-              <span>34 תלמידים סיימו את מכסת הלימוד הנוסף החודשית.</span>
+              <span>השלמת <b className="tabular-nums">5</b> שעות לימוד נוסף החודש.</span>
             </li>
           </ul>
         </div>
@@ -170,10 +163,10 @@ function Dashboard() {
           <h2 className="text-sm font-semibold mb-3">פעולות מהירות</h2>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "רישום נוכחות", icon: ClipboardLike },
-              { label: "הוספת תלמיד", icon: Users },
-              { label: "הפקת דוח", icon: TrendingUp },
-              { label: "גיבוי", icon: CalendarCheck },
+              { label: "רישום נוכחות", icon: CalendarCheck },
+              { label: "הוספת לימוד", icon: BookOpen },
+              { label: "ייצוא דוח", icon: FileDown },
+              { label: "גיבוי נתונים", icon: DatabaseBackup },
             ].map((a) => (
               <button key={a.label} className="rounded-lg border border-border bg-card hover:bg-accent transition p-3 text-right">
                 <a.icon className="size-4 text-primary mb-2" />
@@ -185,8 +178,4 @@ function Dashboard() {
       </div>
     </AppShell>
   );
-}
-
-function ClipboardLike(props: React.SVGProps<SVGSVGElement>) {
-  return <CalendarCheck {...props} />;
 }
