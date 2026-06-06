@@ -2,5 +2,5 @@ import { createFileRoute } from "@tanstack/react-router";
 import { StubPage } from "@/components/stub-page";
 
 export const Route = createFileRoute("/backup")({
-  component: () => <StubPage title="__TITLE__" subtitle="__SUB__" />,
+  component: () => <StubPage title="גיבוי ושחזור" subtitle="ניהול עותקי גיבוי ושחזור נתונים" />,
 });

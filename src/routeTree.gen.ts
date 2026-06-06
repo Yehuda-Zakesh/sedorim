@@ -9,9 +9,63 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as StatisticsRouteImport } from './routes/statistics'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as LearningRouteImport } from './routes/learning'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as CalendarRouteImport } from './routes/calendar'
+import { Route as BackupRouteImport } from './routes/backup'
+import { Route as AuditRouteImport } from './routes/audit'
 import { Route as AttendanceRouteImport } from './routes/attendance'
 import { Route as IndexRouteImport } from './routes/index'
 
+const StatisticsRoute = StatisticsRouteImport.update({
+  id: '/statistics',
+  path: '/statistics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LearningRoute = LearningRouteImport.update({
+  id: '/learning',
+  path: '/learning',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CalendarRoute = CalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BackupRoute = BackupRouteImport.update({
+  id: '/backup',
+  path: '/backup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AttendanceRoute = AttendanceRouteImport.update({
   id: '/attendance',
   path: '/attendance',
@@ -26,31 +80,164 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/attendance': typeof AttendanceRoute
+  '/audit': typeof AuditRoute
+  '/backup': typeof BackupRoute
+  '/calendar': typeof CalendarRoute
+  '/history': typeof HistoryRoute
+  '/learning': typeof LearningRoute
+  '/reports': typeof ReportsRoute
+  '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
+  '/statistics': typeof StatisticsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/attendance': typeof AttendanceRoute
+  '/audit': typeof AuditRoute
+  '/backup': typeof BackupRoute
+  '/calendar': typeof CalendarRoute
+  '/history': typeof HistoryRoute
+  '/learning': typeof LearningRoute
+  '/reports': typeof ReportsRoute
+  '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
+  '/statistics': typeof StatisticsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/attendance': typeof AttendanceRoute
+  '/audit': typeof AuditRoute
+  '/backup': typeof BackupRoute
+  '/calendar': typeof CalendarRoute
+  '/history': typeof HistoryRoute
+  '/learning': typeof LearningRoute
+  '/reports': typeof ReportsRoute
+  '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
+  '/statistics': typeof StatisticsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/attendance'
+  fullPaths:
+    | '/'
+    | '/attendance'
+    | '/audit'
+    | '/backup'
+    | '/calendar'
+    | '/history'
+    | '/learning'
+    | '/reports'
+    | '/search'
+    | '/settings'
+    | '/statistics'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/attendance'
-  id: '__root__' | '/' | '/attendance'
+  to:
+    | '/'
+    | '/attendance'
+    | '/audit'
+    | '/backup'
+    | '/calendar'
+    | '/history'
+    | '/learning'
+    | '/reports'
+    | '/search'
+    | '/settings'
+    | '/statistics'
+  id:
+    | '__root__'
+    | '/'
+    | '/attendance'
+    | '/audit'
+    | '/backup'
+    | '/calendar'
+    | '/history'
+    | '/learning'
+    | '/reports'
+    | '/search'
+    | '/settings'
+    | '/statistics'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AttendanceRoute: typeof AttendanceRoute
+  AuditRoute: typeof AuditRoute
+  BackupRoute: typeof BackupRoute
+  CalendarRoute: typeof CalendarRoute
+  HistoryRoute: typeof HistoryRoute
+  LearningRoute: typeof LearningRoute
+  ReportsRoute: typeof ReportsRoute
+  SearchRoute: typeof SearchRoute
+  SettingsRoute: typeof SettingsRoute
+  StatisticsRoute: typeof StatisticsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/statistics': {
+      id: '/statistics'
+      path: '/statistics'
+      fullPath: '/statistics'
+      preLoaderRoute: typeof StatisticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/learning': {
+      id: '/learning'
+      path: '/learning'
+      fullPath: '/learning'
+      preLoaderRoute: typeof LearningRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/calendar': {
+      id: '/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof CalendarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/backup': {
+      id: '/backup'
+      path: '/backup'
+      fullPath: '/backup'
+      preLoaderRoute: typeof BackupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/attendance': {
       id: '/attendance'
       path: '/attendance'
@@ -71,6 +258,15 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AttendanceRoute: AttendanceRoute,
+  AuditRoute: AuditRoute,
+  BackupRoute: BackupRoute,
+  CalendarRoute: CalendarRoute,
+  HistoryRoute: HistoryRoute,
+  LearningRoute: LearningRoute,
+  ReportsRoute: ReportsRoute,
+  SearchRoute: SearchRoute,
+  SettingsRoute: SettingsRoute,
+  StatisticsRoute: StatisticsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
