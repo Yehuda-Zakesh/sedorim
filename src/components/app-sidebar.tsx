@@ -38,8 +38,8 @@ export function AppSidebar() {
             ש
           </div>
           <div>
-            <div className="text-sm font-semibold leading-tight">מערכת נוכחות</div>
-            <div className="text-[11px] text-sidebar-foreground/60 leading-tight">ניהול תלמידים</div>
+            <div className="text-sm font-semibold leading-tight">המעקב שלי</div>
+            <div className="text-[11px] text-sidebar-foreground/60 leading-tight">נוכחות אישית</div>
           </div>
         </div>
       </div>
