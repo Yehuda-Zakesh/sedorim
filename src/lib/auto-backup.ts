@@ -65,12 +65,16 @@ export function verifySnapshot(snap: BackupSnapshot): boolean {
   return checksum(JSON.stringify(snap.payload)) === snap.checksum;
 }
 
-export function listSnapshots(): readonly BackupSnapshot[] {
-  return snapshots;
-}
+export function listSnapshots(): readonly BackupSnapshot[] { return snapshots; }
 
 export function deleteSnapshot(id: string) {
   snapshots = snapshots.filter((s) => s.id !== id);
+  persist();
+  emit();
+}
+
+export function clearAllSnapshots() {
+  snapshots = [];
   persist();
   emit();
 }
