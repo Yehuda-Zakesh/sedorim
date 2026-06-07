@@ -3,16 +3,10 @@ import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { logAudit } from "./audit-store";
 import {
-  type AttendanceRecord, type LearningItem,
-  attendanceRate, countByStatus, currentStreak, inMonth,
-} from "./tracker-store";
-
-const STATUS_LABEL: Record<string, string> = {
-  present: "נוכח",
-  late: "איחור",
-  absent: "נעדר",
-  excused: "מוצדק",
-};
+  type SederEntry, type LearningEntry,
+  calcSeder, monthlySummary, attendanceScore, FRAMEWORK_LABELS,
+} from "./kollel-store";
+import { formatHebrewDate } from "./hebrew-calendar";
 
 export type ReportSections = {
   kpis: boolean;
@@ -21,87 +15,83 @@ export type ReportSections = {
   learning: boolean;
   charts: boolean;
   excusedSummary: boolean;
+  oheveiList: boolean;
 };
 
 export const DEFAULT_SECTIONS: ReportSections = {
   kpis: true, monthlyTable: true, yearlyBreakdown: true,
-  learning: true, charts: true, excusedSummary: true,
+  learning: true, charts: true, excusedSummary: true, oheveiList: true,
 };
+
+function fmtMin(m: number): string {
+  if (!m) return "0";
+  const h = Math.floor(m / 60), r = m % 60;
+  return h > 0 ? `${h}:${String(r).padStart(2, "0")}` : `${r} דק׳`;
+}
+
+function inRange(d: string, range?: { from: string; to: string }) {
+  return (!range?.from || d >= range.from) && (!range?.to || d <= range.to);
+}
 
 function buildReportHTML(
   title: string,
-  records: AttendanceRecord[],
-  lessons: LearningItem[],
+  entries: SederEntry[],
+  lessons: LearningEntry[],
   sections: ReportSections,
   range?: { from: string; to: string },
 ): string {
-  const inRange = records.filter((r) =>
-    (!range?.from || r.date >= range.from) && (!range?.to || r.date <= range.to),
-  );
-  const lessonsInRange = lessons.filter((l) =>
-    (!range?.from || l.date >= range.from) && (!range?.to || l.date <= range.to),
-  );
+  const ents = entries.filter((e) => inRange(e.date, range));
+  const lsns = lessons.filter((l) => inRange(l.date, range));
 
-  const c = countByStatus(inRange);
-  const rate = attendanceRate(inRange);
-  const streak = currentStreak(records);
-
-  const now = new Date();
-  const y = now.getFullYear();
+  let totalMissing = 0, excused = 0, nonExcused = 0, bonus = 0,
+      lateCount = 0, absenceCount = 0, oheveiCount = 0, netMissing = 0,
+      earlyDepCount = 0;
+  for (const e of ents) {
+    const c = calcSeder(e);
+    totalMissing += c.missingMin; excused += c.excusedMin; nonExcused += c.nonExcusedMin;
+    bonus += c.bonusMin; netMissing += c.netMissingMin;
+    if (c.isLate) lateCount++;
+    if (e.absent) absenceCount++;
+    if (c.isOhevei) oheveiCount++;
+    if (c.isEarlyDeparture) earlyDepCount++;
+  }
+  const totalLearnMin = lsns.reduce((s, l) => s + l.minutes, 0);
 
   // monthly breakdown
-  const monthly: Record<string, AttendanceRecord[]> = {};
-  for (const r of inRange) {
-    const k = r.date.slice(0, 7);
-    (monthly[k] = monthly[k] || []).push(r);
-  }
+  const monthly: Record<string, SederEntry[]> = {};
+  for (const e of ents) (monthly[e.date.slice(0, 7)] = monthly[e.date.slice(0, 7)] || []).push(e);
   const monthKeys = Object.keys(monthly).sort();
 
-  const totalExcusedMin = inRange.filter((r) => r.status === "excused").length * 0; // unknown
-  const totalLearnMin = lessonsInRange.reduce((s, l) => s + l.minutes, 0);
+  const today = new Date();
+  const heDate = formatHebrewDate(today);
 
   const kpiHtml = !sections.kpis ? "" : `
     <section class="grid">
-      <div class="kpi"><div class="kpi-label">נוכחות</div><div class="kpi-val">${rate}%</div></div>
-      <div class="kpi"><div class="kpi-label">סה"כ ימים</div><div class="kpi-val">${inRange.length}</div></div>
-      <div class="kpi"><div class="kpi-label">רצף נוכחי</div><div class="kpi-val">${streak}</div></div>
-      <div class="kpi"><div class="kpi-label">איחורים</div><div class="kpi-val">${c.late}</div></div>
+      <div class="kpi"><div class="kpi-label">דקות חסרות (נטו)</div><div class="kpi-val">${netMissing}</div></div>
+      <div class="kpi"><div class="kpi-label">דקות בונוס</div><div class="kpi-val">${bonus}</div></div>
+      <div class="kpi"><div class="kpi-label">מוצדק</div><div class="kpi-val">${excused}</div></div>
+      <div class="kpi"><div class="kpi-label">סדרי אוהבי ה׳</div><div class="kpi-val">${oheveiCount}</div></div>
     </section>
   `;
 
   const chartHtml = !sections.charts ? "" : `
     <section class="card">
-      <h3>פילוח סטטוסים</h3>
+      <h3>פילוח דקות</h3>
       <div class="bars">
-        ${(["present","late","absent","excused"] as const).map((k) => {
-          const v = c[k]; const max = Math.max(1, c.present + c.late + c.absent + c.excused);
-          const pct = Math.round((v / max) * 100);
+        ${[
+          { k: "missing", l: "חסרות (לא מוצדק)", v: nonExcused, color: "#F44336" },
+          { k: "excused", l: "מוצדק", v: excused, color: "#2196F3" },
+          { k: "bonus", l: "בונוס", v: bonus, color: "#4CAF50" },
+        ].map((row) => {
+          const max = Math.max(1, nonExcused + excused + bonus);
+          const pct = Math.round((row.v / max) * 100);
           return `<div class="bar-row">
-            <span class="bar-label">${STATUS_LABEL[k]}</span>
-            <div class="bar"><div class="bar-fill bf-${k}" style="width:${pct}%"></div></div>
-            <span class="bar-val">${v}</span>
+            <span class="bar-label">${row.l}</span>
+            <div class="bar"><div class="bar-fill" style="width:${pct}%; background:${row.color}"></div></div>
+            <span class="bar-val">${row.v}</span>
           </div>`;
         }).join("")}
       </div>
-    </section>
-  `;
-
-  const monthTableHtml = !sections.monthlyTable ? "" : `
-    <section class="card">
-      <h3>פירוט רישומים</h3>
-      <table>
-        <thead><tr><th>תאריך</th><th>סטטוס</th><th>הערה</th></tr></thead>
-        <tbody>
-          ${inRange.slice(0, 200).map((r) => `
-            <tr>
-              <td>${r.date}</td>
-              <td><span class="pill p-${r.status}">${STATUS_LABEL[r.status]}</span></td>
-              <td>${(r.note || "").replace(/</g, "&lt;")}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-      ${inRange.length > 200 ? `<p class="muted">מוצגים 200 מתוך ${inRange.length} רישומים</p>` : ""}
     </section>
   `;
 
@@ -109,38 +99,74 @@ function buildReportHTML(
     <section class="card">
       <h3>סיכום חודשי</h3>
       <table>
-        <thead><tr><th>חודש</th><th>סה"כ</th><th>נוכח</th><th>איחור</th><th>נעדר</th><th>מוצדק</th><th>%</th></tr></thead>
+        <thead><tr><th>חודש</th><th>רישומים</th><th>איחור</th><th>היעדרות</th><th>חסר נטו</th><th>בונוס</th><th>אוהבי ה׳</th><th>ציון</th></tr></thead>
         <tbody>
           ${monthKeys.map((k) => {
-            const recs = monthly[k];
-            const mc = countByStatus(recs);
-            const mr = attendanceRate(recs);
-            return `<tr><td>${k}</td><td>${recs.length}</td><td>${mc.present}</td><td>${mc.late}</td><td>${mc.absent}</td><td>${mc.excused}</td><td>${mr}%</td></tr>`;
+            const [y, m] = k.split("-").map(Number);
+            const s = monthlySummary(y, m - 1);
+            const score = attendanceScore(y, m - 1);
+            return `<tr><td>${k}</td><td>${s.entries}</td><td>${s.lateCount}</td><td>${s.absenceCount}</td><td>${s.netMissing}</td><td>${s.bonus}</td><td>${s.oheveiCount}</td><td>${score}</td></tr>`;
           }).join("")}
         </tbody>
       </table>
     </section>
   `;
 
+  const monthTableHtml = !sections.monthlyTable ? "" : `
+    <section class="card">
+      <h3>פירוט סדרים</h3>
+      <table>
+        <thead><tr><th>תאריך</th><th>סדר</th><th>הגעה</th><th>יציאה</th><th>חסר</th><th>בונוס</th><th>מוצדק</th><th>אוהבי ה׳</th></tr></thead>
+        <tbody>
+          ${ents.slice(0, 200).map((e) => {
+            const c = calcSeder(e);
+            return `<tr>
+              <td>${e.date}</td>
+              <td>${e.seder === 1 ? "א׳" : "ב׳"}</td>
+              <td>${e.absent ? "—" : (e.arrival || "—")}</td>
+              <td>${e.absent ? "—" : (e.departure || "—")}</td>
+              <td>${c.missingMin}</td>
+              <td>${c.bonusMin}</td>
+              <td>${c.excusedMin}</td>
+              <td>${c.isOhevei ? "✓" : ""}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+      ${ents.length > 200 ? `<p class="muted">מוצגים 200 מתוך ${ents.length} רישומים</p>` : ""}
+    </section>
+  `;
+
   const excusedHtml = !sections.excusedSummary ? "" : `
     <section class="card">
       <h3>סיכום היעדרויות מוצדקות</h3>
-      <p>סה"כ ימים מוצדקים: <b>${c.excused}</b></p>
+      <p>סה"כ דקות מוצדקות: <b>${excused}</b></p>
       <ul>
-        ${inRange.filter((r) => r.status === "excused").slice(0, 20).map((r) =>
-          `<li>${r.date}${r.note ? ` — ${r.note}` : ""}</li>`).join("")}
+        ${ents.filter((e) => e.excusedAll || e.excusedMinutes > 0).slice(0, 30).map((e) =>
+          `<li>${e.date} · סדר ${e.seder === 1 ? "א׳" : "ב׳"} — ${e.excusedAll ? "כל הסדר" : `${e.excusedMinutes} דק׳`}${e.excusedReason ? ` — ${e.excusedReason}` : ""}</li>`).join("")}
+      </ul>
+    </section>
+  `;
+
+  const oheveiHtml = !sections.oheveiList ? "" : `
+    <section class="card">
+      <h3>רשימת סדרי "אוהבי ה׳"</h3>
+      <p>סה"כ: <b>${oheveiCount}</b></p>
+      <ul>
+        ${ents.filter((e) => calcSeder(e).isOhevei).slice(0, 50).map((e) =>
+          `<li>${e.date} · סדר ${e.seder === 1 ? "א׳" : "ב׳"}</li>`).join("")}
       </ul>
     </section>
   `;
 
   const learnHtml = !sections.learning ? "" : `
     <section class="card">
-      <h3>שיעורי לימוד נוסף</h3>
-      <p>סה"כ דקות: <b>${totalLearnMin}</b> (${(totalLearnMin / 60).toFixed(1)} שעות) · ${lessonsInRange.length} שיעורים</p>
+      <h3>לימוד נוסף</h3>
+      <p>סה"כ: <b>${totalLearnMin}</b> דק׳ (${(totalLearnMin / 60).toFixed(1)} שעות) · ${lsns.length} שיעורים</p>
       <table>
-        <thead><tr><th>תאריך</th><th>נושא</th><th>דקות</th></tr></thead>
+        <thead><tr><th>תאריך</th><th>מסגרת</th><th>דקות</th></tr></thead>
         <tbody>
-          ${lessonsInRange.slice(0, 100).map((l) => `<tr><td>${l.date}</td><td>${l.topic.replace(/</g, "&lt;")}</td><td>${l.minutes}</td></tr>`).join("")}
+          ${lsns.slice(0, 100).map((l) => `<tr><td>${l.date}</td><td>${FRAMEWORK_LABELS[l.framework]}</td><td>${l.minutes}</td></tr>`).join("")}
         </tbody>
       </table>
     </section>
@@ -162,19 +188,10 @@ function buildReportHTML(
     #__report table { width:100%; border-collapse:collapse; font-size:12px; }
     #__report th, #__report td { padding:7px 10px; text-align:right; border-bottom:1px solid #eef2f7; }
     #__report th { background:#f7f9fc; font-weight:600; color:#3a4761; }
-    #__report .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
-    #__report .p-present { background:#e8f5e9; color:#2e7d32; }
-    #__report .p-late    { background:#fff8e1; color:#a76300; }
-    #__report .p-absent  { background:#ffebee; color:#c62828; }
-    #__report .p-excused { background:#e3f2fd; color:#1565c0; }
     #__report .bars { display:flex; flex-direction:column; gap:8px; }
-    #__report .bar-row { display:grid; grid-template-columns: 70px 1fr 40px; align-items:center; gap:10px; font-size:12px; }
+    #__report .bar-row { display:grid; grid-template-columns: 130px 1fr 50px; align-items:center; gap:10px; font-size:12px; }
     #__report .bar { height:14px; background:#eef2f7; border-radius:7px; overflow:hidden; }
     #__report .bar-fill { height:100%; border-radius:7px; }
-    #__report .bf-present { background:#4CAF50; }
-    #__report .bf-late    { background:#FFC107; }
-    #__report .bf-absent  { background:#F44336; }
-    #__report .bf-excused { background:#2196F3; }
     #__report .muted { color:#5a6478; font-size:11px; margin-top:8px; }
     #__report .footer { margin-top:24px; padding-top:12px; border-top:1px solid #eef2f7; color:#5a6478; font-size:10px; display:flex; justify-content:space-between; }
     #__report ul { margin:0; padding-right:18px; font-size:12px; }
@@ -184,9 +201,9 @@ function buildReportHTML(
   <header style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid #1565C0; padding-bottom:14px; margin-bottom:20px;">
     <div>
       <h1>${title}</h1>
-      <div class="sub">${range ? `טווח: ${range.from} → ${range.to}` : `שנה ${y}`} · הופק בתאריך ${new Date().toLocaleDateString("he-IL")}</div>
+      <div class="sub">${range ? `טווח: ${range.from} → ${range.to}` : ""} · הופק ${heDate}</div>
     </div>
-    <div style="text-align:left; color:#1E3A5F; font-weight:700;">המעקב שלי</div>
+    <div style="text-align:left; color:#1E3A5F; font-weight:700;">המעקב שלי · כולל</div>
   </header>
 
   ${kpiHtml}
@@ -194,25 +211,26 @@ function buildReportHTML(
   ${yearlyHtml}
   ${monthTableHtml}
   ${excusedHtml}
+  ${oheveiHtml}
   ${learnHtml}
 
   <div class="footer">
     <span>דוח אישי — מסמך פנימי</span>
-    <span>עמוד יצירה אוטומטית · המעקב שלי</span>
+    <span>הופק אוטומטית · המעקב שלי</span>
   </div>
 </div>`;
 }
 
 export async function exportPdfReport(opts: {
   title: string;
-  records: AttendanceRecord[];
-  lessons: LearningItem[];
+  entries: SederEntry[];
+  lessons: LearningEntry[];
   sections?: ReportSections;
   range?: { from: string; to: string };
   filename?: string;
 }) {
   const sections = opts.sections ?? DEFAULT_SECTIONS;
-  const html = buildReportHTML(opts.title, opts.records, opts.lessons, sections, opts.range);
+  const html = buildReportHTML(opts.title, opts.entries, opts.lessons, sections, opts.range);
 
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;top:-99999px;right:-99999px;pointer-events:none;";
@@ -249,72 +267,70 @@ export async function exportPdfReport(opts: {
 }
 
 export function exportXlsxWorkbook(opts: {
-  records: AttendanceRecord[];
-  lessons: LearningItem[];
+  entries: SederEntry[];
+  lessons: LearningEntry[];
   filename?: string;
 }) {
-  const { records, lessons } = opts;
+  const { entries, lessons } = opts;
   const wb = XLSX.utils.book_new();
   wb.Workbook = { Views: [{ RTL: true }] };
 
-  const attRows = records.map((r) => ({
-    "תאריך": r.date,
-    "סטטוס": STATUS_LABEL[r.status] || r.status,
-    "הערה": r.note || "",
-    "תגיות": (r.tags || []).join(", "),
-  }));
-  const wsAtt = XLSX.utils.json_to_sheet(attRows);
-  wsAtt["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 40 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(wb, wsAtt, "נוכחות");
+  const sederRows = entries.map((e) => {
+    const c = calcSeder(e);
+    return {
+      "תאריך": e.date,
+      "סדר": e.seder === 1 ? "א׳" : "ב׳",
+      "הגעה": e.arrival || "",
+      "יציאה": e.departure || "",
+      "היעדרות": e.absent ? "כן" : "",
+      "חסר (דק׳)": c.missingMin,
+      "בונוס": c.bonusMin,
+      "מוצדק": c.excusedMin,
+      "חסר נטו": c.netMissingMin,
+      "אוהבי ה׳": c.isOhevei ? "כן" : "",
+      "סיבה": e.excusedReason || "",
+      "תגיות": (e.tags || []).join(", "),
+      "הערה": e.note || "",
+    };
+  });
+  const wsSed = XLSX.utils.json_to_sheet(sederRows);
+  wsSed["!cols"] = [{ wch: 12 }, { wch: 6 }, { wch: 7 }, { wch: 7 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 9 }, { wch: 18 }, { wch: 16 }, { wch: 24 }];
+  XLSX.utils.book_append_sheet(wb, wsSed, "סדרים");
 
   const lrnRows = lessons.map((l) => ({
     "תאריך": l.date,
-    "נושא": l.topic,
+    "מסגרת": FRAMEWORK_LABELS[l.framework],
     "דקות": l.minutes,
     "שעות": +(l.minutes / 60).toFixed(2),
+    "מקור": l.source === "timer" ? "טיימר" : l.source === "range" ? "טווח שעות" : "ידני",
   }));
   const wsLrn = XLSX.utils.json_to_sheet(lrnRows);
-  wsLrn["!cols"] = [{ wch: 14 }, { wch: 30 }, { wch: 8 }, { wch: 8 }];
-  XLSX.utils.book_append_sheet(wb, wsLrn, "לימוד");
+  wsLrn["!cols"] = [{ wch: 12 }, { wch: 20 }, { wch: 8 }, { wch: 8 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsLrn, "לימוד נוסף");
 
-  const monthly: Record<string, AttendanceRecord[]> = {};
-  for (const r of records) (monthly[r.date.slice(0, 7)] = monthly[r.date.slice(0, 7)] || []).push(r);
+  const monthly: Record<string, SederEntry[]> = {};
+  for (const e of entries) (monthly[e.date.slice(0, 7)] = monthly[e.date.slice(0, 7)] || []).push(e);
   const monthRows = Object.keys(monthly).sort().map((k) => {
-    const recs = monthly[k];
-    const c = countByStatus(recs);
+    const [y, m] = k.split("-").map(Number);
+    const s = monthlySummary(y, m - 1);
     return {
       "חודש": k,
-      'סה"כ ימים': recs.length,
-      "נוכח": c.present,
-      "איחור": c.late,
-      "נעדר": c.absent,
-      "מוצדק": c.excused,
-      "אחוז נוכחות": `${attendanceRate(recs)}%`,
+      "רישומים": s.entries,
+      "איחור": s.lateCount,
+      "היעדרות": s.absenceCount,
+      "יציאה מוקדמת": s.earlyDepCount,
+      "חסר": s.totalMissing,
+      "מוצדק": s.excused,
+      "בונוס": s.bonus,
+      "חסר נטו": s.netMissing,
+      "אוהבי ה׳": s.oheveiCount,
+      "ציון": attendanceScore(y, m - 1),
     };
   });
   const wsMon = XLSX.utils.json_to_sheet(monthRows);
-  wsMon["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, wsMon, "סיכום חודשי");
 
-  const now = new Date();
-  const curMonth = inMonth(records, now.getFullYear(), now.getMonth());
-  const overall = countByStatus(records);
-  const statRows = [
-    { "מדד": 'סה"כ רישומים', "ערך": records.length },
-    { "מדד": "אחוז נוכחות כולל", "ערך": `${attendanceRate(records)}%` },
-    { "מדד": "אחוז נוכחות החודש", "ערך": `${attendanceRate(curMonth)}%` },
-    { "מדד": "רצף נוכחי", "ערך": currentStreak(records) },
-    { "מדד": "נוכח (סה״כ)", "ערך": overall.present },
-    { "מדד": "איחור (סה״כ)", "ערך": overall.late },
-    { "מדד": "נעדר (סה״כ)", "ערך": overall.absent },
-    { "מדד": "מוצדק (סה״כ)", "ערך": overall.excused },
-    { "מדד": "שעות לימוד נוסף", "ערך": +(lessons.reduce((s, l) => s + l.minutes, 0) / 60).toFixed(1) },
-  ];
-  const wsStat = XLSX.utils.json_to_sheet(statRows);
-  wsStat["!cols"] = [{ wch: 24 }, { wch: 16 }];
-  XLSX.utils.book_append_sheet(wb, wsStat, "סטטיסטיקות");
-
-  const fname = opts.filename || `tracker_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const fname = opts.filename || `kollel_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(wb, fname);
   logAudit("report.export", { detail: `XLSX · ${fname}` });
 }

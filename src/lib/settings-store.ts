@@ -2,10 +2,19 @@ import { useEffect, useState } from "react";
 import { logAudit } from "./audit-store";
 
 export type FontSize = "small" | "normal" | "large" | "xlarge";
-export type DateFormat = "iso" | "he" | "mixed";
+export type DateFormat = "iso" | "he" | "mixed" | "hebrew";
+
+export type SederConfig = {
+  s1Start: string; s1End: string;
+  s2Start: string; s2End: string;
+  bonusThresholdMin: number;
+  alertMissingMinPerMonth: number;
+  defaultDeparture: "seder_end" | "blank";
+};
 
 export type Settings = {
   profile: { name: string; classroom: string };
+  seder: SederConfig;
   notifications: {
     dailyReminder: boolean;
     latenessAlert: boolean;
@@ -30,17 +39,24 @@ export type Settings = {
   };
   data: {
     autoBackup: "off" | "daily" | "weekly";
-    backupRetention: number;     // count of snapshots to keep
+    backupRetention: number;
     autoBackupBeforeOps: boolean;
   };
   goals: {
-    monthlyTarget: number;        // % attendance
+    monthlyTarget: number;
     maxLatePerMonth: number;
   };
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  profile: { name: "המשתמש שלי", classroom: "" },
+  profile: { name: "תלמיד הכולל", classroom: "" },
+  seder: {
+    s1Start: "09:30", s1End: "13:30",
+    s2Start: "16:00", s2End: "19:00",
+    bonusThresholdMin: 15,
+    alertMissingMinPerMonth: 180,
+    defaultDeparture: "seder_end",
+  },
   notifications: { dailyReminder: true, latenessAlert: true, weeklySummary: false },
   appearance: { fontSize: "normal", highContrast: false, compactMode: false },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
@@ -53,16 +69,6 @@ export const DEFAULT_SETTINGS: Settings = {
 const KEY = "tracker.settings.v1";
 const ONBOARD_KEY = "tracker.onboarded.v1";
 
-function read(): Settings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw);
-    return deepMerge(DEFAULT_SETTINGS, parsed);
-  } catch { return DEFAULT_SETTINGS; }
-}
-
 function deepMerge<T>(base: T, over: Partial<T>): T {
   const out: any = Array.isArray(base) ? [...(base as any)] : { ...base };
   for (const k of Object.keys(over || {})) {
@@ -74,6 +80,16 @@ function deepMerge<T>(base: T, over: Partial<T>): T {
     }
   }
   return out;
+}
+
+function read(): Settings {
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return DEFAULT_SETTINGS;
+    const parsed = JSON.parse(raw);
+    return deepMerge(DEFAULT_SETTINGS, parsed);
+  } catch { return DEFAULT_SETTINGS; }
 }
 
 let settings: Settings = read();
@@ -92,9 +108,16 @@ export function updateSettings(patch: Partial<Settings>, opts?: { skipAudit?: bo
   settings = deepMerge(settings, patch);
   persist();
   applyAppearance();
-  if (!opts?.skipAudit) {
-    logAudit("settings.update", { oldValue: prev, newValue: settings });
-  }
+  if (!opts?.skipAudit) logAudit("settings.update", { oldValue: prev, newValue: settings });
+  emit();
+}
+
+export function resetSettings() {
+  const prev = settings;
+  settings = DEFAULT_SETTINGS;
+  persist();
+  applyAppearance();
+  logAudit("backup.reset_settings", { oldValue: prev, newValue: settings });
   emit();
 }
 

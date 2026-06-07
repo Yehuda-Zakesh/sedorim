@@ -1,22 +1,26 @@
 import { useEffect, useState } from "react";
 
 export type AuditAction =
-  | "attendance.create"
-  | "attendance.update"
-  | "attendance.delete"
+  | "seder.create"
+  | "seder.update"
+  | "seder.delete"
   | "learning.create"
   | "learning.delete"
+  | "learning.timer_start"
+  | "learning.timer_stop"
   | "settings.update"
   | "backup.export"
   | "backup.import"
   | "backup.auto"
   | "backup.restore"
+  | "backup.delete_db"
+  | "backup.reset_settings"
   | "report.export"
   | "data.validation_failed";
 
 export type AuditEntry = {
   id: string;
-  ts: number;            // epoch ms
+  ts: number;
   action: AuditAction;
   recordId?: string;
   oldValue?: unknown;
@@ -56,8 +60,12 @@ export function logAudit(action: AuditAction, payload: Omit<AuditEntry, "id" | "
   emit();
 }
 
-export function getAuditEntries(): readonly AuditEntry[] {
-  return entries;
+export function getAuditEntries(): readonly AuditEntry[] { return entries; }
+
+export function clearAudit() {
+  entries = [];
+  write();
+  emit();
 }
 
 export function useAudit() {
@@ -71,16 +79,20 @@ export function useAudit() {
 }
 
 export const ACTION_LABELS: Record<AuditAction, string> = {
-  "attendance.create": "רישום נוכחות חדש",
-  "attendance.update": "עדכון רישום נוכחות",
-  "attendance.delete": "מחיקת רישום נוכחות",
+  "seder.create": "רישום סדר חדש",
+  "seder.update": "עדכון רישום סדר",
+  "seder.delete": "מחיקת רישום סדר",
   "learning.create": "הוספת שיעור לימוד",
   "learning.delete": "מחיקת שיעור לימוד",
+  "learning.timer_start": "הפעלת טיימר",
+  "learning.timer_stop": "עצירת טיימר",
   "settings.update": "עדכון הגדרות",
   "backup.export": "ייצוא גיבוי",
   "backup.import": "ייבוא גיבוי",
   "backup.auto": "גיבוי אוטומטי",
   "backup.restore": "שחזור מגיבוי",
+  "backup.delete_db": "מחיקת בסיס נתונים",
+  "backup.reset_settings": "איפוס הגדרות",
   "report.export": "ייצוא דוח",
   "data.validation_failed": "כשל בוולידציה",
 };
