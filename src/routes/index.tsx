@@ -48,24 +48,19 @@ function Dashboard() {
   const hebrewDate = formatHebrewDate(today);
   const beinHazmanim = isBeinHazmanim(today);
 
-  // weekly bars within month — net missing per week
-  const weeks: Record<number, number> = {};
-  for (const e of entries) {
-    if (!e.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`)) continue;
-    const day = parseInt(e.date.slice(8, 10), 10);
-    const w = Math.ceil(day / 7);
-    weeks[w] = (weeks[w] || 0);
-  }
-  // Use computed summary per week
+  // weekly attendance score 0–100 per week (exact calcSeder)
   const weekBars = [1, 2, 3, 4, 5].map((w) => {
-    let net = 0, exp = 0;
+    let expected = 0, netMissing = 0;
     for (const e of entries) {
       if (!e.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`)) continue;
       const day = parseInt(e.date.slice(8, 10), 10);
       if (Math.ceil(day / 7) !== w) continue;
-      // tiny inline calc – import calcSeder for accuracy
+      const c = calcSeder(e);
+      expected += c.sederLengthMin;
+      netMissing += c.netMissingMin;
     }
-    return weeks[w] !== undefined ? Math.max(0, 100 - Math.round((net / Math.max(1, exp)) * 100)) : 0;
+    if (expected === 0) return 0;
+    return Math.max(0, 100 - Math.round((netMissing / expected) * 100));
   });
 
   const kpis = [
