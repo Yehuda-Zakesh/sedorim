@@ -92,10 +92,10 @@ export function generateInsights(
     });
   }
 
-  if (cur.bonusMin >= 60) {
+  if (cur.bonus >= 60) {
     out.push({
       id: "bonus-great", tone: "success", category: "trend",
-      title: `${fmtMin(cur.bonusMin)} דקות בונוס נצברו`,
+      title: `${fmtMin(cur.bonus)} דקות בונוס נצברו`,
       detail: "הגעות מוקדמות עוזרות להקטין דקות חסרות.",
     });
   }

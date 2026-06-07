@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   Plus, Pencil, Trash2, Settings as Cog, Download, Upload,
-  ShieldCheck, FileText, AlertTriangle, Search, Eraser,
+  ShieldCheck, FileText, AlertTriangle, Search, Eraser, Play, Square, Trash, RotateCcw,
 } from "lucide-react";
 import { useAudit, ACTION_LABELS, type AuditAction } from "@/lib/audit-store";
 
@@ -13,18 +13,22 @@ export const Route = createFileRoute("/audit")({
 });
 
 const ICONS: Record<AuditAction, { icon: typeof Plus; tone: string }> = {
-  "attendance.create": { icon: Plus, tone: "success" },
-  "attendance.update": { icon: Pencil, tone: "warning" },
-  "attendance.delete": { icon: Trash2, tone: "destructive" },
-  "learning.create":   { icon: Plus, tone: "info" },
-  "learning.delete":   { icon: Trash2, tone: "destructive" },
-  "settings.update":   { icon: Cog, tone: "info" },
-  "backup.export":     { icon: Download, tone: "info" },
-  "backup.import":     { icon: Upload, tone: "info" },
-  "backup.auto":       { icon: ShieldCheck, tone: "success" },
-  "backup.restore":    { icon: Upload, tone: "warning" },
-  "report.export":     { icon: FileText, tone: "info" },
-  "data.validation_failed": { icon: AlertTriangle, tone: "destructive" },
+  "seder.create":            { icon: Plus, tone: "success" },
+  "seder.update":            { icon: Pencil, tone: "warning" },
+  "seder.delete":            { icon: Trash2, tone: "destructive" },
+  "learning.create":         { icon: Plus, tone: "info" },
+  "learning.delete":         { icon: Trash2, tone: "destructive" },
+  "learning.timer_start":    { icon: Play, tone: "info" },
+  "learning.timer_stop":     { icon: Square, tone: "success" },
+  "settings.update":         { icon: Cog, tone: "info" },
+  "backup.export":           { icon: Download, tone: "info" },
+  "backup.import":           { icon: Upload, tone: "info" },
+  "backup.auto":             { icon: ShieldCheck, tone: "success" },
+  "backup.restore":          { icon: Upload, tone: "warning" },
+  "backup.delete_db":        { icon: Trash, tone: "destructive" },
+  "backup.reset_settings":   { icon: RotateCcw, tone: "warning" },
+  "report.export":           { icon: FileText, tone: "info" },
+  "data.validation_failed":  { icon: AlertTriangle, tone: "destructive" },
 };
 
 const TONES: Record<string, string> = {
@@ -35,11 +39,7 @@ const TONES: Record<string, string> = {
 };
 
 function formatTs(ts: number) {
-  const d = new Date(ts);
-  return d.toLocaleString("he-IL", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  return new Date(ts).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function AuditPage() {
@@ -72,9 +72,7 @@ function AuditPage() {
         </div>
         <div className="flex flex-wrap gap-1">
           <button onClick={() => setFilter("all")}
-            className={`px-3 py-1.5 rounded-md text-xs ${filter === "all" ? "bg-primary text-primary-foreground" : "border border-border hover:bg-accent text-muted-foreground"}`}>
-            הכל
-          </button>
+            className={`px-3 py-1.5 rounded-md text-xs ${filter === "all" ? "bg-primary text-primary-foreground" : "border border-border hover:bg-accent text-muted-foreground"}`}>הכל</button>
           {types.map((t) => (
             <button key={t} onClick={() => setFilter(t)}
               className={`px-3 py-1.5 rounded-md text-xs ${filter === t ? "bg-primary text-primary-foreground" : "border border-border hover:bg-accent text-muted-foreground"}`}>
@@ -102,25 +100,6 @@ function AuditPage() {
                     )}
                   </div>
                   {e.detail && <p className="text-xs text-muted-foreground mt-0.5">{e.detail}</p>}
-                  {(e.oldValue !== undefined || e.newValue !== undefined) && (
-                    <details className="mt-1 text-xs text-muted-foreground">
-                      <summary className="cursor-pointer select-none hover:text-foreground">פרטי שינוי</summary>
-                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {e.oldValue !== undefined && (
-                          <div className="rounded border border-border p-2 bg-muted/30">
-                            <div className="text-[10px] font-medium mb-1">ערך קודם</div>
-                            <pre className="text-[10px] whitespace-pre-wrap break-all">{String(JSON.stringify(e.oldValue, null, 1) ?? "")}</pre>
-                          </div>
-                        )}
-                        {e.newValue !== undefined && (
-                          <div className="rounded border border-border p-2 bg-muted/30">
-                            <div className="text-[10px] font-medium mb-1">ערך חדש</div>
-                            <pre className="text-[10px] whitespace-pre-wrap break-all">{String(JSON.stringify(e.newValue, null, 1) ?? "")}</pre>
-                          </div>
-                        )}
-                      </div>
-                    </details>
-                  )}
                 </li>
               );
             })}

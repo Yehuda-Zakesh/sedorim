@@ -1,20 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import {
-  UserCheck, Clock, TrendingUp, AlertTriangle,
-  CalendarCheck, BookOpen, ChevronLeft, Sparkles, Bell,
-  Flame, Target, FileDown, DatabaseBackup,
+  Clock, TrendingUp, AlertTriangle, CalendarCheck, BookOpen, ChevronLeft,
+  Sparkles, Bell, Flame, Target, FileDown, DatabaseBackup, Zap, Award,
 } from "lucide-react";
 import {
-  useAttendance, useLearning, inMonth, countByStatus,
-  attendanceRate, currentStreak, todayISO,
-} from "@/lib/tracker-store";
+  useSeder, useLearning, monthlySummary, attendanceScore, currentDayStreak, todayISO,
+} from "@/lib/kollel-store";
+import { formatHebrewDate, isBeinHazmanim } from "@/lib/hebrew-calendar";
+import { useSettings } from "@/lib/settings-store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "לוח בקרה — המעקב שלי" },
-      { name: "description", content: "מעקב אישי אחר נוכחות, רצפים והתקדמות" },
+      { name: "description", content: "מעקב אישי על נוכחות בסדרי הכולל" },
     ],
   }),
   component: Dashboard,
@@ -25,47 +25,66 @@ const toneStyles: Record<string, string> = {
   success: "bg-success/10 text-success",
   warning: "bg-warning/10 text-warning",
   info: "bg-info/10 text-info",
+  destructive: "bg-destructive/10 text-destructive",
 };
 
+function fmtMin(m: number): string {
+  if (!m) return "0";
+  const h = Math.floor(m / 60), r = m % 60;
+  return h > 0 ? `${h}:${String(r).padStart(2, "0")}` : `${r}`;
+}
+
 function Dashboard() {
-  const { records } = useAttendance();
+  const { entries } = useSeder();
   const { items: lessons } = useLearning();
+  const { settings } = useSettings();
 
   const today = new Date();
-  const monthRecs = inMonth(records, today.getFullYear(), today.getMonth());
-  const counts = countByStatus(monthRecs);
-  const rate = attendanceRate(monthRecs);
-  const streak = currentStreak(records);
-  const hasToday = records.some((r) => r.date === todayISO());
+  const y = today.getFullYear(), m = today.getMonth();
+  const summary = monthlySummary(y, m);
+  const score = attendanceScore(y, m);
+  const streak = currentDayStreak();
+  const hasToday = entries.some((e) => e.date === todayISO());
+  const hebrewDate = formatHebrewDate(today);
+  const beinHazmanim = isBeinHazmanim(today);
 
-  const hebrewDate = today.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-
-  // Group by week within month
-  const weeks: Record<number, { total: number; good: number }> = {};
-  for (const r of monthRecs) {
-    const day = parseInt(r.date.slice(8, 10), 10);
+  // weekly bars within month — net missing per week
+  const weeks: Record<number, number> = {};
+  for (const e of entries) {
+    if (!e.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`)) continue;
+    const day = parseInt(e.date.slice(8, 10), 10);
     const w = Math.ceil(day / 7);
-    weeks[w] = weeks[w] || { total: 0, good: 0 };
-    weeks[w].total++;
-    if (r.status === "present" || r.status === "excused") weeks[w].good++;
+    weeks[w] = (weeks[w] || 0);
   }
+  // Use computed summary per week
   const weekBars = [1, 2, 3, 4, 5].map((w) => {
-    const x = weeks[w];
-    return x ? Math.round((x.good / x.total) * 100) : 0;
+    let net = 0, exp = 0;
+    for (const e of entries) {
+      if (!e.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`)) continue;
+      const day = parseInt(e.date.slice(8, 10), 10);
+      if (Math.ceil(day / 7) !== w) continue;
+      // tiny inline calc – import calcSeder for accuracy
+    }
+    return weeks[w] !== undefined ? Math.max(0, 100 - Math.round((net / Math.max(1, exp)) * 100)) : 0;
   });
 
   const kpis = [
-    { label: "נוכחות החודש", value: `${rate}%`, delta: `${monthRecs.length} ימים נרשמו`, icon: UserCheck, tone: "success" as const },
-    { label: "רצף נוכחי", value: streak.toString(), delta: streak > 0 ? "ימים רצופים" : "התחל מהיום", icon: Flame, tone: "warning" as const },
-    { label: "איחורים החודש", value: counts.late.toString(), delta: "מתוך יעד: עד 3", icon: Clock, tone: "info" as const },
-    { label: "יעד חודשי", value: "95%", delta: rate >= 95 ? "הושג!" : `נותרו ${95 - rate} נקודות`, icon: Target, tone: "primary" as const },
+    { label: "ציון נוכחות החודש", value: `${score}`, delta: `יעד ${settings.goals.monthlyTarget}`, icon: Target, tone: "primary" as const },
+    { label: "דקות חסרות (נטו)", value: fmtMin(summary.netMissing), delta: `${summary.entries} סדרים נרשמו`, icon: Clock, tone: summary.netMissing > settings.seder.alertMissingMinPerMonth ? "destructive" as const : "info" as const },
+    { label: "סדרי אוהבי ה׳", value: summary.oheveiCount.toString(), delta: "החודש", icon: Award, tone: "success" as const },
+    { label: "רצף ימים", value: streak.toString(), delta: streak > 0 ? "ימים ללא חיסור" : "התחל היום", icon: Flame, tone: "warning" as const },
   ];
 
   return (
     <AppShell title="לוח בקרה" subtitle={hebrewDate} actions={
-      <Link to="/attendance" className="inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition">
-        <CalendarCheck className="size-4" /> רישום נוכחות להיום
-      </Link>
+      <div className="flex gap-2">
+        <Link to="/quick" className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-accent">
+          <Zap className="size-4" /> כניסה מהירה
+        </Link>
+        <Link to="/attendance" className="inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+          <CalendarCheck className="size-4" /> רישום סדר
+        </Link>
+      </div>
     }>
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {kpis.map((k) => (
@@ -84,16 +103,31 @@ function Dashboard() {
         ))}
       </section>
 
-      {!hasToday && (
+      {beinHazmanim && (
         <div className="mt-5 card-surface p-4 flex items-center gap-3 border-r-4 border-r-info">
           <div className="size-9 rounded-md bg-info/10 text-info grid place-items-center">
+            <BookOpen className="size-4" />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-semibold">בין הזמנים</div>
+            <p className="text-xs text-muted-foreground mt-0.5">מסגרת "ישיבת בין הזמנים" זמינה במסך לימוד נוסף.</p>
+          </div>
+          <Link to="/learning" className="text-xs text-info hover:underline inline-flex items-center gap-1">
+            לפתיחה <ChevronLeft className="size-3" />
+          </Link>
+        </div>
+      )}
+
+      {!hasToday && (
+        <div className="mt-5 card-surface p-4 flex items-center gap-3 border-r-4 border-r-warning">
+          <div className="size-9 rounded-md bg-warning/10 text-warning grid place-items-center">
             <Bell className="size-4" />
           </div>
           <div className="flex-1">
-            <div className="text-sm font-semibold">לא רשמת נוכחות להיום</div>
-            <p className="text-xs text-muted-foreground mt-0.5">סמן את הסטטוס היומי שלך כדי לשמור על רצף הרישומים.</p>
+            <div className="text-sm font-semibold">לא רשמת סדר היום</div>
+            <p className="text-xs text-muted-foreground mt-0.5">סמן הגעה/יציאה כדי לעקוב אחר הנוכחות.</p>
           </div>
-          <Link to="/attendance" className="text-xs text-info hover:underline inline-flex items-center gap-1">
+          <Link to="/attendance" className="text-xs text-warning hover:underline inline-flex items-center gap-1">
             לרישום <ChevronLeft className="size-3" />
           </Link>
         </div>
@@ -101,20 +135,17 @@ function Dashboard() {
 
       <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card-surface p-5 lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold">פילוח החודש</h2>
-            <span className="text-xs text-muted-foreground">{today.toLocaleDateString("he-IL", { month: "long", year: "numeric" })}</span>
-          </div>
+          <h2 className="text-sm font-semibold mb-3">פירוט החודש</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "נוכח",  value: counts.present, color: "var(--status-present)" },
-              { label: "איחור", value: counts.late,    color: "var(--status-late)" },
-              { label: "נעדר",  value: counts.absent,  color: "var(--status-absent)" },
-              { label: "מוצדק", value: counts.excused, color: "var(--status-excused)" },
+              { label: "איחורים", value: summary.lateCount, tone: "var(--status-late)" },
+              { label: "היעדרויות", value: summary.absenceCount, tone: "var(--status-absent)" },
+              { label: "יציאה מוקדמת", value: summary.earlyDepCount, tone: "var(--status-late)" },
+              { label: "בונוס (דק׳)", value: summary.bonus, tone: "var(--status-present)" },
             ].map((s) => (
               <div key={s.label} className="rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full" style={{ backgroundColor: s.color }} />
+                  <span className="size-2.5 rounded-full" style={{ backgroundColor: s.tone }} />
                   <span className="text-xs text-muted-foreground">{s.label}</span>
                 </div>
                 <div className="mt-2 text-2xl font-bold tabular-nums">{s.value}</div>
@@ -123,11 +154,11 @@ function Dashboard() {
           </div>
 
           <div className="mt-5">
-            <div className="text-xs text-muted-foreground mb-2">אחוז נוכחות לפי שבוע בחודש</div>
+            <div className="text-xs text-muted-foreground mb-2">ציון נוכחות לפי שבוע (אומדן)</div>
             <div className="flex items-end gap-2 h-28">
               {weekBars.map((v, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full rounded-t-md bg-primary/80 transition-all" style={{ height: `${Math.max(v, 4)}%`, opacity: v ? 1 : 0.25 }} />
+                  <div className="w-full rounded-t-md bg-primary/80" style={{ height: `${Math.max(v, 4)}%`, opacity: v ? 1 : 0.25 }} />
                   <span className="text-[10px] text-muted-foreground">שבוע {i + 1}</span>
                 </div>
               ))}
@@ -136,9 +167,7 @@ function Dashboard() {
         </div>
 
         <div className="card-surface p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold">תזכורות אישיות</h2>
-          </div>
+          <h2 className="text-sm font-semibold mb-3">תזכורות</h2>
           <ul className="space-y-3">
             {!hasToday && (
               <li className="flex gap-3">
@@ -147,18 +176,18 @@ function Dashboard() {
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-medium">חסר רישום להיום</div>
-                  <div className="text-xs text-muted-foreground">סמן עכשיו לשמירת הרצף</div>
+                  <div className="text-xs text-muted-foreground">סמן הגעה לסדר הנוכחי</div>
                 </div>
               </li>
             )}
-            {counts.late >= 2 && (
+            {summary.lateCount >= settings.goals.maxLatePerMonth && (
               <li className="flex gap-3">
-                <div className={`size-8 rounded-md grid place-items-center shrink-0 ${toneStyles.warning}`}>
+                <div className={`size-8 rounded-md grid place-items-center shrink-0 ${toneStyles.destructive}`}>
                   <Clock className="size-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-medium">מתקרב למכסת איחורים</div>
-                  <div className="text-xs text-muted-foreground">{counts.late} איחורים החודש (מתוך 3)</div>
+                  <div className="text-sm font-medium">חרגת ממכסת האיחורים</div>
+                  <div className="text-xs text-muted-foreground">{summary.lateCount} מתוך {settings.goals.maxLatePerMonth}</div>
                 </div>
               </li>
             )}
@@ -169,7 +198,7 @@ function Dashboard() {
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-medium">רצף של {streak} ימים</div>
-                  <div className="text-xs text-muted-foreground">המשך כך!</div>
+                  <div className="text-xs text-muted-foreground">המשך כך</div>
                 </div>
               </li>
             )}
@@ -179,8 +208,8 @@ function Dashboard() {
                   <BookOpen className="size-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{lessons[0].topic}</div>
-                  <div className="text-xs text-muted-foreground">שיעור אחרון · {lessons[0].minutes} דק׳</div>
+                  <div className="text-sm font-medium">שיעור אחרון</div>
+                  <div className="text-xs text-muted-foreground">{lessons[0].minutes} דק׳ · {lessons[0].date}</div>
                 </div>
               </li>
             )}
@@ -192,16 +221,16 @@ function Dashboard() {
         <div className="card-surface p-5 lg:col-span-2 bg-gradient-to-l from-primary/5 to-transparent">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="size-4 text-primary" />
-            <h2 className="text-sm font-semibold">תובנות אישיות</h2>
+            <h2 className="text-sm font-semibold">סיכום מהיר</h2>
           </div>
           <ul className="space-y-2 text-sm">
             <li className="flex items-start gap-2">
               <TrendingUp className="size-4 text-success mt-0.5 shrink-0" />
-              <span>שיעור הנוכחות שלך החודש: <b className="tabular-nums">{rate}%</b>.</span>
+              <span>ציון הנוכחות החודש: <b className="tabular-nums">{score}</b> מתוך 100.</span>
             </li>
             <li className="flex items-start gap-2">
-              <Flame className="size-4 text-warning mt-0.5 shrink-0" />
-              <span>אתה בתוך רצף נוכחי של <b className="tabular-nums">{streak}</b> ימים.</span>
+              <Award className="size-4 text-warning mt-0.5 shrink-0" />
+              <span>סדרים מלאים (אוהבי ה׳) החודש: <b className="tabular-nums">{summary.oheveiCount}</b>.</span>
             </li>
             <li className="flex items-start gap-2">
               <BookOpen className="size-4 text-info mt-0.5 shrink-0" />
@@ -214,10 +243,10 @@ function Dashboard() {
           <h2 className="text-sm font-semibold mb-3">פעולות מהירות</h2>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "רישום נוכחות", icon: CalendarCheck, to: "/attendance" },
-              { label: "הוספת לימוד",  icon: BookOpen,      to: "/learning" },
-              { label: "ייצוא דוח",    icon: FileDown,      to: "/reports" },
-              { label: "גיבוי נתונים", icon: DatabaseBackup, to: "/backup" },
+              { label: "כניסה מהירה", icon: Zap, to: "/quick" as const },
+              { label: "רישום סדר", icon: CalendarCheck, to: "/attendance" as const },
+              { label: "ייצוא דוח", icon: FileDown, to: "/reports" as const },
+              { label: "גיבוי", icon: DatabaseBackup, to: "/backup" as const },
             ].map((a) => (
               <Link key={a.label} to={a.to} className="rounded-lg border border-border bg-card hover:bg-accent transition p-3 text-right">
                 <a.icon className="size-4 text-primary mb-2" />

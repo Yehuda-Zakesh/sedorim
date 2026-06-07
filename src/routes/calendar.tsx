@@ -1,12 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { AppShell } from "@/components/app-shell";
-import { ChevronRight, ChevronLeft, Trash2 } from "lucide-react";
-import {
-  useAttendance, inMonth, countByStatus,
-  type AttendanceStatus, type AttendanceRecord,
-} from "@/lib/tracker-store";
-import { toast } from "sonner";
+import { ChevronRight, ChevronLeft } from "lucide-react";
+import { useSeder, calcSeder, monthlySummary, entriesByDate, type SederEntry } from "@/lib/kollel-store";
+import { hebrewFromGregorian, hebrewDayLetters, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
 
 export const Route = createFileRoute("/calendar")({
   head: () => ({ meta: [{ title: "לוח שנה — המעקב שלי" }] }),
@@ -16,16 +13,21 @@ export const Route = createFileRoute("/calendar")({
 const months = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const weekdays = ["א","ב","ג","ד","ה","ו","ש"];
 
-const colorOf = (s: AttendanceStatus | null) =>
-  s === "present" ? "var(--status-present)" :
-  s === "late"    ? "var(--status-late)" :
-  s === "absent"  ? "var(--status-absent)" :
-  s === "excused" ? "var(--status-excused)" :
-  "var(--status-none)";
-
-const labelOf = (s: AttendanceStatus | null) =>
-  s === "present" ? "נוכח" : s === "late" ? "איחור" :
-  s === "absent" ? "נעדר" : s === "excused" ? "מוצדק" : "ללא רישום";
+function dayTone(list: SederEntry[]): { color: string; label: string } {
+  if (!list.length) return { color: "var(--status-none)", label: "ללא רישום" };
+  let net = 0, hasOhevei = false, hasAbsent = false;
+  for (const e of list) {
+    const c = calcSeder(e);
+    net += c.netMissingMin;
+    if (c.isOhevei) hasOhevei = true;
+    if (e.absent) hasAbsent = true;
+  }
+  if (hasAbsent) return { color: "var(--status-absent)", label: "היעדרות" };
+  if (net === 0 && hasOhevei) return { color: "var(--status-present)", label: "אוהבי ה׳" };
+  if (net === 0) return { color: "var(--status-present)", label: "נוכחות מלאה" };
+  if (net < 30) return { color: "var(--status-late)", label: `${net} דק׳ חסר` };
+  return { color: "var(--status-absent)", label: `${net} דק׳ חסר` };
+}
 
 function CalendarPage() {
   const today = new Date();
@@ -33,13 +35,8 @@ function CalendarPage() {
   const [year, setYear] = useState(today.getFullYear());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  const { records, upsert, remove } = useAttendance();
-
-  const map = useMemo(() => {
-    const m: Record<string, AttendanceRecord> = {};
-    for (const r of records) m[r.date] = r;
-    return m;
-  }, [records]);
+  const { entries, remove } = useSeder();
+  const byDate = useMemo(() => entriesByDate(entries), [entries]);
 
   const first = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -56,28 +53,14 @@ function CalendarPage() {
     setMonth(m); setYear(y); setSelectedDate(null);
   };
 
-  const counts = countByStatus(inMonth(records, year, month));
-  const selectedRec = selectedDate ? map[selectedDate] : null;
-
+  const summary = monthlySummary(year, month);
   const dateOf = (d: number) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-
-  const setStatus = (s: AttendanceStatus) => {
-    if (!selectedDate) return;
-    try {
-      upsert({ date: selectedDate, status: s, note: selectedRec?.note });
-      toast.success(`עודכן ל${labelOf(s)}`, { description: selectedDate });
-    } catch (e) { toast.error(e instanceof Error ? e.message : "שגיאה"); }
-  };
-
-  const clear = () => {
-    if (!selectedDate) return;
-    remove(selectedDate);
-    toast("הרישום נמחק");
-  };
+  const selectedList = selectedDate ? (byDate[selectedDate] || []) : [];
+  const heMonth = formatHebrewMonthYear(hebrewFromGregorian(new Date(year, month, 15)));
 
   return (
-    <AppShell title="לוח שנה" subtitle="תצוגה חודשית בקידוד צבעוני — לחץ על יום לעריכה">
+    <AppShell title="לוח שנה" subtitle={`${months[month]} ${year} · ${heMonth}`}>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="card-surface p-5 lg:col-span-3">
           <div className="flex items-center justify-between mb-5">
@@ -104,11 +87,11 @@ function CalendarPage() {
             {cells.map((day, i) => {
               if (!day) return <div key={i} className="aspect-square" />;
               const dateStr = dateOf(day);
-              const status = map[dateStr]?.status ?? null;
-              const color = colorOf(status);
+              const list = byDate[dateStr] || [];
+              const t = dayTone(list);
               const isSelected = selectedDate === dateStr;
-              const isToday =
-                year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
+              const isToday = year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
+              const heDay = hebrewDayLetters(hebrewFromGregorian(new Date(year, month, day)).day);
               return (
                 <button
                   key={i}
@@ -117,16 +100,17 @@ function CalendarPage() {
                     "aspect-square rounded-lg border p-1.5 flex flex-col items-stretch text-right transition",
                     isSelected ? "ring-2 ring-primary border-primary" : "border-border hover:border-primary",
                   ].join(" ")}
-                  style={status ? {
-                    backgroundColor: `color-mix(in oklch, ${color} 18%, var(--color-card))`,
-                    borderColor: isSelected ? "var(--color-primary)" : `color-mix(in oklch, ${color} 50%, transparent)`,
+                  style={list.length ? {
+                    backgroundColor: `color-mix(in oklch, ${t.color} 18%, var(--color-card))`,
+                    borderColor: isSelected ? "var(--color-primary)" : `color-mix(in oklch, ${t.color} 50%, transparent)`,
                   } : undefined}
                 >
-                  <div className={`text-xs font-semibold tabular-nums ${isToday ? "text-primary" : ""}`}>
-                    {day}{isToday && <span className="mr-1 text-[9px]">היום</span>}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-muted-foreground">{heDay}</span>
+                    <span className={`text-xs font-semibold tabular-nums ${isToday ? "text-primary" : ""}`}>{day}</span>
                   </div>
-                  {status && (
-                    <div className="mt-auto self-end size-2 rounded-full" style={{ backgroundColor: color }} />
+                  {list.length > 0 && (
+                    <div className="mt-auto self-end size-2 rounded-full" style={{ backgroundColor: t.color }} />
                   )}
                 </button>
               );
@@ -139,49 +123,57 @@ function CalendarPage() {
             <div className="card-surface p-5">
               <div className="text-xs text-muted-foreground">תאריך נבחר</div>
               <div className="text-base font-semibold tabular-nums mt-0.5">{selectedDate}</div>
-              <div className="text-xs text-muted-foreground mt-2">
-                סטטוס נוכחי: <span className="font-medium">{labelOf(selectedRec?.status ?? null)}</span>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                {(["present","late","absent","excused"] as AttendanceStatus[]).map((s) => (
-                  <button key={s} onClick={() => setStatus(s)}
-                    className="rounded-md border border-border px-2 py-2 text-xs hover:border-primary transition flex items-center gap-2"
-                    style={{ borderColor: selectedRec?.status === s ? colorOf(s) : undefined }}>
-                    <span className="size-2.5 rounded-full" style={{ backgroundColor: colorOf(s) }} />
-                    {labelOf(s)}
-                  </button>
-                ))}
-              </div>
-              {selectedRec && (
-                <button onClick={clear}
-                  className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:text-destructive hover:border-destructive transition">
-                  <Trash2 className="size-3" /> מחיקת רישום
-                </button>
+              {selectedList.length === 0 ? (
+                <div className="text-xs text-muted-foreground mt-3">אין רישומים</div>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {selectedList.map((e) => {
+                    const c = calcSeder(e);
+                    return (
+                      <li key={e.id} className="rounded-md border border-border p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-medium">סדר {e.seder === 1 ? "א׳" : "ב׳"}</div>
+                          <button onClick={() => remove(e.id)} className="text-[10px] text-destructive hover:underline">מחק</button>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {e.absent ? "היעדרות" : `${e.arrival || "—"} → ${e.departure || "—"}`}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-1">
+                          חסר {c.netMissingMin} · בונוס {c.bonusMin}{c.isOhevei && " · אוהבי ה׳"}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           ) : (
-            <div className="card-surface p-5 text-xs text-muted-foreground">
-              לחץ על יום בלוח כדי לערוך את הסטטוס שלו.
-            </div>
+            <div className="card-surface p-5 text-xs text-muted-foreground">לחץ על יום בלוח לפרטים.</div>
           )}
 
           <div className="card-surface p-5">
             <h3 className="text-sm font-semibold mb-3">סיכום חודשי</h3>
             <ul className="space-y-2 text-sm">
-              {(["present","late","absent","excused"] as AttendanceStatus[]).map((s) => (
-                <li key={s} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="size-2.5 rounded-full" style={{ backgroundColor: colorOf(s) }} />
-                    <span className="text-muted-foreground">{labelOf(s)}</span>
-                  </div>
-                  <span className="font-semibold tabular-nums">{counts[s]}</span>
-                </li>
-              ))}
+              <Row label="רישומים" value={summary.entries} />
+              <Row label="חסר נטו (דק׳)" value={summary.netMissing} />
+              <Row label="מוצדק" value={summary.excused} />
+              <Row label="בונוס" value={summary.bonus} />
+              <Row label="איחורים" value={summary.lateCount} />
+              <Row label="היעדרויות" value={summary.absenceCount} />
+              <Row label="אוהבי ה׳" value={summary.oheveiCount} />
             </ul>
           </div>
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function Row({ label, value }: { label: string; value: number }) {
+  return (
+    <li className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold tabular-nums">{value}</span>
+    </li>
   );
 }
