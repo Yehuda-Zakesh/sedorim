@@ -5,7 +5,7 @@ import {
   Sparkles, Bell, Flame, Target, FileDown, DatabaseBackup, Zap, Award,
 } from "lucide-react";
 import {
-  useSeder, useLearning, monthlySummary, attendanceScore, currentDayStreak, todayISO,
+  useSeder, useLearning, monthlySummary, attendanceScore, currentDayStreak, todayISO, calcSeder,
 } from "@/lib/kollel-store";
 import { formatHebrewDate, isBeinHazmanim } from "@/lib/hebrew-calendar";
 import { useSettings } from "@/lib/settings-store";
