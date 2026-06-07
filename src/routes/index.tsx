@@ -149,7 +149,7 @@ function Dashboard() {
           </div>
 
           <div className="mt-5">
-            <div className="text-xs text-muted-foreground mb-2">ציון נוכחות לפי שבוע (אומדן)</div>
+            <div className="text-xs text-muted-foreground mb-2">ציון נוכחות לפי שבוע</div>
             <div className="flex items-end gap-2 h-28">
               {weekBars.map((v, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1">
