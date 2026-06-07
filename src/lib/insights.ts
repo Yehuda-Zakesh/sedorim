@@ -1,7 +1,7 @@
 import {
-  type AttendanceRecord, type LearningItem,
-  countByStatus, attendanceRate, currentStreak, inMonth,
-} from "./tracker-store";
+  type SederEntry, type LearningEntry,
+  calcSeder, monthlySummary, attendanceScore, entriesInMonth, getSederSnapshot,
+} from "./kollel-store";
 
 export type Insight = {
   id: string;
@@ -11,120 +11,108 @@ export type Insight = {
   category: "trend" | "opportunity" | "recommendation";
 };
 
+function fmtMin(m: number): string {
+  if (m < 60) return `${m} דק׳`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return r === 0 ? `${h} שע׳` : `${h}:${String(r).padStart(2, "0")} שע׳`;
+}
+
 export function generateInsights(
-  records: AttendanceRecord[],
-  lessons: LearningItem[],
-  goals: { monthlyTarget: number; maxLatePerMonth: number },
+  entries: SederEntry[],
+  lessons: LearningEntry[],
+  goals: { monthlyTarget: number; maxLatePerMonth: number; alertMissingMinPerMonth: number },
 ): Insight[] {
   const out: Insight[] = [];
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth();
+  const cur = monthlySummary(y, m);
+  const prevY = m === 0 ? y - 1 : y;
+  const prevM = m === 0 ? 11 : m - 1;
+  const prev = monthlySummary(prevY, prevM);
+  const score = attendanceScore(y, m);
+  const prevScore = attendanceScore(prevY, prevM);
 
-  const cur = inMonth(records, y, m);
-  const prev = inMonth(records, m === 0 ? y - 1 : y, m === 0 ? 11 : m - 1);
-  const curRate = attendanceRate(cur);
-  const prevRate = attendanceRate(prev);
-  const streak = currentStreak(records);
-  const curCounts = countByStatus(cur);
-
-  if (cur.length >= 3 && prev.length >= 3) {
-    const diff = curRate - prevRate;
-    if (diff >= 3) {
-      out.push({
-        id: "trend-up",
-        tone: "success",
-        title: `שיפור של ${diff} נקודות בנוכחות`,
-        detail: `החודש: ${curRate}% · חודש קודם: ${prevRate}%. המשך כך!`,
-        category: "trend",
-      });
-    } else if (diff <= -3) {
-      out.push({
-        id: "trend-down",
-        tone: "warning",
-        title: `ירידה של ${Math.abs(diff)} נקודות בנוכחות`,
-        detail: `החודש: ${curRate}% · חודש קודם: ${prevRate}%. כדאי לבדוק מה השתנה.`,
-        category: "trend",
-      });
-    }
+  if (cur.entries === 0) {
+    out.push({
+      id: "no-data", tone: "info", category: "recommendation",
+      title: "אין רישומים החודש",
+      detail: "פתח את מסך הנוכחות ורשום את הסדרים של היום.",
+    });
+    return out;
   }
 
-  if (curRate < goals.monthlyTarget && cur.length >= 5) {
-    out.push({
-      id: "goal-gap",
-      tone: "info",
-      title: `${goals.monthlyTarget - curRate} נקודות עד היעד החודשי`,
-      detail: `היעד: ${goals.monthlyTarget}%. תכנן יום נוכחות נוסף לשבוע הקרוב לסגירת הפער.`,
-      category: "opportunity",
+  if (prev.entries >= 5) {
+    const diff = score - prevScore;
+    if (diff >= 3) out.push({
+      id: "trend-up", tone: "success", category: "trend",
+      title: `שיפור של ${diff} נקודות בציון הנוכחות`,
+      detail: `החודש: ${score} · חודש קודם: ${prevScore}. המשך כך!`,
     });
-  } else if (curRate >= goals.monthlyTarget && cur.length >= 5) {
+    else if (diff <= -3) out.push({
+      id: "trend-down", tone: "warning", category: "trend",
+      title: `ירידה של ${Math.abs(diff)} נקודות בציון הנוכחות`,
+      detail: `החודש: ${score} · חודש קודם: ${prevScore}.`,
+    });
+  }
+
+  if (score >= goals.monthlyTarget) {
     out.push({
-      id: "goal-met",
-      tone: "success",
+      id: "goal-met", tone: "success", category: "trend",
       title: "היעד החודשי הושג",
-      detail: `${curRate}% מתוך יעד של ${goals.monthlyTarget}%.`,
-      category: "trend",
+      detail: `${score} מתוך יעד ${goals.monthlyTarget}.`,
+    });
+  } else if (cur.entries >= 5) {
+    out.push({
+      id: "goal-gap", tone: "info", category: "opportunity",
+      title: `${goals.monthlyTarget - score} נקודות עד היעד החודשי`,
+      detail: `יעד: ${goals.monthlyTarget} · נוכחי: ${score}. הקפד על הגעה מוקדמת בימים הקרובים.`,
     });
   }
 
-  if (curCounts.late >= goals.maxLatePerMonth) {
+  if (cur.lateCount >= goals.maxLatePerMonth) {
     out.push({
-      id: "late-limit",
-      tone: "destructive",
+      id: "late-limit", tone: "destructive", category: "recommendation",
       title: "מכסת איחורים חודשית נחצתה",
-      detail: `${curCounts.late} איחורים מתוך ${goals.maxLatePerMonth} מותרים. שקול הקדמת היציאה ב-10 דקות.`,
-      category: "recommendation",
+      detail: `${cur.lateCount} איחורים מתוך ${goals.maxLatePerMonth} מותרים.`,
     });
-  } else if (curCounts.late === goals.maxLatePerMonth - 1) {
+  } else if (cur.lateCount === goals.maxLatePerMonth - 1) {
     out.push({
-      id: "late-warn",
-      tone: "warning",
+      id: "late-warn", tone: "warning", category: "opportunity",
       title: "מתקרב למכסת איחורים",
-      detail: `${curCounts.late} מתוך ${goals.maxLatePerMonth}. הימנע מאיחור נוסף החודש.`,
-      category: "opportunity",
+      detail: `${cur.lateCount} מתוך ${goals.maxLatePerMonth}. הימנע מאיחור נוסף.`,
     });
   }
 
-  if (streak >= 7) {
+  if (cur.netMissing >= goals.alertMissingMinPerMonth) {
     out.push({
-      id: "streak",
-      tone: "success",
-      title: `רצף מצוין של ${streak} ימים`,
-      detail: "עקביות גבוהה. שמור על השגרה הנוכחית.",
-      category: "trend",
-    });
-  } else if (streak === 0 && records.length > 0) {
-    out.push({
-      id: "streak-broken",
-      tone: "info",
-      title: "התחל רצף חדש היום",
-      detail: "סמן נוכחות כדי לפתוח רצף.",
-      category: "recommendation",
+      id: "missing-alert", tone: "destructive", category: "recommendation",
+      title: `${fmtMin(cur.netMissing)} חסרים החודש (נטו)`,
+      detail: `סף ההתראה: ${fmtMin(goals.alertMissingMinPerMonth)}. שקול תכנון מחדש לשבוע הקרוב.`,
     });
   }
 
-  const weekdayPresence: number[] = Array(7).fill(0);
-  const weekdayTotal: number[] = Array(7).fill(0);
-  for (const r of records) {
-    const d = new Date(r.date).getDay();
-    weekdayTotal[d]++;
-    if (r.status === "present" || r.status === "excused") weekdayPresence[d]++;
-  }
-  let worstDay = -1, worstRate = 101;
-  const names = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-  for (let i = 0; i < 7; i++) {
-    if (weekdayTotal[i] >= 3) {
-      const rate = (weekdayPresence[i] / weekdayTotal[i]) * 100;
-      if (rate < worstRate) { worstRate = rate; worstDay = i; }
-    }
-  }
-  if (worstDay >= 0 && worstRate < 80) {
+  if (cur.bonusMin >= 60) {
     out.push({
-      id: "weak-day",
-      tone: "warning",
-      title: `יום ${names[worstDay]} חלש בנוכחות`,
-      detail: `ממוצע נוכחות ב${names[worstDay]}: ${Math.round(worstRate)}%. שקול תכנון מוקדם לימים אלו.`,
-      category: "opportunity",
+      id: "bonus-great", tone: "success", category: "trend",
+      title: `${fmtMin(cur.bonusMin)} דקות בונוס נצברו`,
+      detail: "הגעות מוקדמות עוזרות להקטין דקות חסרות.",
+    });
+  }
+
+  if (cur.oheveiCount >= 5) {
+    out.push({
+      id: "ohevei", tone: "success", category: "trend",
+      title: `${cur.oheveiCount} סדרים של "אוהבי ה׳"`,
+      detail: "השקעה משמעותית — כל הכבוד.",
+    });
+  }
+
+  if (cur.absenceCount >= 3) {
+    out.push({
+      id: "absences", tone: "warning", category: "opportunity",
+      title: `${cur.absenceCount} היעדרויות החודש`,
+      detail: "סמן היעדרויות כמוצדקות כשהן זכאיות לכך.",
     });
   }
 
@@ -133,47 +121,50 @@ export function generateInsights(
     .reduce((s, l) => s + l.minutes, 0);
   if (learnMinThisMonth >= 300) {
     out.push({
-      id: "learn-good",
-      tone: "success",
+      id: "learn-good", tone: "success", category: "trend",
       title: `${(learnMinThisMonth / 60).toFixed(1)} שעות לימוד נוסף החודש`,
-      detail: "השקעה משמעותית — כל הכבוד.",
-      category: "trend",
+      detail: "מעבר לסדרים הקבועים.",
     });
   } else if (learnMinThisMonth < 60 && lessons.length > 0) {
     out.push({
-      id: "learn-low",
-      tone: "info",
+      id: "learn-low", tone: "info", category: "recommendation",
       title: "מעט שעות לימוד נוסף החודש",
       detail: "הוסף שיעור קצר השבוע כדי לשמור על קצב.",
-      category: "recommendation",
     });
   }
 
   return out;
 }
 
-export function forecastMonthRate(records: AttendanceRecord[]): number | null {
+export function forecastMonthlyNetMissing(): number | null {
+  const all = getSederSnapshot();
   const now = new Date();
-  const cur = inMonth(records, now.getFullYear(), now.getMonth());
-  if (cur.length < 3) return null;
-  const rate = attendanceRate(cur);
-  // simple persistence forecast with bias toward yearly average
-  const all = attendanceRate(records);
-  return Math.round(rate * 0.7 + all * 0.3);
+  const y = now.getFullYear(), m = now.getMonth();
+  const list = entriesInMonth(all, y, m);
+  if (list.length < 3) return null;
+  const day = now.getDate();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  let net = 0;
+  for (const e of list) net += calcSeder(e).netMissingMin;
+  return Math.round((net / Math.max(1, day)) * daysInMonth);
 }
 
-export function consistencyScore(records: AttendanceRecord[]): number {
-  if (records.length < 5) return 0;
-  const monthly: Record<string, number[]> = {};
-  for (const r of records) {
-    const k = r.date.slice(0, 7);
-    monthly[k] = monthly[k] || [];
-    monthly[k].push(r.status === "present" || r.status === "excused" ? 1 : 0);
+export function consistencyScore(): number {
+  const all = getSederSnapshot();
+  if (all.length < 5) return 0;
+  const monthly: Record<string, number> = {};
+  const counts: Record<string, number> = {};
+  for (const e of all) {
+    const k = e.date.slice(0, 7);
+    const c = calcSeder(e);
+    monthly[k] = (monthly[k] || 0) + c.netMissingMin;
+    counts[k] = (counts[k] || 0) + 1;
   }
-  const rates = Object.values(monthly).map((arr) => arr.reduce((s, v) => s + v, 0) / arr.length);
-  if (rates.length < 2) return Math.round(rates[0] * 100);
+  const rates = Object.keys(monthly).map((k) => monthly[k] / Math.max(1, counts[k]));
+  if (rates.length < 2) return 0;
   const avg = rates.reduce((s, v) => s + v, 0) / rates.length;
   const variance = rates.reduce((s, v) => s + (v - avg) ** 2, 0) / rates.length;
   const stddev = Math.sqrt(variance);
-  return Math.max(0, Math.round((1 - stddev) * 100));
+  // Lower stddev = higher consistency. Map stddev (0–60min) → 100–0.
+  return Math.max(0, Math.min(100, Math.round(100 - (stddev / 60) * 100)));
 }

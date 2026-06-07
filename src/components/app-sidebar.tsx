@@ -1,12 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, ClipboardCheck, CalendarDays, History, BookOpen,
-  BarChart3, Sparkles, FileText, Search, ShieldCheck, Settings, DatabaseBackup,
+  BarChart3, Sparkles, FileText, Search, ShieldCheck, Settings, DatabaseBackup, Zap,
 } from "lucide-react";
 
 const navItems = [
   { to: "/", label: "לוח בקרה", icon: LayoutDashboard },
-  { to: "/attendance", label: "נוכחות", icon: ClipboardCheck },
+  { to: "/attendance", label: "נוכחות סדרים", icon: ClipboardCheck },
+  { to: "/quick", label: "כניסה מהירה", icon: Zap },
   { to: "/calendar", label: "לוח שנה", icon: CalendarDays },
   { to: "/history", label: "היסטוריה", icon: History },
   { to: "/learning", label: "לימוד נוסף", icon: BookOpen },
@@ -27,11 +28,11 @@ export function AppSidebar() {
       <div className="px-5 py-5 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="size-9 rounded-lg bg-sidebar-primary grid place-items-center text-sidebar-primary-foreground font-bold">
-            ש
+            כ
           </div>
           <div>
             <div className="text-sm font-semibold leading-tight">המעקב שלי</div>
-            <div className="text-[11px] text-sidebar-foreground/60 leading-tight">נוכחות אישית</div>
+            <div className="text-[11px] text-sidebar-foreground/60 leading-tight">מעקב נוכחות כולל</div>
           </div>
         </div>
       </div>
@@ -61,7 +62,7 @@ export function AppSidebar() {
       </nav>
 
       <div className="px-4 py-3 border-t border-sidebar-border text-[11px] text-sidebar-foreground/60">
-        גרסה 1.0 · Enterprise
+        גרסה 2.0 · כולל
       </div>
     </aside>
   );
