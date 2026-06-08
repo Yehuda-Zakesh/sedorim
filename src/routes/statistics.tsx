@@ -135,7 +135,7 @@ function Kpi({ label, value, icon: Icon, trend, up }: { label: string; value: st
       <div className="flex items-start justify-between">
         <div>
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-2 text-3xl font-bold tabular-nums">{value}</div>
+          <div className="mt-2 text-3xl font-bold tabular-nums break-words leading-tight" style={{ fontSize: value.length > 8 ? "1.25rem" : undefined }}>{value}</div>
           <div className={`mt-1 text-[11px] inline-flex items-center gap-1 ${up ? "text-success" : "text-destructive"}`}>
             {up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />} {trend}
           </div>
