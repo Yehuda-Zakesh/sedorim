@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { TrendingUp, TrendingDown, Target, Flame, Award } from "lucide-react";
 import { useSeder, useLearning, monthlySummary, attendanceScore, calcSeder, currentDayStreak } from "@/lib/kollel-store";
+import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
 
 export const Route = createFileRoute("/statistics")({
   head: () => ({ meta: [{ title: "סטטיסטיקות — המעקב שלי" }] }),
@@ -15,12 +16,15 @@ function StatisticsPage() {
   const y = now.getFullYear(), m = now.getMonth();
 
   // 12-month trend of score
-  const months: { label: string; score: number; net: number }[] = [];
+  const months: { label: string; hebLabel: string; score: number; net: number }[] = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(y, m - i, 1);
     const ms = monthlySummary(d.getFullYear(), d.getMonth());
+    const mid = new Date(d.getFullYear(), d.getMonth(), 15);
+    const h = hebrewFromGregorian(mid);
     months.push({
       label: d.toLocaleDateString("he-IL", { month: "short" }),
+      hebLabel: formatHebrewMonthYear(h),
       score: attendanceScore(d.getFullYear(), d.getMonth()),
       net: ms.netMissing,
     });
@@ -61,7 +65,7 @@ function StatisticsPage() {
     <AppShell title="סטטיסטיקות" subtitle="ניתוח אישי של מגמות נוכחות">
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi label="ציון החודש" value={`${curScore}`} icon={Target} trend={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`} up={curScore >= yoyScore} />
-        <Kpi label="חודש מצטיין" value={bestMonth?.label || "—"} icon={Award} trend={`${bestMonth?.score || 0} נק׳`} up />
+        <Kpi label="חודש מצטיין" value={bestMonth?.hebLabel || "—"} icon={Award} trend={`${bestMonth?.score || 0} נק׳`} up />
         <Kpi label="רצף ימים" value={streak.toString()} icon={Flame} trend="ימים" up={streak > 0} />
         <Kpi label="שעות לימוד" value={totalLearnHours} icon={TrendingUp} trend="סך הכל" up />
       </section>
@@ -131,7 +135,7 @@ function Kpi({ label, value, icon: Icon, trend, up }: { label: string; value: st
       <div className="flex items-start justify-between">
         <div>
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-2 text-3xl font-bold tabular-nums">{value}</div>
+          <div className="mt-2 text-3xl font-bold tabular-nums break-words leading-tight" style={{ fontSize: value.length > 8 ? "1.25rem" : undefined }}>{value}</div>
           <div className={`mt-1 text-[11px] inline-flex items-center gap-1 ${up ? "text-success" : "text-destructive"}`}>
             {up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />} {trend}
           </div>
