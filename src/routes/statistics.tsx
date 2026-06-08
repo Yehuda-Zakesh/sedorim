@@ -16,12 +16,15 @@ function StatisticsPage() {
   const y = now.getFullYear(), m = now.getMonth();
 
   // 12-month trend of score
-  const months: { label: string; score: number; net: number }[] = [];
+  const months: { label: string; hebLabel: string; score: number; net: number }[] = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(y, m - i, 1);
     const ms = monthlySummary(d.getFullYear(), d.getMonth());
+    const mid = new Date(d.getFullYear(), d.getMonth(), 15);
+    const h = hebrewFromGregorian(mid);
     months.push({
       label: d.toLocaleDateString("he-IL", { month: "short" }),
+      hebLabel: formatHebrewMonthYear(h),
       score: attendanceScore(d.getFullYear(), d.getMonth()),
       net: ms.netMissing,
     });
