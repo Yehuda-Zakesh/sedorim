@@ -1,5 +1,3 @@
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { logAudit } from "./audit-store";
 import {
@@ -232,38 +230,43 @@ export async function exportPdfReport(opts: {
   const sections = opts.sections ?? DEFAULT_SECTIONS;
   const html = buildReportHTML(opts.title, opts.entries, opts.lessons, sections, opts.range);
 
-  const host = document.createElement("div");
-  host.style.cssText = "position:fixed;top:-99999px;right:-99999px;pointer-events:none;";
-  host.innerHTML = html;
-  document.body.appendChild(host);
-  const node = host.firstElementChild as HTMLElement;
-
-  try {
-    const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-    const imgData = canvas.toDataURL("image/jpeg", 0.95);
-    const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const imgW = pageW;
-    const imgH = (canvas.height * imgW) / canvas.width;
-
-    let heightLeft = imgH;
-    let position = 0;
-    pdf.addImage(imgData, "JPEG", 0, position, imgW, imgH);
-    heightLeft -= pageH;
-    while (heightLeft > 0) {
-      position = heightLeft - imgH;
-      pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, position, imgW, imgH);
-      heightLeft -= pageH;
-    }
-
-    const fname = opts.filename || `${opts.title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
-    pdf.save(fname);
-    logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
-  } finally {
-    document.body.removeChild(host);
+  const win = window.open("", "_blank", "width=900,height=1000");
+  if (!win) {
+    throw new Error("חלון ההדפסה נחסם על ידי הדפדפן — אפשר חלונות קופצים ונסה שוב");
   }
+  const fname = opts.filename || `${opts.title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}`;
+  win.document.open();
+  win.document.write(`<!doctype html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8" />
+  <title>${fname}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4; margin: 12mm; }
+    html, body { margin:0; padding:0; background:#fff; }
+    body { font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; }
+    #__report { width:auto !important; padding:0 !important; }
+    @media print { .__no-print { display:none !important; } }
+  </style>
+</head>
+<body>
+  <div class="__no-print" style="position:fixed;top:8px;left:8px;display:flex;gap:6px;z-index:9999;">
+    <button onclick="window.print()" style="padding:8px 14px;border:0;border-radius:6px;background:#1565C0;color:#fff;font:600 13px sans-serif;cursor:pointer;">הדפס / שמור כ-PDF</button>
+    <button onclick="window.close()" style="padding:8px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;font:13px sans-serif;cursor:pointer;">סגור</button>
+  </div>
+  ${html}
+  <script>
+    window.addEventListener('load', function () {
+      setTimeout(function () { try { window.focus(); window.print(); } catch (e) {} }, 400);
+    });
+  </script>
+</body>
+</html>`);
+  win.document.close();
+  logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
 }
 
 export function exportXlsxWorkbook(opts: {
