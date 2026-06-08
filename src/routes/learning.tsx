@@ -110,7 +110,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="rounded-lg border border-border p-3">
             <div className="text-xs text-muted-foreground mb-2">הוספה ידנית</div>
             <div className="flex gap-2">
