@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { TrendingUp, TrendingDown, Target, Flame, Award } from "lucide-react";
 import { useSeder, useLearning, monthlySummary, attendanceScore, calcSeder, currentDayStreak } from "@/lib/kollel-store";
+import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
 
 export const Route = createFileRoute("/statistics")({
   head: () => ({ meta: [{ title: "סטטיסטיקות — המעקב שלי" }] }),
