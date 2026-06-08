@@ -110,7 +110,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="rounded-lg border border-border p-3">
             <div className="text-xs text-muted-foreground mb-2">הוספה ידנית</div>
             <div className="flex gap-2">
@@ -124,14 +124,14 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
           </div>
           <div className="rounded-lg border border-border p-3">
             <div className="text-xs text-muted-foreground mb-2">לפי טווח שעות</div>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               <input type="time" value={fromT} onChange={(e) => setFromT(e.target.value)}
-                className="flex-1 rounded-md border border-input bg-card px-2 py-1.5 text-sm" />
-              <span className="text-xs">→</span>
+                className="min-w-0 flex-1 basis-[6rem] rounded-md border border-input bg-card px-2 py-1.5 text-sm" />
+              <span className="text-xs shrink-0">→</span>
               <input type="time" value={toT} onChange={(e) => setToT(e.target.value)}
-                className="flex-1 rounded-md border border-input bg-card px-2 py-1.5 text-sm" />
+                className="min-w-0 flex-1 basis-[6rem] rounded-md border border-input bg-card px-2 py-1.5 text-sm" />
               <button onClick={addRange}
-                className="rounded-md bg-primary px-2 py-1.5 text-xs text-primary-foreground hover:bg-primary/90">
+                className="shrink-0 rounded-md bg-primary px-2 py-1.5 text-xs text-primary-foreground hover:bg-primary/90">
                 <Plus className="size-3.5" />
               </button>
             </div>
