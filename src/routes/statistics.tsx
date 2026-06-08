@@ -65,7 +65,7 @@ function StatisticsPage() {
     <AppShell title="סטטיסטיקות" subtitle="ניתוח אישי של מגמות נוכחות">
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi label="ציון החודש" value={`${curScore}`} icon={Target} trend={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`} up={curScore >= yoyScore} />
-        <Kpi label="חודש מצטיין" value={bestMonth?.label || "—"} icon={Award} trend={`${bestMonth?.score || 0} נק׳`} up />
+        <Kpi label="חודש מצטיין" value={bestMonth?.hebLabel || "—"} icon={Award} trend={`${bestMonth?.score || 0} נק׳`} up />
         <Kpi label="רצף ימים" value={streak.toString()} icon={Flame} trend="ימים" up={streak > 0} />
         <Kpi label="שעות לימוד" value={totalLearnHours} icon={TrendingUp} trend="סך הכל" up />
       </section>
