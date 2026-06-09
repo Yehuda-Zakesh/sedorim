@@ -61,6 +61,24 @@ function BackupPage() {
     }
   };
 
+  const handleDownloadSource = async () => {
+    try {
+      const result = await generateSourceZip();
+      const binary = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0));
+      const blob = new Blob([binary], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      logAudit("backup.download_source", { detail: result.filename });
+      toast.success("הקוד הורד בהצלחה");
+    } catch {
+      toast.error("ההורדה נכשלה — נסה שוב");
+    }
+  };
+
   const snapshotNow = () => {
     const snap = createSnapshot({ attendance: entries, learning: items }, "manual");
     logAudit("backup.export", { recordId: snap.id, detail: "תמונת מצב מקומית" });
