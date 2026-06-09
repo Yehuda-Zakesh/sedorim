@@ -2,13 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
-  Download, Upload, CheckCircle2, HardDrive, FileJson, Clock, Trash2, ShieldAlert, RotateCcw, AlertTriangle,
+  Download, Upload, CheckCircle2, HardDrive, FileJson, Clock, Trash2, ShieldAlert, RotateCcw, AlertTriangle, FileArchive,
 } from "lucide-react";
 import { useSeder, useLearning } from "@/lib/kollel-store";
 import { useSnapshots, createSnapshot, deleteSnapshot, verifySnapshot, getLastAutoBackupTs, clearAllSnapshots } from "@/lib/auto-backup";
 import { logAudit } from "@/lib/audit-store";
 import { useSettings, resetSettings } from "@/lib/settings-store";
 import { toast } from "sonner";
+import { generateSourceZip } from "@/lib/download-source.functions";
 
 export const Route = createFileRoute("/backup")({
   head: () => ({ meta: [{ title: "גיבוי ושחזור — המעקב שלי" }] }),
