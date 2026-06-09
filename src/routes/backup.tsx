@@ -142,6 +142,23 @@ function BackupPage() {
         </button>
       </div>
 
+      <div className="card-surface p-5 mb-5 border border-primary/20">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="size-10 rounded-lg bg-primary/10 grid place-items-center text-primary">
+            <FileArchive className="size-5" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold">הורדת קוד מקור</div>
+            <div className="text-xs text-muted-foreground">אריזת כל קבצי הפרויקט לקובץ ZIP ישירות מהשרת</div>
+          </div>
+        </div>
+        <button onClick={handleDownloadSource}
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition">
+          <Download className="size-4" />
+          הורד ZIP מעודכן
+        </button>
+      </div>
+
       <div className="card-surface p-5 mb-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold">היסטוריית גיבויים מקומיים</h2>
