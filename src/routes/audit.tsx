@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   Plus, Pencil, Trash2, Settings as Cog, Download, Upload,
-  ShieldCheck, FileText, AlertTriangle, Search, Eraser, Play, Square, Trash, RotateCcw,
+  ShieldCheck, FileText, AlertTriangle, Search, Eraser, Play, Square, Trash, RotateCcw, Archive,
 } from "lucide-react";
 import { useAudit, ACTION_LABELS, type AuditAction } from "@/lib/audit-store";
 
