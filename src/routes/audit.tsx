@@ -27,6 +27,7 @@ const ICONS: Record<AuditAction, { icon: typeof Plus; tone: string }> = {
   "backup.restore":          { icon: Upload, tone: "warning" },
   "backup.delete_db":        { icon: Trash, tone: "destructive" },
   "backup.reset_settings":   { icon: RotateCcw, tone: "warning" },
+  "backup.download_source":  { icon: Archive, tone: "info" },
   "report.export":           { icon: FileText, tone: "info" },
   "data.validation_failed":  { icon: AlertTriangle, tone: "destructive" },
 };
