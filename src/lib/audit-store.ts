@@ -15,6 +15,7 @@ export type AuditAction =
   | "backup.restore"
   | "backup.delete_db"
   | "backup.reset_settings"
+  | "backup.download_source"
   | "report.export"
   | "data.validation_failed";
 
