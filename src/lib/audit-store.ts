@@ -94,6 +94,7 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
   "backup.restore": "שחזור מגיבוי",
   "backup.delete_db": "מחיקת בסיס נתונים",
   "backup.reset_settings": "איפוס הגדרות",
+  "backup.download_source": "הורדת קוד מקור",
   "report.export": "ייצוא דוח",
   "data.validation_failed": "כשל בוולידציה",
 };
