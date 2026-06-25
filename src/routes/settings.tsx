@@ -5,7 +5,7 @@ import {
   ChevronDown, User, Bell, Palette, Globe, Shield, Database, Search,
   RotateCcw, Type, Contrast, Target, Clock,
 } from "lucide-react";
-import { useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, updateSettings } from "@/lib/settings-store";
+import { useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, updateSettings } from "@/lib/settings-store";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({
@@ -104,6 +104,10 @@ function SettingsPage() {
                   )}
                   {s.id === "appearance" && (
                     <>
+                      <ColorThemePicker
+                        value={settings.appearance.colorTheme}
+                        onChange={(v) => update({ appearance: { ...settings.appearance, colorTheme: v } })}
+                      />
                       <SelectField label="גודל גופן" value={settings.appearance.fontSize}
                         options={[{ v: "small", l: "קטן" }, { v: "normal", l: "רגיל" }, { v: "large", l: "גדול" }, { v: "xlarge", l: "גדול מאוד" }]}
                         onChange={(v) => update({ appearance: { ...settings.appearance, fontSize: v as FontSize } })} />
