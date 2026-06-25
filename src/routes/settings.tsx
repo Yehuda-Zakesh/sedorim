@@ -5,7 +5,7 @@ import {
   ChevronDown, User, Bell, Palette, Globe, Shield, Database, Search,
   RotateCcw, Type, Contrast, Target, Clock,
 } from "lucide-react";
-import { useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, updateSettings } from "@/lib/settings-store";
+import { useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, updateSettings } from "@/lib/settings-store";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({
@@ -104,6 +104,10 @@ function SettingsPage() {
                   )}
                   {s.id === "appearance" && (
                     <>
+                      <ColorThemePicker
+                        value={settings.appearance.colorTheme}
+                        onChange={(v) => update({ appearance: { ...settings.appearance, colorTheme: v } })}
+                      />
                       <SelectField label="גודל גופן" value={settings.appearance.fontSize}
                         options={[{ v: "small", l: "קטן" }, { v: "normal", l: "רגיל" }, { v: "large", l: "גדול" }, { v: "xlarge", l: "גדול מאוד" }]}
                         onChange={(v) => update({ appearance: { ...settings.appearance, fontSize: v as FontSize } })} />
@@ -221,6 +225,46 @@ function Toggle({ label, on, onChange }: { label: React.ReactNode; on: boolean; 
         className={`relative h-6 w-11 rounded-full transition ${on ? "bg-primary" : "bg-muted"}`}>
         <span className={`absolute top-0.5 size-5 rounded-full bg-card shadow transition-all ${on ? "right-0.5" : "right-[22px]"}`} />
       </button>
+    </div>
+  );
+}
+
+const COLOR_THEMES: { id: ColorTheme; label: string; hex: string }[] = [
+  { id: "blue",    label: "כחול",    hex: "#1565C0" },
+  { id: "indigo",  label: "אינדיגו", hex: "#3F51B5" },
+  { id: "violet",  label: "סגול",    hex: "#7C3AED" },
+  { id: "pink",    label: "ורוד",    hex: "#DB2777" },
+  { id: "rose",    label: "רוז",     hex: "#E11D48" },
+  { id: "crimson", label: "אדום",    hex: "#C62828" },
+  { id: "amber",   label: "ענבר",    hex: "#D97706" },
+  { id: "lime",    label: "ליים",    hex: "#65A30D" },
+  { id: "emerald", label: "ירוק",    hex: "#059669" },
+  { id: "teal",    label: "טורקיז",  hex: "#0D9488" },
+  { id: "slate",   label: "אפור",    hex: "#475569" },
+];
+
+function ColorThemePicker({ value, onChange }: { value: ColorTheme; onChange: (v: ColorTheme) => void }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground mb-2">ערכת צבעים</div>
+      <div className="grid grid-cols-6 sm:grid-cols-11 gap-2">
+        {COLOR_THEMES.map((t) => {
+          const active = value === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onChange(t.id)}
+              title={t.label}
+              aria-label={t.label}
+              className={`relative aspect-square rounded-lg border-2 transition ${active ? "border-foreground scale-105" : "border-transparent hover:scale-105"}`}
+              style={{ backgroundColor: t.hex }}
+            >
+              {active && <span className="absolute inset-0 grid place-items-center text-white text-xs font-bold">✓</span>}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

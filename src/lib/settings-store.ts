@@ -3,6 +3,9 @@ import { logAudit } from "./audit-store";
 
 export type FontSize = "small" | "normal" | "large" | "xlarge";
 export type DateFormat = "iso" | "he" | "mixed" | "hebrew";
+export type ColorTheme =
+  | "blue" | "emerald" | "violet" | "rose" | "amber"
+  | "teal" | "pink" | "slate" | "crimson" | "indigo" | "lime";
 
 export type SederConfig = {
   s1Start: string; s1End: string;
@@ -24,6 +27,7 @@ export type Settings = {
     fontSize: FontSize;
     highContrast: boolean;
     compactMode: boolean;
+    colorTheme: ColorTheme;
   };
   dashboard: {
     showInsights: boolean;
@@ -58,7 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
     defaultDeparture: "seder_end",
   },
   notifications: { dailyReminder: true, latenessAlert: true, weeklySummary: false },
-  appearance: { fontSize: "normal", highContrast: false, compactMode: false },
+  appearance: { fontSize: "normal", highContrast: false, compactMode: false, colorTheme: "blue" },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
   language: { dateFormat: "mixed" },
   privacy: { lockScreen: false, enableAudit: true },
@@ -137,6 +141,7 @@ export function applyAppearance() {
   r.classList.toggle("hc", settings.appearance.highContrast);
   r.classList.toggle("compact", settings.appearance.compactMode);
   r.dataset.fontSize = settings.appearance.fontSize;
+  r.dataset.theme = settings.appearance.colorTheme || "blue";
   const sizes: Record<FontSize, string> = { small: "14px", normal: "16px", large: "18px", xlarge: "20px" };
   r.style.fontSize = sizes[settings.appearance.fontSize];
 }

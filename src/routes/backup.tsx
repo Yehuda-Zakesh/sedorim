@@ -2,14 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
-  Download, Upload, CheckCircle2, HardDrive, FileJson, Clock, Trash2, ShieldAlert, RotateCcw, AlertTriangle, FileArchive,
+  Download, Upload, CheckCircle2, HardDrive, FileJson, Clock, Trash2, ShieldAlert, RotateCcw, AlertTriangle,
 } from "lucide-react";
 import { useSeder, useLearning } from "@/lib/kollel-store";
 import { useSnapshots, createSnapshot, deleteSnapshot, verifySnapshot, getLastAutoBackupTs, clearAllSnapshots } from "@/lib/auto-backup";
 import { logAudit } from "@/lib/audit-store";
 import { useSettings, resetSettings } from "@/lib/settings-store";
 import { toast } from "sonner";
-import { generateSourceZip } from "@/lib/download-source.functions";
 
 export const Route = createFileRoute("/backup")({
   head: () => ({ meta: [{ title: "גיבוי ושחזור — המעקב שלי" }] }),
@@ -58,24 +57,6 @@ function BackupPage() {
       toast.success("השחזור הושלם");
     } catch {
       toast.error("קובץ לא תקין");
-    }
-  };
-
-  const handleDownloadSource = async () => {
-    try {
-      const result = await generateSourceZip();
-      const binary = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0));
-      const blob = new Blob([binary], { type: "application/zip" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = result.filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      logAudit("backup.download_source", { detail: result.filename });
-      toast.success("הקוד הורד בהצלחה");
-    } catch {
-      toast.error("ההורדה נכשלה — נסה שוב");
     }
   };
 
@@ -139,23 +120,6 @@ function BackupPage() {
           <RotateCcw className="size-6 text-primary mb-3" />
           <div className="text-sm font-semibold">תמונת מצב</div>
           <div className="text-xs text-muted-foreground mt-1">שמירה מקומית מהירה</div>
-        </button>
-      </div>
-
-      <div className="card-surface p-5 mb-5 border border-primary/20">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="size-10 rounded-lg bg-primary/10 grid place-items-center text-primary">
-            <FileArchive className="size-5" />
-          </div>
-          <div>
-            <div className="text-sm font-semibold">הורדת קוד מקור</div>
-            <div className="text-xs text-muted-foreground">אריזת כל קבצי הפרויקט לקובץ ZIP ישירות מהשרת</div>
-          </div>
-        </div>
-        <button onClick={handleDownloadSource}
-          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition">
-          <Download className="size-4" />
-          הורד ZIP מעודכן
         </button>
       </div>
 
