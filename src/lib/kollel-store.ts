@@ -74,6 +74,21 @@ let learningEntries: LearningEntry[] = load<LearningEntry[]>(LRN_KEY, []);
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
 
+// Cross-window sync: when another Chromium window (e.g. KollelQuick.exe)
+// writes to the same localStorage, the `storage` event fires here. Reload
+// the in-memory caches and notify subscribers so the UI updates live.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === SEDER_KEY) {
+      sederEntries = load<SederEntry[]>(SEDER_KEY, []);
+      emit();
+    } else if (e.key === LRN_KEY) {
+      learningEntries = load<LearningEntry[]>(LRN_KEY, []);
+      emit();
+    }
+  });
+}
+
 function snapshotIfConfigured() {
   if (typeof window === "undefined") return;
   if (!getSettings().data.autoBackupBeforeOps) return;
