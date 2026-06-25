@@ -228,3 +228,43 @@ function Toggle({ label, on, onChange }: { label: React.ReactNode; on: boolean; 
     </div>
   );
 }
+
+const COLOR_THEMES: { id: ColorTheme; label: string; hex: string }[] = [
+  { id: "blue",    label: "כחול",    hex: "#1565C0" },
+  { id: "indigo",  label: "אינדיגו", hex: "#3F51B5" },
+  { id: "violet",  label: "סגול",    hex: "#7C3AED" },
+  { id: "pink",    label: "ורוד",    hex: "#DB2777" },
+  { id: "rose",    label: "רוז",     hex: "#E11D48" },
+  { id: "crimson", label: "אדום",    hex: "#C62828" },
+  { id: "amber",   label: "ענבר",    hex: "#D97706" },
+  { id: "lime",    label: "ליים",    hex: "#65A30D" },
+  { id: "emerald", label: "ירוק",    hex: "#059669" },
+  { id: "teal",    label: "טורקיז",  hex: "#0D9488" },
+  { id: "slate",   label: "אפור",    hex: "#475569" },
+];
+
+function ColorThemePicker({ value, onChange }: { value: ColorTheme; onChange: (v: ColorTheme) => void }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground mb-2">ערכת צבעים</div>
+      <div className="grid grid-cols-6 sm:grid-cols-11 gap-2">
+        {COLOR_THEMES.map((t) => {
+          const active = value === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onChange(t.id)}
+              title={t.label}
+              aria-label={t.label}
+              className={`relative aspect-square rounded-lg border-2 transition ${active ? "border-foreground scale-105" : "border-transparent hover:scale-105"}`}
+              style={{ backgroundColor: t.hex }}
+            >
+              {active && <span className="absolute inset-0 grid place-items-center text-white text-xs font-bold">✓</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
