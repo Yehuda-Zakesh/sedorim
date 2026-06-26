@@ -6,6 +6,9 @@ export type DateFormat = "iso" | "he" | "mixed" | "hebrew";
 export type ColorTheme =
   | "blue" | "emerald" | "violet" | "rose" | "amber"
   | "teal" | "pink" | "slate" | "crimson" | "indigo" | "lime";
+export type BgTheme =
+  | "white" | "cream" | "mint" | "sky" | "lavender"
+  | "peach" | "blush" | "sand" | "gray" | "paper";
 
 export type SederConfig = {
   s1Start: string; s1End: string;
@@ -28,6 +31,7 @@ export type Settings = {
     highContrast: boolean;
     compactMode: boolean;
     colorTheme: ColorTheme;
+    background: BgTheme;
   };
   dashboard: {
     showInsights: boolean;
@@ -62,7 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
     defaultDeparture: "seder_end",
   },
   notifications: { dailyReminder: true, latenessAlert: true, weeklySummary: false },
-  appearance: { fontSize: "normal", highContrast: false, compactMode: false, colorTheme: "blue" },
+  appearance: { fontSize: "normal", highContrast: false, compactMode: false, colorTheme: "blue", background: "white" },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
   language: { dateFormat: "mixed" },
   privacy: { lockScreen: false, enableAudit: true },
@@ -142,6 +146,8 @@ export function applyAppearance() {
   r.classList.toggle("compact", settings.appearance.compactMode);
   r.dataset.fontSize = settings.appearance.fontSize;
   r.dataset.theme = settings.appearance.colorTheme || "blue";
+  const bg = settings.appearance.background || "white";
+  if (bg === "white") delete r.dataset.bg; else r.dataset.bg = bg;
   const sizes: Record<FontSize, string> = { small: "14px", normal: "16px", large: "18px", xlarge: "20px" };
   r.style.fontSize = sizes[settings.appearance.fontSize];
 }
