@@ -30,6 +30,14 @@ function dayTone(list: SederEntry[]): { color: string; label: string } {
 }
 
 function CalendarPage() {
+  return (
+    <AppShell title="לוח שנה" subtitle="ניווט מהיר בין חודשים">
+      <CalendarView />
+    </AppShell>
+  );
+}
+
+export function CalendarView() {
   const today = new Date();
   const [month, setMonth] = useState(today.getMonth());
   const [year, setYear] = useState(today.getFullYear());
@@ -60,7 +68,8 @@ function CalendarPage() {
   const heMonth = formatHebrewMonthYear(hebrewFromGregorian(new Date(year, month, 15)));
 
   return (
-    <AppShell title="לוח שנה" subtitle={`${months[month]} ${year} · ${heMonth}`}>
+    <>
+      <div className="text-xs text-muted-foreground mb-3">{months[month]} {year} · {heMonth}</div>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="card-surface p-5 lg:col-span-3">
           <div className="flex items-center justify-between mb-5">
@@ -165,7 +174,7 @@ function CalendarPage() {
           </div>
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }
 
