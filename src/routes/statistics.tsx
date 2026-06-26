@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { TrendingUp, TrendingDown, Target, Flame, Award } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Flame, Award, BarChart3, Sparkles } from "lucide-react";
 import { useSeder, useLearning, monthlySummary, attendanceScore, calcSeder, currentDayStreak } from "@/lib/kollel-store";
 import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
+import { InsightsView } from "./insights";
 
 export const Route = createFileRoute("/statistics")({
   head: () => ({ meta: [{ title: "סטטיסטיקות — המעקב שלי" }] }),
@@ -10,6 +12,7 @@ export const Route = createFileRoute("/statistics")({
 });
 
 function StatisticsPage() {
+  const [tab, setTab] = useState<"stats" | "insights">("stats");
   const { entries } = useSeder();
   const { items: lessons } = useLearning();
   const now = new Date();
@@ -63,6 +66,19 @@ function StatisticsPage() {
 
   return (
     <AppShell title="סטטיסטיקות" subtitle="ניתוח אישי של מגמות נוכחות">
+      <div className="mb-4 inline-flex rounded-lg border border-border bg-card p-1">
+        <button onClick={() => setTab("stats")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "stats" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <BarChart3 className="size-3.5" /> סטטיסטיקות
+        </button>
+        <button onClick={() => setTab("insights")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "insights" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <Sparkles className="size-3.5" /> תובנות חכמות
+        </button>
+      </div>
+
+      {tab === "insights" ? <InsightsView /> : (
+      <>
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi label="ציון החודש" value={`${curScore}`} icon={Target} trend={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`} up={curScore >= yoyScore} />
         <Kpi label="חודש מצטיין" value={bestMonth?.hebLabel || "—"} icon={Award} trend={`${bestMonth?.score || 0} נק׳`} up />
@@ -125,6 +141,8 @@ function StatisticsPage() {
           ))}
         </div>
       </div>
+      </>
+      )}
     </AppShell>
   );
 }

@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Search, Trash2 } from "lucide-react";
+import { Search, Trash2, History as HistoryIcon, CalendarDays } from "lucide-react";
 import { useSeder, calcSeder, monthlySummary } from "@/lib/kollel-store";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
+import { CalendarView } from "./calendar";
 
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "היסטוריה — המעקב שלי" }] }),
@@ -16,6 +17,7 @@ type ExcusedFilter = "all" | "excused" | "non-excused";
 
 function HistoryPage() {
   const { entries, remove } = useSeder();
+  const [tab, setTab] = useState<"list" | "calendar">("list");
   const [q, setQ] = useState("");
   const [sederFilter, setSederFilter] = useState<"all" | "1" | "2">("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -42,6 +44,19 @@ function HistoryPage() {
 
   return (
     <AppShell title="היסטוריה" subtitle={`${entries.length} רישומים סה״כ`}>
+      <div className="mb-4 inline-flex rounded-lg border border-border bg-card p-1">
+        <button onClick={() => setTab("list")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <HistoryIcon className="size-3.5" /> טבלת רישומים
+        </button>
+        <button onClick={() => setTab("calendar")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "calendar" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <CalendarDays className="size-3.5" /> לוח שנה
+        </button>
+      </div>
+
+      {tab === "calendar" ? <CalendarView /> : (
+      <>
       <div className="card-surface p-4 mb-4 space-y-3">
         <div className="relative">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -136,6 +151,8 @@ function HistoryPage() {
           <SumRow label="אוהבי ה׳" value={summary.oheveiCount} />
         </div>
       </div>
+      </>
+      )}
     </AppShell>
   );
 }

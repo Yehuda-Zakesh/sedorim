@@ -8,6 +8,8 @@ import { applyAppearance, useSettings, isOnboarded } from "@/lib/settings-store"
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { OnboardingWizard } from "./onboarding-wizard";
 
+export const APP_VERSION = "1.0.0";
+
 export function AppShell({ title, subtitle, actions, children }: {
   title: string; subtitle?: string; actions?: ReactNode; children: ReactNode;
 }) {
@@ -27,7 +29,7 @@ export function AppShell({ title, subtitle, actions, children }: {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AppSidebar />
-      <div className="mr-[220px] flex flex-col min-h-screen">
+      <div className="mr-[64px] flex flex-col min-h-screen">
         <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
           <div className="flex items-center justify-between gap-4 px-6 py-3.5">
             <div>
@@ -49,6 +51,9 @@ export function AppShell({ title, subtitle, actions, children }: {
           </div>
         </header>
         <main className="flex-1 p-6">{children}</main>
+        <footer className="border-t border-border bg-card/40 px-6 py-3 text-center text-[11px] text-muted-foreground">
+          התוכנה נוצרה ע"י יהודה זקש · כל הזכויות לא שמורות · גרסה {APP_VERSION}
+        </footer>
       </div>
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       {needsOnboarding && <OnboardingWizard onComplete={() => setNeedsOnboarding(false)} />}

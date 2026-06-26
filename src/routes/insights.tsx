@@ -22,6 +22,14 @@ const CATEGORY_LABEL: Record<Insight["category"], string> = {
 };
 
 function InsightsPage() {
+  return (
+    <AppShell title="תובנות חכמות" subtitle="ניתוח אוטומטי של הנתונים שלך">
+      <InsightsView />
+    </AppShell>
+  );
+}
+
+export function InsightsView() {
   const { entries } = useSeder();
   const { items: lessons } = useLearning();
   const { settings } = useSettings();
@@ -40,7 +48,7 @@ function InsightsPage() {
   for (const i of insights) grouped[i.category].push(i);
 
   return (
-    <AppShell title="תובנות חכמות" subtitle="ניתוח אוטומטי של הנתונים שלך">
+    <>
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
         <KpiCard label="ציון החודש" value={`${overall}`} icon={Target} />
         <KpiCard label="רצף ימים" value={streak.toString()} icon={Sparkles} />
@@ -85,7 +93,7 @@ function InsightsPage() {
           ))}
         </div>
       )}
-    </AppShell>
+    </>
   );
 }
 

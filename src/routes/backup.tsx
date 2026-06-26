@@ -23,6 +23,14 @@ function formatSize(n: number) {
 }
 
 function BackupPage() {
+  return (
+    <AppShell title="גיבוי ושחזור" subtitle="ייצוא, ייבוא ופעולות מערכת">
+      <BackupView />
+    </AppShell>
+  );
+}
+
+export function BackupView() {
   const { entries, replaceAll: replaceSeder, clearAll: clearSeder } = useSeder();
   const { items, replaceAll: replaceLrn, clearAll: clearLrn } = useLearning();
   const snapshots = useSnapshots();
@@ -95,7 +103,7 @@ function BackupPage() {
   const lastAuto = getLastAutoBackupTs();
 
   return (
-    <AppShell title="גיבוי ושחזור" subtitle="ייצוא, ייבוא ופעולות מערכת">
+    <>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
         <Kpi icon={CheckCircle2} tone="success" label="רישומי סדרים" value={entries.length.toString()} />
         <Kpi icon={FileJson} tone="info" label="שיעורי לימוד" value={items.length.toString()} />
@@ -193,7 +201,7 @@ function BackupPage() {
         <button onClick={() => { clearAllSnapshots(); toast("תמונות המצב נמחקו"); }}
           className="mt-3 text-xs text-muted-foreground hover:text-destructive">מחיקת כל תמונות המצב</button>
       </div>
-    </AppShell>
+    </>
   );
 }
 

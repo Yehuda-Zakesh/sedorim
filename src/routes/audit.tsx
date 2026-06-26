@@ -44,6 +44,14 @@ function formatTs(ts: number) {
 }
 
 function AuditPage() {
+  return (
+    <AppShell title="יומן ביקורת" subtitle="רישומים אינם ניתנים לעריכה">
+      <AuditView />
+    </AppShell>
+  );
+}
+
+export function AuditView() {
   const entries = useAudit();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | AuditAction>("all");
@@ -63,7 +71,8 @@ function AuditPage() {
   );
 
   return (
-    <AppShell title="יומן ביקורת" subtitle={`${entries.length} פעולות מתועדות · רישומים אינם ניתנים לעריכה`}>
+    <>
+      <div className="text-xs text-muted-foreground mb-3">{entries.length} פעולות מתועדות</div>
       <div className="card-surface p-4 mb-4 space-y-3">
         <div className="relative">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -112,6 +121,6 @@ function AuditPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

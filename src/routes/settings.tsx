@@ -3,10 +3,12 @@ import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   ChevronDown, User, Bell, Palette, Globe, Shield, Database, Search,
-  RotateCcw, Type, Contrast, Target, Clock,
+  RotateCcw, Type, Contrast, Target, Clock, ShieldCheck, DatabaseBackup,
 } from "lucide-react";
-import { useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, updateSettings } from "@/lib/settings-store";
+import { useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, type BgTheme, updateSettings } from "@/lib/settings-store";
 import { toast } from "sonner";
+import { AuditView } from "./audit";
+import { BackupView } from "./backup";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "הגדרות — המעקב שלי" }] }),
@@ -23,6 +25,8 @@ const SECTIONS = [
   { id: "language", label: "שפה ואזור", icon: Globe },
   { id: "privacy", label: "פרטיות", icon: Shield },
   { id: "data", label: "נתונים וגיבוי", icon: Database },
+  { id: "backup", label: "גיבוי ושחזור", icon: DatabaseBackup },
+  { id: "audit", label: "יומן ביקורת", icon: ShieldCheck },
 ] as const;
 
 function SettingsPage() {
@@ -108,6 +112,10 @@ function SettingsPage() {
                         value={settings.appearance.colorTheme}
                         onChange={(v) => update({ appearance: { ...settings.appearance, colorTheme: v } })}
                       />
+                      <BackgroundPicker
+                        value={settings.appearance.background}
+                        onChange={(v) => update({ appearance: { ...settings.appearance, background: v } })}
+                      />
                       <SelectField label="גודל גופן" value={settings.appearance.fontSize}
                         options={[{ v: "small", l: "קטן" }, { v: "normal", l: "רגיל" }, { v: "large", l: "גדול" }, { v: "xlarge", l: "גדול מאוד" }]}
                         onChange={(v) => update({ appearance: { ...settings.appearance, fontSize: v as FontSize } })} />
@@ -157,6 +165,8 @@ function SettingsPage() {
                         onChange={(v) => update({ data: { ...settings.data, autoBackupBeforeOps: v } })} />
                     </>
                   )}
+                  {s.id === "backup" && <BackupView />}
+                  {s.id === "audit" && <AuditView />}
                 </div>
               )}
             </div>
@@ -261,6 +271,45 @@ function ColorThemePicker({ value, onChange }: { value: ColorTheme; onChange: (v
               style={{ backgroundColor: t.hex }}
             >
               {active && <span className="absolute inset-0 grid place-items-center text-white text-xs font-bold">✓</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const BG_THEMES: { id: BgTheme; label: string; hex: string }[] = [
+  { id: "white",    label: "לבן (ברירת מחדל)", hex: "#F5F5F5" },
+  { id: "paper",    label: "נייר",  hex: "#FAF8F1" },
+  { id: "cream",    label: "שמנת", hex: "#F8F1DE" },
+  { id: "sand",     label: "חול",  hex: "#F1E9D2" },
+  { id: "peach",    label: "אפרסק", hex: "#FAE3D0" },
+  { id: "blush",    label: "ורדרד", hex: "#F8E1E0" },
+  { id: "lavender", label: "לבנדר", hex: "#E5DEF5" },
+  { id: "sky",      label: "תכלת",  hex: "#D9EAF6" },
+  { id: "mint",     label: "מנטה",  hex: "#D9F0E1" },
+  { id: "gray",     label: "אפור",  hex: "#E5E5E5" },
+];
+
+function BackgroundPicker({ value, onChange }: { value: BgTheme; onChange: (v: BgTheme) => void }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground mb-2">רקע מסך (פעיל במצב בהיר)</div>
+      <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+        {BG_THEMES.map((t) => {
+          const active = value === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onChange(t.id)}
+              title={t.label}
+              aria-label={t.label}
+              className={`relative aspect-square rounded-lg border-2 transition ${active ? "border-foreground scale-105" : "border-border hover:scale-105"}`}
+              style={{ backgroundColor: t.hex }}
+            >
+              {active && <span className="absolute inset-0 grid place-items-center text-foreground text-xs font-bold">✓</span>}
             </button>
           );
         })}
