@@ -149,9 +149,9 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
       <div className="card-surface p-5">
         <div className="text-xs text-muted-foreground">סה״כ במסגרת זו</div>
         <div className="text-3xl font-bold tabular-nums mt-1">{(totalMin / 60).toFixed(1)} <span className="text-sm text-muted-foreground">שע׳</span></div>
-        <div className="text-xs text-muted-foreground mt-1">{totalMin} דקות · {items.filter((i) => i.framework === fw).length} שיעורים</div>
+        <div className="text-xs text-muted-foreground mt-1">{totalMin} דקות · {items.filter((i) => i.framework === fw).length} רישומים</div>
 
-        <h3 className="text-sm font-semibold mt-5 mb-2">שיעורים אחרונים</h3>
+        <h3 className="text-sm font-semibold mt-5 mb-2">רישומים אחרונים</h3>
         {myItems.length ? (
           <ul className="space-y-2">
             {myItems.map((i) => (
