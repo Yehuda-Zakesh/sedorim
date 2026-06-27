@@ -149,9 +149,9 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
       <div className="card-surface p-5">
         <div className="text-xs text-muted-foreground">סה״כ במסגרת זו</div>
         <div className="text-3xl font-bold tabular-nums mt-1">{(totalMin / 60).toFixed(1)} <span className="text-sm text-muted-foreground">שע׳</span></div>
-        <div className="text-xs text-muted-foreground mt-1">{totalMin} דקות · {items.filter((i) => i.framework === fw).length} שיעורים</div>
+        <div className="text-xs text-muted-foreground mt-1">{totalMin} דקות · {items.filter((i) => i.framework === fw).length} רישומים</div>
 
-        <h3 className="text-sm font-semibold mt-5 mb-2">שיעורים אחרונים</h3>
+        <h3 className="text-sm font-semibold mt-5 mb-2">רישומים אחרונים</h3>
         {myItems.length ? (
           <ul className="space-y-2">
             {myItems.map((i) => (
@@ -162,7 +162,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
               </li>
             ))}
           </ul>
-        ) : <div className="text-xs text-muted-foreground">אין שיעורים</div>}
+        ) : <div className="text-xs text-muted-foreground">אין רישומים</div>}
       </div>
     </div>
   );
@@ -188,7 +188,7 @@ function LearningPage() {
       <FrameworkPanel fw={active} enabled={active !== "bein-hazmanim" || beinHaz} />
 
       <div className="card-surface p-5 mt-4">
-        <h3 className="text-sm font-semibold mb-3">כל השיעורים</h3>
+        <h3 className="text-sm font-semibold mb-3">כל הרישומים</h3>
         {items.length ? (
           <ul className="divide-y divide-border">
             {items.slice(0, 30).map((i: LearningEntry) => (
@@ -207,7 +207,7 @@ function LearningPage() {
               </li>
             ))}
           </ul>
-        ) : <div className="text-center text-sm text-muted-foreground py-6">אין שיעורים</div>}
+        ) : <div className="text-center text-sm text-muted-foreground py-6">אין רישומים</div>}
       </div>
     </AppShell>
   );

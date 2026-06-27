@@ -129,7 +129,7 @@ export function generateInsights(
     out.push({
       id: "learn-low", tone: "info", category: "recommendation",
       title: "מעט שעות לימוד נוסף החודש",
-      detail: "הוסף שיעור קצר השבוע כדי לשמור על קצב.",
+      detail: "הוסף רישום קצר השבוע כדי לשמור על קצב.",
     });
   }
 
