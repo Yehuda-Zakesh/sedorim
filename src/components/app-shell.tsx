@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Moon, Sun, Monitor, Keyboard } from "lucide-react";
-import { AppSidebar } from "./app-sidebar";
+import { AppSidebar, useSidebarCollapsed } from "./app-sidebar";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
 import { applyAppearance, useSettings, isOnboarded } from "@/lib/settings-store";
@@ -15,6 +15,7 @@ export function AppShell({ title, subtitle, actions, children }: {
 }) {
   const { theme, setTheme } = useTheme();
   useSettings(); // re-render on settings change
+  const { collapsed } = useSidebarCollapsed();
   const [helpOpen, setHelpOpen] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
@@ -29,7 +30,7 @@ export function AppShell({ title, subtitle, actions, children }: {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AppSidebar />
-      <div className="mr-[64px] flex flex-col min-h-screen">
+      <div className={`${collapsed ? "mr-[64px]" : "mr-[220px]"} flex flex-col min-h-screen transition-[margin] duration-200`}>
         <header className="sticky top-0 z-20 bg-card/80 backdrop-blur border-b border-border">
           <div className="flex items-center justify-between gap-4 px-6 py-3.5">
             <div>

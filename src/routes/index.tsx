@@ -2,10 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import {
   Clock, TrendingUp, AlertTriangle, CalendarCheck, BookOpen, ChevronLeft,
-  Sparkles, Bell, Flame, Target, FileDown, DatabaseBackup, Zap, Award,
+  Sparkles, Bell, Flame, Target, FileDown, DatabaseBackup, Award,
 } from "lucide-react";
 import {
   useSeder, useLearning, monthlySummary, attendanceScore, currentDayStreak, todayISO, calcSeder,
+  FRAMEWORK_LABELS, type LearningFramework,
 } from "@/lib/kollel-store";
 import { formatHebrewDate, isBeinHazmanim } from "@/lib/hebrew-calendar";
 import { useSettings } from "@/lib/settings-store";
@@ -48,6 +49,13 @@ function Dashboard() {
   const hebrewDate = formatHebrewDate(today);
   const beinHazmanim = isBeinHazmanim(today);
 
+  // Additional-learning totals for the current month, grouped by framework
+  const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
+  const monthLessons = lessons.filter((l) => l.date.startsWith(monthPrefix));
+  const learningTotalMin = monthLessons.reduce((s, l) => s + l.minutes, 0);
+  const learningByFw = (["kollel-erev", "torato-beyado", "bein-hazmanim"] as LearningFramework[])
+    .map((fw) => ({ fw, minutes: monthLessons.filter((l) => l.framework === fw).reduce((s, l) => s + l.minutes, 0) }));
+
   // weekly attendance score 0–100 per week (exact calcSeder)
   const weekBars = [1, 2, 3, 4, 5].map((w) => {
     let expected = 0, netMissing = 0;
@@ -73,9 +81,6 @@ function Dashboard() {
   return (
     <AppShell title="לוח בקרה" subtitle={hebrewDate} actions={
       <div className="flex gap-2">
-        <Link to="/quick" className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-accent">
-          <Zap className="size-4" /> כניסה מהירה
-        </Link>
         <Link to="/attendance" className="inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
           <CalendarCheck className="size-4" /> רישום סדר
         </Link>
@@ -197,18 +202,33 @@ function Dashboard() {
                 </div>
               </li>
             )}
-            {lessons[0] && (
-              <li className="flex gap-3">
-                <div className={`size-8 rounded-md grid place-items-center shrink-0 ${toneStyles.info}`}>
-                  <BookOpen className="size-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">שיעור אחרון</div>
-                  <div className="text-xs text-muted-foreground">{lessons[0].minutes} דק׳ · {lessons[0].date}</div>
-                </div>
-              </li>
-            )}
           </ul>
+        </div>
+      </div>
+
+      <div className="mt-5 card-surface p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <BookOpen className="size-4 text-primary" />
+            <h2 className="text-sm font-semibold">לימוד נוסף החודש</h2>
+          </div>
+          <Link to="/learning" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+            לפרטים <ChevronLeft className="size-3" />
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">סה״כ דקות</div>
+            <div className="mt-1 text-2xl font-bold tabular-nums">{learningTotalMin}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{(learningTotalMin / 60).toFixed(1)} שע׳</div>
+          </div>
+          {learningByFw.map(({ fw, minutes }) => (
+            <div key={fw} className="rounded-lg border border-border p-3">
+              <div className="text-xs text-muted-foreground truncate">{FRAMEWORK_LABELS[fw]}</div>
+              <div className="mt-1 text-2xl font-bold tabular-nums">{minutes}</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">דקות</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -229,7 +249,7 @@ function Dashboard() {
             </li>
             <li className="flex items-start gap-2">
               <BookOpen className="size-4 text-info mt-0.5 shrink-0" />
-              <span>השלמת <b className="tabular-nums">{lessons.reduce((s, l) => s + l.minutes, 0)}</b> דקות לימוד נוסף.</span>
+              <span>לימוד נוסף החודש: <b className="tabular-nums">{learningTotalMin}</b> דקות.</span>
             </li>
           </ul>
         </div>
@@ -238,10 +258,10 @@ function Dashboard() {
           <h2 className="text-sm font-semibold mb-3">פעולות מהירות</h2>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "כניסה מהירה", icon: Zap, to: "/quick" as const },
               { label: "רישום סדר", icon: CalendarCheck, to: "/attendance" as const },
+              { label: "לימוד נוסף", icon: BookOpen, to: "/learning" as const },
               { label: "ייצוא דוח", icon: FileDown, to: "/reports" as const },
-              { label: "גיבוי", icon: DatabaseBackup, to: "/backup" as const },
+              { label: "גיבוי", icon: DatabaseBackup, to: "/settings" as const },
             ].map((a) => (
               <Link key={a.label} to={a.to} className="rounded-lg border border-border bg-card hover:bg-accent transition p-3 text-right">
                 <a.icon className="size-4 text-primary mb-2" />
