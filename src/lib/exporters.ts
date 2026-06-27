@@ -160,7 +160,7 @@ function buildReportHTML(
   const learnHtml = !sections.learning ? "" : `
     <section class="card">
       <h3>לימוד נוסף</h3>
-      <p>סה"כ: <b>${totalLearnMin}</b> דק׳ (${(totalLearnMin / 60).toFixed(1)} שעות) · ${lsns.length} שיעורים</p>
+      <p>סה"כ: <b>${totalLearnMin}</b> דק׳ (${(totalLearnMin / 60).toFixed(1)} שעות) · ${lsns.length} רישומים</p>
       <table>
         <thead><tr><th>תאריך</th><th>מסגרת</th><th>דקות</th></tr></thead>
         <tbody>

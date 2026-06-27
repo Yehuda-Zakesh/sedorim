@@ -61,7 +61,7 @@ export function BackupView() {
       createSnapshot({ attendance: entries, learning: items }, "before-op");
       replaceSeder(sederArr);
       replaceLrn(lrnArr);
-      logAudit("backup.import", { detail: `${sederArr.length} סדרים · ${lrnArr.length} שיעורים` });
+      logAudit("backup.import", { detail: `${sederArr.length} סדרים · ${lrnArr.length} רישומי לימוד` });
       toast.success("השחזור הושלם");
     } catch {
       toast.error("קובץ לא תקין");
@@ -106,7 +106,7 @@ export function BackupView() {
     <>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
         <Kpi icon={CheckCircle2} tone="success" label="רישומי סדרים" value={entries.length.toString()} />
-        <Kpi icon={FileJson} tone="info" label="שיעורי לימוד" value={items.length.toString()} />
+        <Kpi icon={FileJson} tone="info" label="רישומי לימוד" value={items.length.toString()} />
         <Kpi icon={HardDrive} tone="primary" label="נפח נתונים" value={formatSize(totalBytes)} />
         <Kpi icon={Clock} tone="warning" label="גיבוי אחרון" value={lastAuto ? formatTs(lastAuto).split(",")[0] : "אין"} />
       </div>
@@ -186,7 +186,7 @@ export function BackupView() {
           </div>
           <div className="rounded-lg border border-destructive/40 p-4">
             <div className="text-sm font-semibold text-destructive">מחיקת בסיס נתונים</div>
-            <div className="text-xs text-muted-foreground mt-1">מוחק את כל הסדרים והשיעורים. תיווצר תמונת מצב אוטומטית לפני המחיקה.</div>
+            <div className="text-xs text-muted-foreground mt-1">מוחק את כל הסדרים ורישומי הלימוד. תיווצר תמונת מצב אוטומטית לפני המחיקה.</div>
             {!confirmDelete ? (
               <button onClick={() => setConfirmDelete(true)}
                 className="mt-3 rounded-md border border-destructive text-destructive px-3 py-1.5 text-xs hover:bg-destructive/10">מחק נתונים</button>
