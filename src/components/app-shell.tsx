@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Moon, Sun, Monitor, Keyboard } from "lucide-react";
-import { AppSidebar } from "./app-sidebar";
-import { useSidebarCollapsed } from "./app-sidebar";
+import { AppSidebar, useSidebarCollapsed } from "./app-sidebar";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
 import { applyAppearance, useSettings, isOnboarded } from "@/lib/settings-store";
