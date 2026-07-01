@@ -14,7 +14,114 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      learning_entries: {
+        Row: {
+          created_at: string
+          date: string
+          framework: string
+          id: string
+          minutes: number
+          note: string | null
+          topic: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          framework: string
+          id?: string
+          minutes: number
+          note?: string | null
+          topic?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          framework?: string
+          id?: string
+          minutes?: number
+          note?: string | null
+          topic?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      seder_entries: {
+        Row: {
+          absent: boolean
+          arrival: string | null
+          created_at: string
+          date: string
+          departure: string | null
+          excused_all: boolean
+          excused_minutes: number
+          id: string
+          manual_adjust_min: number
+          note: string | null
+          ohevei: boolean
+          seder: number
+          tags: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          absent?: boolean
+          arrival?: string | null
+          created_at?: string
+          date: string
+          departure?: string | null
+          excused_all?: boolean
+          excused_minutes?: number
+          id?: string
+          manual_adjust_min?: number
+          note?: string | null
+          ohevei?: boolean
+          seder: number
+          tags?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          absent?: boolean
+          arrival?: string | null
+          created_at?: string
+          date?: string
+          departure?: string | null
+          excused_all?: boolean
+          excused_minutes?: number
+          id?: string
+          manual_adjust_min?: number
+          note?: string | null
+          ohevei?: boolean
+          seder?: number
+          tags?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          data: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          data?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          data?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
