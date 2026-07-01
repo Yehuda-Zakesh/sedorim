@@ -110,14 +110,10 @@ export async function hydrateFromCloud(userId: string) {
       supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
     ]);
 
-    const { useSeder, useLearning } = await import("./kollel-store");
-    const { updateSettings } = await import("./settings-store");
-
-    // Direct mutation via replaceAll (need hook-less accessors) — use dynamic replace
     const kollel = await import("./kollel-store");
-    // We must call via a temporary hook-less path: expose module-level replace helpers
-    (kollel as any).__replaceSederFromCloud?.((seder || []).map(row_to_seder));
-    (kollel as any).__replaceLearningFromCloud?.((learning || []).map(row_to_learning));
+    const { updateSettings } = await import("./settings-store");
+    kollel.__replaceSederFromCloud((seder || []).map(row_to_seder));
+    kollel.__replaceLearningFromCloud((learning || []).map(row_to_learning));
 
     if (settingsRow?.data) {
       updateSettings(settingsRow.data as Partial<Settings>, { skipAudit: true });
