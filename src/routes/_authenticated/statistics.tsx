@@ -6,7 +6,7 @@ import { useSeder, useLearning, monthlySummary, attendanceScore, calcSeder, curr
 import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
 import { InsightsView } from "./insights";
 
-export const Route = createFileRoute("/statistics")({
+export const Route = createFileRoute("/_authenticated/statistics")({
   head: () => ({ meta: [{ title: "סטטיסטיקות — המעקב שלי" }] }),
   component: StatisticsPage,
 });

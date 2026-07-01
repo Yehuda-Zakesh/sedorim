@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Moon, Sun, Monitor, Keyboard } from "lucide-react";
+import { Moon, Sun, Monitor, Keyboard, LogOut } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { clearHydrationState } from "@/lib/cloud-sync";
+import { useNavigate } from "@tanstack/react-router";
 import { AppSidebar, useSidebarCollapsed } from "./app-sidebar";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
@@ -18,6 +21,7 @@ export function AppShell({ title, subtitle, actions, children }: {
   const { collapsed } = useSidebarCollapsed();
   const [helpOpen, setHelpOpen] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => { applyAppearance(); }, []);
   useEffect(() => { setNeedsOnboarding(!isOnboarded()); }, []);
@@ -26,6 +30,12 @@ export function AppShell({ title, subtitle, actions, children }: {
   const cycle = () => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
   const label = theme === "light" ? "בהיר" : theme === "dark" ? "כהה" : "מערכת";
+
+  async function logout() {
+    await supabase.auth.signOut();
+    clearHydrationState();
+    navigate({ to: "/auth" });
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -47,6 +57,10 @@ export function AppShell({ title, subtitle, actions, children }: {
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition">
                 <Icon className="size-4" />
                 <span className="hidden sm:inline">{label}</span>
+              </button>
+              <button onClick={logout} title="התנתקות"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition">
+                <LogOut className="size-4" />
               </button>
             </div>
           </div>

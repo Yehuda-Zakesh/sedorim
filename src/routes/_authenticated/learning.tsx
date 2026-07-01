@@ -10,7 +10,7 @@ import {
 import { isBeinHazmanim } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/learning")({
+export const Route = createFileRoute("/_authenticated/learning")({
   head: () => ({ meta: [{ title: "לימוד נוסף — המעקב שלי" }] }),
   component: LearningPage,
 });

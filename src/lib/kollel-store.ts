@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { logAudit } from "./audit-store";
 import { getSettings } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
+import { pushSeder, deleteSederCloud, pushLearning, deleteLearningCloud } from "./cloud-sync";
 
 export type SederNum = 1 | 2;
 export type LearningFramework = "kollel-erev" | "torato-beyado" | "bein-hazmanim";
@@ -227,6 +228,7 @@ export function useSeder() {
       save(SEDER_KEY, sederEntries);
       logAudit(prev ? "seder.update" : "seder.create", { recordId: e.id, oldValue: prev, newValue: e });
       maybeAutoBackup({ attendance: sederEntries as unknown, learning: learningEntries as unknown });
+      pushSeder(e);
       emit();
     },
     remove(id: string) {
@@ -236,6 +238,7 @@ export function useSeder() {
       sederEntries = sederEntries.filter((x) => x.id !== id);
       save(SEDER_KEY, sederEntries);
       logAudit("seder.delete", { recordId: id, oldValue: prev });
+      deleteSederCloud(id);
       emit();
     },
     replaceAll(list: SederEntry[]) {
@@ -272,6 +275,7 @@ export function useLearning() {
       save(LRN_KEY, learningEntries);
       logAudit("learning.create", { recordId: item.id, newValue: item });
       maybeAutoBackup({ attendance: sederEntries as unknown, learning: learningEntries as unknown });
+      pushLearning(item);
       emit();
     },
     remove(id: string) {
@@ -280,6 +284,7 @@ export function useLearning() {
       learningEntries = learningEntries.filter((i) => i.id !== id);
       save(LRN_KEY, learningEntries);
       logAudit("learning.delete", { recordId: id, oldValue: prev });
+      deleteLearningCloud(id);
       emit();
     },
     replaceAll(list: LearningEntry[]) {
@@ -423,4 +428,16 @@ export const FRAMEWORK_LABELS: Record<LearningFramework, string> = {
 
 export function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ---------- Cloud hydration bridge (used by cloud-sync) ----------
+export function __replaceSederFromCloud(list: SederEntry[]) {
+  sederEntries = list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
+  save(SEDER_KEY, sederEntries);
+  emit();
+}
+export function __replaceLearningFromCloud(list: LearningEntry[]) {
+  learningEntries = list;
+  save(LRN_KEY, learningEntries);
+  emit();
 }

@@ -5,7 +5,7 @@ import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useSeder, calcSeder, monthlySummary, entriesByDate, type SederEntry } from "@/lib/kollel-store";
 import { hebrewFromGregorian, hebrewDayLetters, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
 
-export const Route = createFileRoute("/calendar")({
+export const Route = createFileRoute("/_authenticated/calendar")({
   head: () => ({ meta: [{ title: "לוח שנה — המעקב שלי" }] }),
   component: CalendarPage,
 });

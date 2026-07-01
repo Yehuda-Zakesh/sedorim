@@ -5,7 +5,7 @@ import { useSeder, useLearning, attendanceScore, currentDayStreak } from "@/lib/
 import { useSettings } from "@/lib/settings-store";
 import { generateInsights, forecastMonthlyNetMissing, consistencyScore, type Insight } from "@/lib/insights";
 
-export const Route = createFileRoute("/insights")({
+export const Route = createFileRoute("/_authenticated/insights")({
   head: () => ({ meta: [{ title: "תובנות חכמות — המעקב שלי" }] }),
   component: InsightsPage,
 });

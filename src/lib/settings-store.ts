@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { logAudit } from "./audit-store";
+import { pushSettings } from "./cloud-sync";
 
 export type FontSize = "small" | "normal" | "large" | "xlarge";
 export type DateFormat = "iso" | "he" | "mixed" | "hebrew";
@@ -117,6 +118,7 @@ export function updateSettings(patch: Partial<Settings>, opts?: { skipAudit?: bo
   persist();
   applyAppearance();
   if (!opts?.skipAudit) logAudit("settings.update", { oldValue: prev, newValue: settings });
+  if (!opts?.skipAudit) pushSettings(settings);
   emit();
 }
 
