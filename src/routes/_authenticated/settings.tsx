@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { AuditView } from "./audit";
 import { BackupView } from "./backup";
 
-export const Route = createFileRoute("/settings")({
+export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "הגדרות — המעקב שלי" }] }),
   component: SettingsPage,
 });

@@ -11,7 +11,7 @@ import {
 import { formatHebrewDate, isBeinHazmanim } from "@/lib/hebrew-calendar";
 import { useSettings } from "@/lib/settings-store";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
       { title: "לוח בקרה — המעקב שלי" },

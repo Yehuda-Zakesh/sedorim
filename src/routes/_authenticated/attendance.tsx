@@ -10,7 +10,7 @@ import { useSettings } from "@/lib/settings-store";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/attendance")({
+export const Route = createFileRoute("/_authenticated/attendance")({
   head: () => ({ meta: [{ title: "נוכחות סדרים — המעקב שלי" }] }),
   component: AttendancePage,
 });

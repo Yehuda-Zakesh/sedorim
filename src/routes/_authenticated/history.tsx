@@ -7,7 +7,7 @@ import { formatHebrewDate } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 import { CalendarView } from "./calendar";
 
-export const Route = createFileRoute("/history")({
+export const Route = createFileRoute("/_authenticated/history")({
   head: () => ({ meta: [{ title: "היסטוריה — המעקב שלי" }] }),
   component: HistoryPage,
 });

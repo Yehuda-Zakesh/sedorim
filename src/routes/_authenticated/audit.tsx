@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useAudit, ACTION_LABELS, type AuditAction } from "@/lib/audit-store";
 
-export const Route = createFileRoute("/audit")({
+export const Route = createFileRoute("/_authenticated/audit")({
   head: () => ({ meta: [{ title: "יומן ביקורת — המעקב שלי" }] }),
   component: AuditPage,
 });

@@ -6,7 +6,7 @@ import { exportPdfReport, exportXlsxWorkbook, DEFAULT_SECTIONS, type ReportSecti
 import { useSeder, useLearning } from "@/lib/kollel-store";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/reports")({
+export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({ meta: [{ title: "דוחות — המעקב שלי" }] }),
   component: ReportsPage,
 });

@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Search as SearchIcon, Calendar, BookOpen, Star, Save, Trash2, ChevronLeft } from "lucide-react";
 import { useSeder, useLearning, calcSeder, FRAMEWORK_LABELS, allTags } from "@/lib/kollel-store";
 
-export const Route = createFileRoute("/search")({
+export const Route = createFileRoute("/_authenticated/search")({
   head: () => ({ meta: [{ title: "חיפוש — המעקב שלי" }] }),
   component: SearchPage,
 });

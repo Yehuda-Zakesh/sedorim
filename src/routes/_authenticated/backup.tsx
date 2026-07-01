@@ -10,7 +10,7 @@ import { logAudit } from "@/lib/audit-store";
 import { useSettings, resetSettings } from "@/lib/settings-store";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/backup")({
+export const Route = createFileRoute("/_authenticated/backup")({
   head: () => ({ meta: [{ title: "גיבוי ושחזור — המעקב שלי" }] }),
   component: BackupPage,
 });
