@@ -121,21 +121,6 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const router = useRouter();
-
-  useEffect(() => {
-    // Lazy import to avoid SSR issues
-    let unsub: (() => void) | undefined;
-    import("@/integrations/supabase/client").then(({ supabase }) => {
-      const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-        if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-        router.invalidate();
-      });
-      unsub = () => sub.subscription.unsubscribe();
-    });
-    return () => { unsub?.(); };
-  }, [router]);
-
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
