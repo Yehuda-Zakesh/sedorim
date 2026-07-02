@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { Zap, LogIn, LogOut as LogOutIcon, Check, Clock } from "lucide-react";
+import { Zap, LogIn, LogOut as LogOutIcon, Check, Clock, Pencil } from "lucide-react";
 import { useSeder, type SederEntry } from "@/lib/kollel-store";
 import { getSettings, applyAppearance } from "@/lib/settings-store";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
@@ -61,6 +61,31 @@ function QuickApp() {
     toast.success(kind === "arrival" ? `נרשמה הגעה לסדר ${sederNum}` : `נרשמה יציאה מסדר ${sederNum}`);
   }
 
+  function setTime(sederNum: 1 | 2, kind: "arrival" | "departure", value: string) {
+    if (!value) return;
+    const existing = findEntry(sederNum);
+    const base: SederEntry = existing ?? {
+      id: uid(),
+      date,
+      seder: sederNum,
+      arrival: undefined,
+      departure: undefined,
+      absent: false,
+      ohevei: false,
+      excusedAll: false,
+      excusedMinutes: 0,
+      manualAdjustMin: 0,
+      tags: [],
+    };
+    const updated: SederEntry = { ...base, [kind]: value };
+    seder.upsert(updated);
+    toast.success(
+      kind === "arrival" ? `שעת הגעה עודכנה לסדר ${sederNum}: ${value}` : `שעת יציאה עודכנה לסדר ${sederNum}: ${value}`
+    );
+  }
+
+  const [editing, setEditing] = useState<{ seder: 1 | 2; kind: "arrival" | "departure" } | null>(null);
+
   return (
     <div dir="rtl" className="min-h-screen bg-background text-foreground flex flex-col">
       <header className="border-b border-border bg-card">
@@ -101,26 +126,69 @@ function QuickApp() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => stamp(s, "arrival")}
-                  className="flex flex-col items-center gap-1 rounded-xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 active:scale-[0.98] transition p-4"
-                >
-                  <LogIn className="size-6 text-primary" />
-                  <span className="text-sm font-semibold">הגעתי</span>
-                  <span className="text-[11px] text-muted-foreground tabular-nums">
-                    {entry?.arrival || "—"}
-                  </span>
-                </button>
-                <button
-                  onClick={() => stamp(s, "departure")}
-                  className="flex flex-col items-center gap-1 rounded-xl border-2 border-border bg-background hover:bg-accent active:scale-[0.98] transition p-4"
-                >
-                  <LogOutIcon className="size-6 text-muted-foreground" />
-                  <span className="text-sm font-semibold">יצאתי</span>
-                  <span className="text-[11px] text-muted-foreground tabular-nums">
-                    {entry?.departure || "—"}
-                  </span>
-                </button>
+                <div className="flex flex-col items-center gap-1 rounded-xl border-2 border-primary/30 bg-primary/5 p-4">
+                  <button
+                    onClick={() => stamp(s, "arrival")}
+                    className="flex flex-col items-center gap-1 active:scale-[0.98] transition"
+                  >
+                    <LogIn className="size-6 text-primary" />
+                    <span className="text-sm font-semibold">הגעתי</span>
+                  </button>
+                  {editing?.seder === s && editing.kind === "arrival" ? (
+                    <input
+                      type="time"
+                      autoFocus
+                      defaultValue={entry?.arrival || nowHM()}
+                      onBlur={(e) => { setTime(s, "arrival", e.target.value); setEditing(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { setTime(s, "arrival", e.currentTarget.value); setEditing(null); }
+                        if (e.key === "Escape") setEditing(null);
+                      }}
+                      className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1 text-center text-[13px] tabular-nums"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setEditing({ seder: s, kind: "arrival" })}
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums hover:text-foreground"
+                      title="ערוך שעת כניסה ידנית"
+                    >
+                      {entry?.arrival || "—"}
+                      <Pencil className="size-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col items-center gap-1 rounded-xl border-2 border-border bg-background p-4">
+                  <button
+                    onClick={() => stamp(s, "departure")}
+                    className="flex flex-col items-center gap-1 active:scale-[0.98] transition"
+                  >
+                    <LogOutIcon className="size-6 text-muted-foreground" />
+                    <span className="text-sm font-semibold">יצאתי</span>
+                  </button>
+                  {editing?.seder === s && editing.kind === "departure" ? (
+                    <input
+                      type="time"
+                      autoFocus
+                      defaultValue={entry?.departure || nowHM()}
+                      onBlur={(e) => { setTime(s, "departure", e.target.value); setEditing(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { setTime(s, "departure", e.currentTarget.value); setEditing(null); }
+                        if (e.key === "Escape") setEditing(null);
+                      }}
+                      className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1 text-center text-[13px] tabular-nums"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setEditing({ seder: s, kind: "departure" })}
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums hover:text-foreground"
+                      title="ערוך שעת יציאה ידנית"
+                    >
+                      {entry?.departure || "—"}
+                      <Pencil className="size-3" />
+                    </button>
+                  )}
+                </div>
               </div>
             </section>
           );
