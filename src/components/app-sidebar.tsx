@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, ClipboardCheck, History, BookOpen,
-  BarChart3, FileText, Search, Settings, Info, Zap, PanelRightClose, PanelRightOpen,
+  BarChart3, FileText, Search, Settings, Info, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 
 const navItems = [
