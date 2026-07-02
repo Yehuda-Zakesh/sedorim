@@ -13,6 +13,7 @@ import { Route as StatisticsRouteImport } from './routes/statistics'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as QuickRouteImport } from './routes/quick'
 import { Route as LearningRouteImport } from './routes/learning'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as HistoryRouteImport } from './routes/history'
@@ -41,6 +42,11 @@ const SearchRoute = SearchRouteImport.update({
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuickRoute = QuickRouteImport.update({
+  id: '/quick',
+  path: '/quick',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LearningRoute = LearningRouteImport.update({
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof HistoryRoute
   '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
+  '/quick': typeof QuickRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByTo {
   '/history': typeof HistoryRoute
   '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
+  '/quick': typeof QuickRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   '/history': typeof HistoryRoute
   '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
+  '/quick': typeof QuickRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
@@ -147,6 +156,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/insights'
     | '/learning'
+    | '/quick'
     | '/reports'
     | '/search'
     | '/settings'
@@ -162,6 +172,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/insights'
     | '/learning'
+    | '/quick'
     | '/reports'
     | '/search'
     | '/settings'
@@ -177,6 +188,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/insights'
     | '/learning'
+    | '/quick'
     | '/reports'
     | '/search'
     | '/settings'
@@ -193,6 +205,7 @@ export interface RootRouteChildren {
   HistoryRoute: typeof HistoryRoute
   InsightsRoute: typeof InsightsRoute
   LearningRoute: typeof LearningRoute
+  QuickRoute: typeof QuickRoute
   ReportsRoute: typeof ReportsRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
@@ -227,6 +240,13 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quick': {
+      id: '/quick'
+      path: '/quick'
+      fullPath: '/quick'
+      preLoaderRoute: typeof QuickRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/learning': {
@@ -305,6 +325,7 @@ const rootRouteChildren: RootRouteChildren = {
   HistoryRoute: HistoryRoute,
   InsightsRoute: InsightsRoute,
   LearningRoute: LearningRoute,
+  QuickRoute: QuickRoute,
   ReportsRoute: ReportsRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
