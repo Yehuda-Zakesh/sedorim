@@ -3,7 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Zap, LogIn, LogOut as LogOutIcon, Check, Clock } from "lucide-react";
 import { useSeder, type SederEntry } from "@/lib/kollel-store";
 import { getSettings, applyAppearance } from "@/lib/settings-store";
-import { toHebrewDate } from "@/lib/hebrew-calendar";
+import { formatHebrewDate } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -35,7 +35,7 @@ function QuickApp() {
   const settings = getSettings();
   const date = todayISO();
   const heb = useMemo(() => {
-    try { return toHebrewDate(new Date(date)); } catch { return ""; }
+    try { return formatHebrewDate(new Date(date)); } catch { return ""; }
   }, [date]);
 
   const todayEntries = seder.entries.filter((e) => e.date === date);
@@ -81,14 +81,15 @@ function QuickApp() {
       <main className="flex-1 mx-auto w-full max-w-md px-5 py-6 space-y-4">
         {[1, 2].map((n) => {
           const s = n as 1 | 2;
-          const cfg = s === 1 ? settings.seder1 : settings.seder2;
+          const start = s === 1 ? settings.seder.s1Start : settings.seder.s2Start;
+          const end = s === 1 ? settings.seder.s1End : settings.seder.s2End;
           const entry = findEntry(s);
           return (
             <section key={s} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-base font-semibold">סדר {s === 1 ? "א׳" : "ב׳"}</h2>
-                  <p className="text-[11px] text-muted-foreground">{cfg.start}–{cfg.end}</p>
+                  <p className="text-[11px] text-muted-foreground">{start}–{end}</p>
                 </div>
                 {entry?.arrival && entry?.departure ? (
                   <span className="inline-flex items-center gap-1 text-[11px] rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 font-medium">
