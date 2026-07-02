@@ -65,7 +65,18 @@ async function createWindow() {
     },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) shell.openExternal(url);
+    if (/^https?:/i.test(url)) {
+      shell.openExternal(url);
+      return { action: "deny" };
+    }
+    if (url === "about:blank" || url === "") {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+        },
+      };
+    }
     return { action: "deny" };
   });
   Menu.setApplicationMenu(null);
