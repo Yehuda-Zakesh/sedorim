@@ -38,7 +38,14 @@ async function ensureServer() {
   process.env.NITRO_HOST = "127.0.0.1";
   process.env.NITRO_PORT = String(FIXED_PORT);
   const entry = resolveServerEntry();
-  await import(require("url").pathToFileURL(entry).href);
+  try {
+    await import(require("url").pathToFileURL(entry).href);
+  } catch (err) {
+    // Lost the race: the other EXE bound the port a moment after our
+    // isPortInUse() check but before our own listen() call. That's fine —
+    // just attach to their server instead of crashing.
+    if (!(await isPortInUse(FIXED_PORT))) throw err;
+  }
   await new Promise((r) => setTimeout(r, 300));
   return FIXED_PORT;
 }

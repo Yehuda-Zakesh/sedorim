@@ -10,7 +10,10 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "postinstall": "patch-package",
+    "build:electron-server": "vite build --config vite.electron.config.ts",
+    "package:win": "node scripts/package-win.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -80,6 +83,7 @@
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@vercel/nft": "^1.10.2",
     "@vitejs/plugin-react": "^5.0.4",
     "electron": "^33.4.11",
     "eslint": "^9.32.0",
@@ -89,6 +93,7 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
+    "patch-package": "^8.0.1",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
