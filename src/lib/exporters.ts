@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
 import { logAudit } from "./audit-store";
 import {
   type SederEntry, type LearningEntry,
@@ -229,44 +230,51 @@ export async function exportPdfReport(opts: {
 }) {
   const sections = opts.sections ?? DEFAULT_SECTIONS;
   const html = buildReportHTML(opts.title, opts.entries, opts.lessons, sections, opts.range);
-
-  const win = window.open("", "_blank", "width=900,height=1000");
-  if (!win) {
-    throw new Error("חלון ההדפסה נחסם על ידי הדפדפן — אפשר חלונות קופצים ונסה שוב");
-  }
   const fname = opts.filename || `${opts.title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}`;
-  win.document.open();
-  win.document.write(`<!doctype html>
-<html dir="rtl" lang="he">
-<head>
-  <meta charset="utf-8" />
-  <title>${fname}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    @page { size: A4; margin: 12mm; }
-    html, body { margin:0; padding:0; background:#fff; }
-    body { font-family: 'Heebo', 'Segoe UI', Arial, sans-serif; }
-    #__report { width:auto !important; padding:0 !important; }
-    @media print { .__no-print { display:none !important; } }
-  </style>
-</head>
-<body>
-  <div class="__no-print" style="position:fixed;top:8px;left:8px;display:flex;gap:6px;z-index:9999;">
-    <button onclick="window.print()" style="padding:8px 14px;border:0;border-radius:6px;background:#1565C0;color:#fff;font:600 13px sans-serif;cursor:pointer;">הדפס / שמור כ-PDF</button>
-    <button onclick="window.close()" style="padding:8px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;font:13px sans-serif;cursor:pointer;">סגור</button>
-  </div>
-  ${html}
-  <script>
-    window.addEventListener('load', function () {
-      setTimeout(function () { try { window.focus(); window.print(); } catch (e) {} }, 400);
+
+  // Render the report off-screen (not visible, not a popup) so html2canvas
+  // can rasterize it straight into a real PDF — no print dialog, no manual
+  // "save as PDF" step.
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.top = "0";
+  container.style.left = "-10000px";
+  container.style.zIndex = "-1";
+  container.innerHTML = html;
+  document.body.appendChild(container);
+
+  try {
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const pageWidthPt = doc.internal.pageSize.getWidth();
+    const marginPt = 24;
+
+    await new Promise<void>((resolve, reject) => {
+      doc.html(container, {
+        x: marginPt,
+        y: marginPt,
+        width: pageWidthPt - marginPt * 2,
+        windowWidth: 794,
+        autoPaging: "text",
+        html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false },
+        callback: () => resolve(),
+      });
+      // jsPDF's html() plugin doesn't propagate html2canvas rejections to
+      // this callback path in all versions — guard with a timeout so the
+      // UI never hangs silently if rendering fails.
+      setTimeout(() => reject(new Error("תם הזמן ליצירת ה-PDF")), 20000);
     });
-  </script>
-</body>
-</html>`);
-  win.document.close();
-  logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
+
+    const blobUrl = doc.output("bloburl") as unknown as string;
+    const win = window.open(blobUrl, "_blank");
+    if (!win) {
+      // Popup blocked (shouldn't happen in the desktop app) — fall back to
+      // a direct file download so the user still gets their PDF.
+      doc.save(`${fname}.pdf`);
+    }
+    logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
+  } finally {
+    document.body.removeChild(container);
+  }
 }
 
 export function exportXlsxWorkbook(opts: {

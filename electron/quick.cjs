@@ -2,7 +2,7 @@
 // the main app by pointing at the same Chromium userData folder and the same
 // loopback origin. If KollelTracker.exe is running, we just attach to its
 // server; otherwise we boot the bundled server ourselves on the same port.
-const { app, BrowserWindow, Menu, shell } = require("electron");
+const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const path = require("path");
 const net = require("net");
 
@@ -50,6 +50,53 @@ async function ensureServer() {
   return FIXED_PORT;
 }
 
+function attachWindowOpenHandler(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) {
+      shell.openExternal(url);
+      return { action: "deny" };
+    }
+    if (url === "about:blank" || url === "" || url.startsWith("blob:")) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+        },
+      };
+    }
+    return { action: "deny" };
+  });
+}
+
+// The full app, opened as a second window IN THIS SAME PROCESS (same
+// session/localStorage — no cross-process storage race like launching a
+// separate KollelTracker.exe would have). Reused/focused on repeat clicks.
+let mainAppWin = null;
+
+async function openMainApp() {
+  if (mainAppWin && !mainAppWin.isDestroyed()) {
+    mainAppWin.focus();
+    return;
+  }
+  const port = await ensureServer();
+  mainAppWin = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    title: "KollelTracker",
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  attachWindowOpenHandler(mainAppWin);
+  mainAppWin.on("closed", () => { mainAppWin = null; });
+  mainAppWin.loadURL(`http://127.0.0.1:${port}/`);
+}
+
+ipcMain.handle("open-main-app", () => openMainApp());
+
 async function createWindow() {
   const port = await ensureServer();
   const win = new BrowserWindow({
@@ -62,23 +109,10 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: path.join(__dirname, "preload-quick.cjs"),
     },
   });
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) {
-      shell.openExternal(url);
-      return { action: "deny" };
-    }
-    if (url === "about:blank" || url === "") {
-      return {
-        action: "allow",
-        overrideBrowserWindowOptions: {
-          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
-        },
-      };
-    }
-    return { action: "deny" };
-  });
+  attachWindowOpenHandler(win);
   Menu.setApplicationMenu(null);
   win.loadURL(`http://127.0.0.1:${port}/quick`);
 }

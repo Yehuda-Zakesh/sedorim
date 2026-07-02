@@ -77,7 +77,7 @@ async function createWindow() {
       shell.openExternal(url);
       return { action: "deny" };
     }
-    if (url === "about:blank" || url === "") {
+    if (url === "about:blank" || url === "" || url.startsWith("blob:")) {
       return {
         action: "allow",
         overrideBrowserWindowOptions: {

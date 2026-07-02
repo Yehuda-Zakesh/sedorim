@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { Zap, LogIn, LogOut as LogOutIcon, Check, Clock, Pencil } from "lucide-react";
+import { Zap, LogIn, LogOut as LogOutIcon, Check, Clock, Pencil, LayoutDashboard } from "lucide-react";
 import { useSeder, type SederEntry } from "@/lib/kollel-store";
 import { getSettings, applyAppearance } from "@/lib/settings-store";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
@@ -85,6 +85,17 @@ function QuickApp() {
   }
 
   const [editing, setEditing] = useState<{ seder: 1 | 2; kind: "arrival" | "departure" } | null>(null);
+  const navigate = useNavigate();
+
+  function openMainApp() {
+    const api = (window as any).electronAPI;
+    if (api?.openMainApp) {
+      api.openMainApp();
+    } else {
+      // Web (no Electron bridge): just navigate this tab to the full app.
+      navigate({ to: "/" });
+    }
+  }
 
   return (
     <div dir="rtl" className="min-h-screen bg-background text-foreground flex flex-col">
@@ -97,6 +108,13 @@ function QuickApp() {
             <h1 className="text-lg font-bold leading-tight">כניסה מהירה</h1>
             <p className="text-[11px] text-muted-foreground">{heb}</p>
           </div>
+          <button
+            onClick={openMainApp}
+            title="פתח אפליקציה ראשית"
+            className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent transition"
+          >
+            <LayoutDashboard className="size-4" />
+          </button>
           <div className="text-xs text-muted-foreground tabular-nums flex items-center gap-1">
             <Clock className="size-3.5" /><LiveClock />
           </div>
