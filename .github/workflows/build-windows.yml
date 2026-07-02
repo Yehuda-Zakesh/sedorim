@@ -1,0 +1,40 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "electron/**"
+      - "scripts/package-win.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "patches/**"
+      - "vite.electron.config.ts"
+      - ".github/workflows/build-windows.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build + package Windows EXEs
+        run: npm run package:win
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: KollelTracker-windows
+          path: release-win
+          if-no-files-found: error
