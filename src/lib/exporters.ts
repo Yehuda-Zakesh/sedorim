@@ -234,8 +234,11 @@ export async function exportPdfReport(opts: {
   // Open a print window with the report content and trigger the browser's
   // native print dialog. The user chooses "Save as PDF" to produce a real
   // PDF file — reliable for Hebrew/RTL, no font-embedding issues.
-  const win = window.open("", "_blank", "width=900,height=1000");
-  if (!win) throw new Error("החלון נחסם ע\"י הדפדפן. אפשר חלונות קופצים ונסה שוב.");
+ const win = window.open("", "_blank", "width=900,height=1000");
+
+ if (!win) {
+   throw new Error("לא ניתן לפתוח חלון הדפסה. יש בעיה ב־Electron build.");
+ }
   win.document.open();
   win.document.write(`<!doctype html>
 <html dir="rtl" lang="he">
