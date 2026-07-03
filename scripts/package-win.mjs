@@ -110,7 +110,10 @@ async function packageApp({ name, appStagingDir, channel, appId }) {
   await builder.build({
     projectDir: appStagingDir,
     targets: Platform.WINDOWS.createTarget(),
-    publish: isPublishing ? "always" : "never",
+    // We publish ourselves afterward (see publishRelease) so both apps land
+    // on ONE shared GitHub release instead of electron-builder creating a
+    // separate draft release per app.
+    publish: "never",
     config: {
       appId,
       productName: name,
@@ -131,6 +134,9 @@ async function packageApp({ name, appStagingDir, channel, appId }) {
         allowToChangeInstallationDirectory: false,
         artifactName: `${name}-Setup-\${version}.\${ext}`,
       },
+      // Still declared so electron-builder embeds app-update.yml into the
+      // packaged app — that's what electron-updater reads at runtime to
+      // know which repo/channel to check.
       publish: [{ provider: "github", owner: REPO_OWNER, repo: REPO_NAME, channel }],
     },
   });
@@ -145,6 +151,87 @@ timeout /t 1 /nobreak >nul
 start "" "%LOCALAPPDATA%\\Programs\\KollelQuick\\KollelQuick.exe"
 `;
   writeFileSync(path.join(outDir, "RunBoth.bat"), bat, "utf8");
+}
+
+async function ghApi(method, urlPath, body, isUpload = false) {
+  const base = isUpload ? "https://uploads.github.com" : "https://api.github.com";
+  const res = await fetch(`${base}${urlPath}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${process.env.GH_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      ...(isUpload ? { "Content-Type": "application/octet-stream" } : {}),
+    },
+    body: body ? (isUpload ? body : JSON.stringify(body)) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`GitHub API ${method} ${urlPath} -> ${res.status}: ${text}`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// Publishes both apps' installers + update-feed yml files to ONE shared
+// GitHub Release (electron-builder, run per-app, would otherwise create two
+// separate draft releases for the same tag — bad, since electron-updater's
+// GitHub provider resolves a single repo-wide "latest release").
+async function publishRelease() {
+  const tag = `v${version}`;
+  console.log(`\n== Publishing release ${tag} to github.com/${REPO_OWNER}/${REPO_NAME} ==`);
+
+  const releases = await ghApi("GET", `/repos/${REPO_OWNER}/${REPO_NAME}/releases`);
+  let release = releases.find((r) => r.tag_name === tag);
+  if (release) {
+    console.log(`Reusing existing release id=${release.id}`);
+  } else {
+    release = await ghApi("POST", `/repos/${REPO_OWNER}/${REPO_NAME}/releases`, {
+      tag_name: tag,
+      name: version,
+      draft: false,
+      prerelease: false,
+      generate_release_notes: false,
+    });
+    console.log(`Created release id=${release.id}`);
+  }
+
+  if (release.draft) {
+    await ghApi("PATCH", `/repos/${REPO_OWNER}/${REPO_NAME}/releases/${release.id}`, {
+      draft: false,
+    });
+  }
+
+  const uploadPatterns = [/\.exe$/i, /\.exe\.blockmap$/i, /^(tracker|quick)\.yml$/i];
+  const fsMod = await import("node:fs");
+  for (const appName of ["KollelTracker", "KollelQuick"]) {
+    const appOutDir = path.join(outDir, appName);
+    if (!existsSync(appOutDir)) continue;
+    const files = fsMod
+      .readdirSync(appOutDir, { withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => path.join(appOutDir, e.name));
+    for (const filePath of files) {
+      const fileName = path.basename(filePath);
+      if (!uploadPatterns.some((re) => re.test(fileName))) continue;
+
+      // Remove any pre-existing asset with the same name (re-running a
+      // build for the same version should replace, not duplicate/fail).
+      const existing = (release.assets || []).find((a) => a.name === fileName);
+      if (existing) {
+        await ghApi("DELETE", `/repos/${REPO_OWNER}/${REPO_NAME}/releases/assets/${existing.id}`);
+      }
+
+      const data = fsMod.readFileSync(filePath);
+      console.log(`Uploading ${fileName} (${(data.length / 1e6).toFixed(1)} MB)...`);
+      await ghApi(
+        "POST",
+        `/repos/${REPO_OWNER}/${REPO_NAME}/releases/${release.id}/assets?name=${encodeURIComponent(fileName)}`,
+        data,
+        true
+      );
+    }
+  }
+
+  console.log(`\n✔ Release ${tag} published: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/tag/${tag}`);
 }
 
 async function main() {
@@ -184,6 +271,10 @@ async function main() {
   writeRunBothLauncher();
 
   rmSync(stagingDir, { recursive: true, force: true });
+
+  if (isPublishing) {
+    await publishRelease();
+  }
 
   console.log(
     `\n✔ Done. Find the installers under: ${outDir}\n` +
