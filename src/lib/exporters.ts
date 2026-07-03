@@ -1,5 +1,4 @@
 import * as XLSX from "xlsx";
-import { jsPDF } from "jspdf";
 import { logAudit } from "./audit-store";
 import {
   type SederEntry, type LearningEntry,
@@ -232,49 +231,46 @@ export async function exportPdfReport(opts: {
   const html = buildReportHTML(opts.title, opts.entries, opts.lessons, sections, opts.range);
   const fname = opts.filename || `${opts.title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}`;
 
-  // Render the report off-screen (not visible, not a popup) so html2canvas
-  // can rasterize it straight into a real PDF — no print dialog, no manual
-  // "save as PDF" step.
-  const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.top = "0";
-  container.style.left = "-10000px";
-  container.style.zIndex = "-1";
-  container.innerHTML = html;
-  document.body.appendChild(container);
-
-  try {
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    const pageWidthPt = doc.internal.pageSize.getWidth();
-    const marginPt = 24;
-
-    await new Promise<void>((resolve, reject) => {
-      doc.html(container, {
-        x: marginPt,
-        y: marginPt,
-        width: pageWidthPt - marginPt * 2,
-        windowWidth: 794,
-        autoPaging: "text",
-        html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false },
-        callback: () => resolve(),
-      });
-      // jsPDF's html() plugin doesn't propagate html2canvas rejections to
-      // this callback path in all versions — guard with a timeout so the
-      // UI never hangs silently if rendering fails.
-      setTimeout(() => reject(new Error("תם הזמן ליצירת ה-PDF")), 20000);
+  // Open a print window with the report content and trigger the browser's
+  // native print dialog. The user chooses "Save as PDF" to produce a real
+  // PDF file — reliable for Hebrew/RTL, no font-embedding issues.
+  const win = window.open("", "_blank", "width=900,height=1000");
+  if (!win) throw new Error("החלון נחסם ע\"י הדפדפן. אפשר חלונות קופצים ונסה שוב.");
+  win.document.open();
+  win.document.write(`<!doctype html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8" />
+  <title>${fname}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    @page { size: A4; margin: 12mm; }
+    html, body { margin:0; padding:0; background:#fff; font-family:'Heebo','Segoe UI',Arial,sans-serif; }
+    #__print-actions { position:fixed; top:12px; left:12px; z-index:9999; display:flex; gap:8px; }
+    #__print-actions button { background:#1565C0; color:#fff; border:none; padding:8px 14px; border-radius:6px; font-size:13px; cursor:pointer; font-family:inherit; }
+    #__print-actions button.secondary { background:#e1e6ee; color:#1E3A5F; }
+    @media print { #__print-actions { display:none !important; } }
+  </style>
+</head>
+<body>
+  <div id="__print-actions">
+    <button onclick="window.print()">שמירה כ־PDF / הדפסה</button>
+    <button class="secondary" onclick="window.close()">סגירה</button>
+  </div>
+  ${html}
+  <script>
+    // Wait for fonts and layout, then auto-open the print dialog.
+    window.addEventListener('load', function() {
+      var run = function(){ setTimeout(function(){ window.focus(); window.print(); }, 400); };
+      if (document.fonts && document.fonts.ready) { document.fonts.ready.then(run); } else { run(); }
     });
-
-    const blobUrl = doc.output("bloburl") as unknown as string;
-    const win = window.open(blobUrl, "_blank");
-    if (!win) {
-      // Popup blocked (shouldn't happen in the desktop app) — fall back to
-      // a direct file download so the user still gets their PDF.
-      doc.save(`${fname}.pdf`);
-    }
-    logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
-  } finally {
-    document.body.removeChild(container);
-  }
+  </script>
+</body>
+</html>`);
+  win.document.close();
+  logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
 }
 
 export function exportXlsxWorkbook(opts: {
