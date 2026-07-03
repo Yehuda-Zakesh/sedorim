@@ -3,6 +3,7 @@
 const { app, BrowserWindow, Menu, shell } = require("electron");
 const path = require("path");
 const net = require("net");
+const { initAutoUpdater } = require("./updater.cjs");
 
 // CRITICAL: shared userData so KollelTracker.exe and KollelQuick.exe see the
 // same Chromium profile (same localStorage). Must be set BEFORE app is ready.
@@ -91,7 +92,10 @@ async function createWindow() {
   win.loadURL(`http://127.0.0.1:${port}/`);
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  initAutoUpdater("tracker");
+});
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
