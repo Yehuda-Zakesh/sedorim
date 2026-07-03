@@ -5,7 +5,6 @@
 const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const path = require("path");
 const net = require("net");
-const { initAutoUpdater } = require("./updater.cjs");
 
 const SHARED_USER_DATA = path.join(app.getPath("appData"), "KollelTracker");
 app.setPath("userData", SHARED_USER_DATA);
@@ -118,10 +117,7 @@ async function createWindow() {
   win.loadURL(`http://127.0.0.1:${port}/quick`);
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  initAutoUpdater("quick");
-});
+app.whenReady().then(createWindow);
 app.on("window-all-closed", () => app.quit());
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();

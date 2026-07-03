@@ -9,9 +9,8 @@ import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { OnboardingWizard } from "./onboarding-wizard";
 import { useAutoUpdateCheck } from "@/lib/updater";
 import { UpdatePrompt } from "./update-prompt";
-import pkg from "../../package.json";
 
-export const APP_VERSION: string = pkg.version;
+export const APP_VERSION = "1.0.0";
 
 export function AppShell({ title, subtitle, actions, children }: {
   title: string; subtitle?: string; actions?: ReactNode; children: ReactNode;

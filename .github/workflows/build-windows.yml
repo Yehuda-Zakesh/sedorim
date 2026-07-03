@@ -1,4 +1,4 @@
-name: Build & Release Windows Installers
+name: Build Windows EXE
 
 on:
   push:
@@ -11,12 +11,8 @@ on:
       - "package-lock.json"
       - "patches/**"
       - "vite.electron.config.ts"
-      - "build/**"
       - ".github/workflows/build-windows.yml"
   workflow_dispatch: {}
-
-permissions:
-  contents: write # required to publish a GitHub Release
 
 jobs:
   build:
@@ -33,22 +29,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Compute release version
-        id: ver
-        shell: bash
-        run: |
-          BASE=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
-          echo "version=$BASE.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-
-      - name: Build + publish Windows installers
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CI_RELEASE_VERSION: ${{ steps.ver.outputs.version }}
+      - name: Build + package Windows EXEs
         run: npm run package:win
 
-      - name: Upload build (also available as a workflow artifact)
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: KollelTracker-windows-${{ steps.ver.outputs.version }}
+          name: KollelTracker-windows
           path: release-win
           if-no-files-found: error

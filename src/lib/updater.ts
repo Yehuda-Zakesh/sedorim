@@ -4,7 +4,6 @@ import { APP_VERSION } from "@/components/app-shell";
 const REPO_KEY = "tracker.updater.repo.v1";
 const SKIP_KEY = "tracker.updater.skipVersion.v1";
 const LAST_CHECK_KEY = "tracker.updater.lastCheck.v1";
-const DEFAULT_REPO = "Yehuda-Zakesh/sedorim";
 
 export type GithubRelease = {
   tag_name: string;
@@ -25,8 +24,8 @@ export type UpdateInfo = {
 };
 
 export function getUpdateRepo(): string {
-  if (typeof window === "undefined") return DEFAULT_REPO;
-  return localStorage.getItem(REPO_KEY) || DEFAULT_REPO;
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(REPO_KEY) || "";
 }
 export function setUpdateRepo(repo: string) {
   if (typeof window === "undefined") return;
@@ -95,18 +94,11 @@ export function getLastCheck(): string {
   return localStorage.getItem(LAST_CHECK_KEY) || "";
 }
 
-function isElectron(): boolean {
-  return typeof navigator !== "undefined" && /Electron/i.test(navigator.userAgent);
-}
-
-/** Background auto-check hook — runs once per day, prompts via state.
- * Skipped inside the desktop app: there, electron-updater checks, downloads,
- * and installs updates automatically in the background — no prompt needed. */
+/** Background auto-check hook — runs once per day, prompts via state. */
 export function useAutoUpdateCheck() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
-    if (isElectron()) return;
     const repo = getUpdateRepo();
     if (!repo) return;
     const last = getLastCheck();
