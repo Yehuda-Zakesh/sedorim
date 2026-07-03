@@ -237,7 +237,14 @@ export async function exportPdfReport(opts: {
  const win = window.open("", "_blank", "width=900,height=1000");
 
  if (!win) {
-   throw new Error("לא ניתן לפתוח חלון הדפסה. יש בעיה ב־Electron build.");
+ // fallback יציב במקום קריסה
+   const printWindow = window;
+   printWindow.document.body.innerHTML = html;
+   setTimeout(() => {
+     printWindow.focus();
+     printWindow.print();
+   }, 300);
+   return;
  }
   win.document.open();
   win.document.write(`<!doctype html>
