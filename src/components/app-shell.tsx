@@ -7,6 +7,8 @@ import { useTheme } from "@/lib/use-theme";
 import { applyAppearance, useSettings, isOnboarded } from "@/lib/settings-store";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { OnboardingWizard } from "./onboarding-wizard";
+import { useAutoUpdateCheck } from "@/lib/updater";
+import { UpdatePrompt } from "./update-prompt";
 
 export const APP_VERSION = "1.0.0";
 
@@ -22,6 +24,7 @@ export function AppShell({ title, subtitle, actions, children }: {
   useEffect(() => { applyAppearance(); }, []);
   useEffect(() => { setNeedsOnboarding(!isOnboarded()); }, []);
   useGlobalShortcuts(() => setHelpOpen((v) => !v));
+  const { update, dismiss } = useAutoUpdateCheck();
 
   const cycle = () => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
@@ -58,6 +61,7 @@ export function AppShell({ title, subtitle, actions, children }: {
       </div>
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       {needsOnboarding && <OnboardingWizard onComplete={() => setNeedsOnboarding(false)} />}
+      {update && <UpdatePrompt info={update} onClose={dismiss} />}
     </div>
   );
 }
