@@ -1,4 +1,6 @@
 import * as XLSX from "xlsx";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { logAudit } from "./audit-store";
 import {
   type SederEntry, type LearningEntry,
