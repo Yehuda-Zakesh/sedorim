@@ -115,13 +115,14 @@ function main() {
   rmSync(outDir, { recursive: true, force: true });
   rmSync(stagingDir, { recursive: true, force: true });
 
-  const icon = path.join(root, "public", "favicon.ico");
+  const trackerIcon = path.join(root, "build", "tracker-icon.ico");
+  const quickIcon = path.join(root, "build", "quick-icon.ico");
 
   const tracker = stageApp({ name: "KollelTracker", mainEntry: "main.cjs" });
-  packageApp({ name: "KollelTracker", appStagingDir: tracker, icon });
+  packageApp({ name: "KollelTracker", appStagingDir: tracker, icon: trackerIcon });
 
   const quick = stageApp({ name: "KollelQuick", mainEntry: "quick.cjs" });
-  packageApp({ name: "KollelQuick", appStagingDir: quick, icon });
+  packageApp({ name: "KollelQuick", appStagingDir: quick, icon: quickIcon });
 
   writeRunBothLauncher();
 
