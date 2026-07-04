@@ -56,19 +56,49 @@ async function ensureServer() {
   return FIXED_PORT;
 }
 
+function createSplash() {
+  const splash = new BrowserWindow({
+    width: 260,
+    height: 260,
+    frame: false,
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    show: false,
+    backgroundColor: "#0f172a",
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  splash.loadFile(path.join(__dirname, "splash.html"));
+  splash.once("ready-to-show", () => splash.show());
+  return splash;
+}
+
 async function createWindow() {
+  const splash = createSplash();
+
   const port = await ensureServer();
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
     title: "KollelTracker",
     autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   });
+  win.once("ready-to-show", () => {
+    win.show();
+    if (!splash.isDestroyed()) splash.destroy();
+  });
+  // Safety net: never let the splash hang forever if something goes wrong.
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show();
+    if (!splash.isDestroyed()) splash.destroy();
+  }, 20_000);
   // Open external links in the default browser, not a new Electron window.
   // Empty/about:blank popups (e.g. the print-to-PDF preview window used by
   // exportPdfReport) are allowed to open as a normal Electron window.

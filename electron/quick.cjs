@@ -68,6 +68,23 @@ function attachWindowOpenHandler(win) {
   });
 }
 
+function createSplash() {
+  const splash = new BrowserWindow({
+    width: 260,
+    height: 260,
+    frame: false,
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    show: false,
+    backgroundColor: "#0f172a",
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  splash.loadFile(path.join(__dirname, "splash.html"));
+  splash.once("ready-to-show", () => splash.show());
+  return splash;
+}
+
 // The full app, opened as a second window IN THIS SAME PROCESS (same
 // session/localStorage — no cross-process storage race like launching a
 // separate KollelTracker.exe would have). Reused/focused on repeat clicks.
@@ -78,12 +95,14 @@ async function openMainApp() {
     mainAppWin.focus();
     return;
   }
+  const splash = createSplash();
   const port = await ensureServer();
   mainAppWin = new BrowserWindow({
     width: 1280,
     height: 820,
     title: "KollelTracker",
     autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -91,6 +110,14 @@ async function openMainApp() {
     },
   });
   attachWindowOpenHandler(mainAppWin);
+  mainAppWin.once("ready-to-show", () => {
+    mainAppWin.show();
+    if (!splash.isDestroyed()) splash.destroy();
+  });
+  setTimeout(() => {
+    if (mainAppWin && !mainAppWin.isDestroyed() && !mainAppWin.isVisible()) mainAppWin.show();
+    if (!splash.isDestroyed()) splash.destroy();
+  }, 20_000);
   mainAppWin.on("closed", () => { mainAppWin = null; });
   mainAppWin.loadURL(`http://127.0.0.1:${port}/`);
 }
@@ -98,6 +125,7 @@ async function openMainApp() {
 ipcMain.handle("open-main-app", () => openMainApp());
 
 async function createWindow() {
+  const splash = createSplash();
   const port = await ensureServer();
   const win = new BrowserWindow({
     width: 480,
@@ -105,6 +133,7 @@ async function createWindow() {
     title: "כניסה מהירה — כולל",
     autoHideMenuBar: true,
     resizable: true,
+    show: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -113,6 +142,14 @@ async function createWindow() {
     },
   });
   attachWindowOpenHandler(win);
+  win.once("ready-to-show", () => {
+    win.show();
+    if (!splash.isDestroyed()) splash.destroy();
+  });
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show();
+    if (!splash.isDestroyed()) splash.destroy();
+  }, 20_000);
   Menu.setApplicationMenu(null);
   win.loadURL(`http://127.0.0.1:${port}/quick`);
 }

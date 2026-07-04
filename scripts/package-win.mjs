@@ -12,7 +12,7 @@
 // both app folders — double-click it to open both windows together.
 
 import { execSync } from "node:child_process";
-import { existsSync, rmSync, mkdirSync, cpSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync, rmSync, mkdirSync, cpSync, writeFileSync, renameSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -46,7 +46,7 @@ function buildServer() {
   console.log(`Server bundle ready at ${distNode}`);
 }
 
-function stageApp({ name, mainEntry }) {
+function stageApp({ name, mainEntry, splashIconPng }) {
   const appStagingDir = path.join(stagingDir, name);
   rmSync(appStagingDir, { recursive: true, force: true });
   mkdirSync(appStagingDir, { recursive: true });
@@ -68,9 +68,30 @@ function stageApp({ name, mainEntry }) {
   );
 
   cpSync(path.join(root, "electron"), path.join(appStagingDir, "electron"), { recursive: true });
+  if (splashIconPng && existsSync(splashIconPng)) {
+    cpSync(splashIconPng, path.join(appStagingDir, "electron", "splash-icon.png"));
+  }
   cpSync(path.join(root, "dist-node"), path.join(appStagingDir, "dist-node"), { recursive: true });
 
   return appStagingDir;
+}
+
+// Electron ships translations for ~60 languages by default (Chromium's
+// locales/*.pak). We only need Hebrew + English — deleting the rest saves
+// several MB per app with zero effect on functionality.
+const KEEP_LOCALES = new Set(["he.pak", "en-US.pak", "en.pak"]);
+
+function pruneLocales(appOutDir) {
+  const localesDir = path.join(appOutDir, "locales");
+  if (!existsSync(localesDir)) return;
+  let removed = 0;
+  for (const file of readdirSync(localesDir)) {
+    if (!KEEP_LOCALES.has(file)) {
+      unlinkSync(path.join(localesDir, file));
+      removed++;
+    }
+  }
+  console.log(`Pruned ${removed} unused locale files from ${localesDir}`);
 }
 
 function packageApp({ name, appStagingDir, icon }) {
@@ -78,9 +99,10 @@ function packageApp({ name, appStagingDir, icon }) {
   const iconArg = existsSync(icon) ? ` --icon="${icon}"` : "";
   run(
     `npx electron-packager "${appStagingDir}" "${name}" ` +
-      `--platform=win32 --arch=x64 --out="${outDir}" --overwrite` +
+      `--platform=win32 --arch=x64 --out="${outDir}" --overwrite --asar` +
       iconArg
   );
+  pruneLocales(path.join(outDir, `${name}-win32-x64`));
 }
 
 function writeRunBothLauncher() {
@@ -117,11 +139,13 @@ function main() {
 
   const trackerIcon = path.join(root, "build", "tracker-icon.ico");
   const quickIcon = path.join(root, "build", "quick-icon.ico");
+  const trackerSplash = path.join(root, "build", "tracker-icon.png");
+  const quickSplash = path.join(root, "build", "quick-icon.png");
 
-  const tracker = stageApp({ name: "KollelTracker", mainEntry: "main.cjs" });
+  const tracker = stageApp({ name: "KollelTracker", mainEntry: "main.cjs", splashIconPng: trackerSplash });
   packageApp({ name: "KollelTracker", appStagingDir: tracker, icon: trackerIcon });
 
-  const quick = stageApp({ name: "KollelQuick", mainEntry: "quick.cjs" });
+  const quick = stageApp({ name: "KollelQuick", mainEntry: "quick.cjs", splashIconPng: quickSplash });
   packageApp({ name: "KollelQuick", appStagingDir: quick, icon: quickIcon });
 
   writeRunBothLauncher();
