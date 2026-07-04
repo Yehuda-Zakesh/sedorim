@@ -1,12 +1,12 @@
-// KollelQuick.exe — minimal companion window that shares localStorage with
+// SederPlusQuick.exe — minimal companion window that shares localStorage with
 // the main app by pointing at the same Chromium userData folder and the same
-// loopback origin. If KollelTracker.exe is running, we just attach to its
+// loopback origin. If SederPlus.exe is running, we just attach to its
 // server; otherwise we boot the bundled server ourselves on the same port.
 const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const path = require("path");
 const net = require("net");
 
-const SHARED_USER_DATA = path.join(app.getPath("appData"), "KollelTracker");
+const SHARED_USER_DATA = path.join(app.getPath("appData"), "SederPlus");
 app.setPath("userData", SHARED_USER_DATA);
 
 const FIXED_PORT = 47821;
@@ -87,7 +87,7 @@ function createSplash() {
 
 // The full app, opened as a second window IN THIS SAME PROCESS (same
 // session/localStorage — no cross-process storage race like launching a
-// separate KollelTracker.exe would have). Reused/focused on repeat clicks.
+// separate SederPlus.exe would have). Reused/focused on repeat clicks.
 let mainAppWin = null;
 
 async function openMainApp() {
@@ -100,7 +100,7 @@ async function openMainApp() {
   mainAppWin = new BrowserWindow({
     width: 1280,
     height: 820,
-    title: "KollelTracker",
+    title: "סדר פלוס",
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -130,7 +130,7 @@ async function createWindow() {
   const win = new BrowserWindow({
     width: 480,
     height: 680,
-    title: "כניסה מהירה — כולל",
+    title: "כניסה מהירה — סדר פלוס",
     autoHideMenuBar: true,
     resizable: true,
     show: false,

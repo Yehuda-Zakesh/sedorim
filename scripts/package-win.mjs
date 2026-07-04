@@ -1,8 +1,8 @@
 // Builds the app and packages it into two Windows EXEs designed to run
 // AT THE SAME TIME, sharing the same local data and local server
 // (see electron/main.cjs and electron/quick.cjs):
-//   - KollelTracker.exe  (full app)
-//   - KollelQuick.exe    (quick entry window)
+//   - SederPlus.exe  (full app)
+//   - SederPlusQuick.exe    (quick entry window)
 //
 // Usage (on Windows, in the project root):
 //   npm install
@@ -111,12 +111,12 @@ function writeRunBothLauncher() {
   // port first "wins"; the other just attaches to it), so a plain
   // double-start here is safe.
   const bat = `@echo off
-REM Launches KollelTracker and KollelQuick together.
-REM They share data (%APPDATA%\\KollelTracker) and a local port automatically.
+REM Launches SederPlus and SederPlusQuick together.
+REM They share data (%APPDATA%\\SederPlus) and a local port automatically.
 cd /d "%~dp0"
-start "" "KollelTracker-win32-x64\\KollelTracker.exe"
+start "" "SederPlus-win32-x64\\SederPlus.exe"
 timeout /t 1 /nobreak >nul
-start "" "KollelQuick-win32-x64\\KollelQuick.exe"
+start "" "SederPlusQuick-win32-x64\\SederPlusQuick.exe"
 `;
   writeFileSync(path.join(outDir, "RunBoth.bat"), bat, "utf8");
 }
@@ -142,11 +142,11 @@ function main() {
   const trackerSplash = path.join(root, "build", "tracker-icon.png");
   const quickSplash = path.join(root, "build", "quick-icon.png");
 
-  const tracker = stageApp({ name: "KollelTracker", mainEntry: "main.cjs", splashIconPng: trackerSplash });
-  packageApp({ name: "KollelTracker", appStagingDir: tracker, icon: trackerIcon });
+  const tracker = stageApp({ name: "SederPlus", mainEntry: "main.cjs", splashIconPng: trackerSplash });
+  packageApp({ name: "SederPlus", appStagingDir: tracker, icon: trackerIcon });
 
-  const quick = stageApp({ name: "KollelQuick", mainEntry: "quick.cjs", splashIconPng: quickSplash });
-  packageApp({ name: "KollelQuick", appStagingDir: quick, icon: quickIcon });
+  const quick = stageApp({ name: "SederPlusQuick", mainEntry: "quick.cjs", splashIconPng: quickSplash });
+  packageApp({ name: "SederPlusQuick", appStagingDir: quick, icon: quickIcon });
 
   writeRunBothLauncher();
 
@@ -154,10 +154,10 @@ function main() {
 
   console.log(
     `\n✔ Done. Find everything under: ${outDir}\n` +
-      `  KollelTracker-win32-x64\\KollelTracker.exe\n` +
-      `  KollelQuick-win32-x64\\KollelQuick.exe\n` +
+      `  SederPlus-win32-x64\\SederPlus.exe\n` +
+      `  SederPlusQuick-win32-x64\\SederPlusQuick.exe\n` +
       `  RunBoth.bat   <- double-click this to launch both together\n\n` +
-      `They share data via %APPDATA%\\KollelTracker and a fixed local port ` +
+      `They share data via %APPDATA%\\SederPlus and a fixed local port ` +
       `(127.0.0.1:47821). Whichever opens first starts the shared local ` +
       `server; the second one just connects to it. Both can be open at the ` +
       `same time, on the same machine, safely.`

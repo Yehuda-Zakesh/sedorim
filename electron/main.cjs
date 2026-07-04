@@ -4,9 +4,9 @@ const { app, BrowserWindow, Menu, shell } = require("electron");
 const path = require("path");
 const net = require("net");
 
-// CRITICAL: shared userData so KollelTracker.exe and KollelQuick.exe see the
+// CRITICAL: shared userData so SederPlus.exe and SederPlusQuick.exe see the
 // same Chromium profile (same localStorage). Must be set BEFORE app is ready.
-const SHARED_USER_DATA = path.join(app.getPath("appData"), "KollelTracker");
+const SHARED_USER_DATA = path.join(app.getPath("appData"), "SederPlus");
 app.setPath("userData", SHARED_USER_DATA);
 
 // Fixed loopback port so both EXEs share the same origin (= same localStorage
@@ -81,7 +81,7 @@ async function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
-    title: "KollelTracker",
+    title: "סדר פלוס",
     autoHideMenuBar: true,
     show: false,
     webPreferences: {

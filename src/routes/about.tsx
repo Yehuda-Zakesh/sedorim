@@ -67,7 +67,7 @@ function AboutPage() {
               <Info className="size-7" />
             </div>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold tracking-tight">מעקב כולל · Kollel Tracker</h2>
+              <h2 className="text-2xl font-bold tracking-tight">סדר פלוס</h2>
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                 תוכנה אישית ומקצועית לניהול הנוכחות והלימוד היומי בכולל. כל המידע נשמר מקומית במחשב שלך —
                 שקוף, פרטי ותמיד זמין. מותאמת במיוחד לצרכי בני התורה, עם חישובי מלגה, לוח עברי ודוחות מוכנים לשליחה.
