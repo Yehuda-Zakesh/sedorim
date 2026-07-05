@@ -44,7 +44,7 @@ function AboutPage() {
               <h2 className="text-2xl font-bold tracking-tight">סדר פלוס</h2>
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                 תוכנה אישית ומקצועית לניהול הנוכחות והלימוד היומי בכולל. כל המידע נשמר מקומית במחשב שלך —
-                שקוף, פרטי ותמיד זמין. מותאמת במיוחד לצרכי בני התורה, עם חישובי מלגה, לוח עברי ודוחות מוכנים לשליחה.
+                שקוף, פרטי ותמיד זמין. מותאמת במיוחד לאברכי כולל כתר תורה, לוח עברי ודוחות מוכנים לשליחה.
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                 <span className="rounded-full bg-primary/15 text-primary px-3 py-1 font-medium">גרסה {APP_VERSION}</span>
