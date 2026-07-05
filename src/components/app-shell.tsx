@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Moon, Sun, Monitor, Keyboard } from "lucide-react";
+import { Moon, Sun, Monitor, Keyboard, Search } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { AppSidebar, useSidebarCollapsed } from "./app-sidebar";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
@@ -42,6 +43,10 @@ export function AppShell({ title, subtitle, actions, children }: {
             </div>
             <div className="flex items-center gap-2">
               {actions}
+              <Link to="/search" title="חיפוש"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition">
+                <Search className="size-4" />
+              </Link>
               <button onClick={() => setHelpOpen(true)} title="קיצורי מקלדת (?)"
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition">
                 <Keyboard className="size-4" />

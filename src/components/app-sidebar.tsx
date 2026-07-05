@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, ClipboardCheck, History, BookOpen,
-  BarChart3, FileText, Search, Settings, Info, PanelRightClose, PanelRightOpen,
+  BarChart3, FileText, Settings, Info, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 
 const navItems = [
@@ -12,7 +12,7 @@ const navItems = [
   { to: "/learning", label: "לימוד נוסף", icon: BookOpen },
   { to: "/statistics", label: "סטטיסטיקות", icon: BarChart3 },
   { to: "/reports", label: "דוחות", icon: FileText },
-  { to: "/search", label: "חיפוש", icon: Search },
+  
   { to: "/settings", label: "הגדרות", icon: Settings },
   { to: "/about", label: "אודות", icon: Info },
 ] as const;
