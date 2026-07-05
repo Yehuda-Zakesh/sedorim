@@ -81,7 +81,26 @@ export function CalendarView() {
                 <ChevronLeft className="size-4" />
               </button>
             </div>
-            <h2 className="text-base font-semibold">{months[month]} {year}</h2>
+            <div className="flex items-center gap-2">
+              <select
+                value={month}
+                onChange={(e) => { setMonth(Number(e.target.value)); setSelectedDate(null); }}
+                className="rounded-md border border-border bg-card px-2 py-1.5 text-sm font-semibold hover:bg-accent"
+              >
+                {months.map((m, i) => (
+                  <option key={m} value={i}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={year}
+                onChange={(e) => { setYear(Number(e.target.value)); setSelectedDate(null); }}
+                className="rounded-md border border-border bg-card px-2 py-1.5 text-sm font-semibold hover:bg-accent tabular-nums"
+              >
+                {Array.from({ length: 21 }, (_, i) => today.getFullYear() - 10 + i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
             <button onClick={() => { const d = new Date(); setMonth(d.getMonth()); setYear(d.getFullYear()); }}
               className="text-xs rounded-md border border-border px-3 py-1.5 hover:bg-accent">היום</button>
           </div>
