@@ -1,14 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { AppShell, APP_VERSION } from "@/components/app-shell";
 import {
   ClipboardCheck, BookOpen, BarChart3, CalendarDays, History, FileText,
   Search, Settings, Shield, Zap, Sparkles, Info, HeartHandshake, Palette,
-  Download, RefreshCw, Loader2, CheckCircle2,
 } from "lucide-react";
-import { checkForUpdate, getUpdateRepo, setUpdateRepo, type UpdateInfo } from "@/lib/updater";
-import { UpdatePrompt } from "@/components/update-prompt";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -36,27 +31,6 @@ const features = [
 ];
 
 function AboutPage() {
-  const [repo, setRepo] = useState(getUpdateRepo());
-  const [checking, setChecking] = useState(false);
-  const [info, setInfo] = useState<UpdateInfo | null>(null);
-  const [upToDate, setUpToDate] = useState(false);
-
-  const saveRepo = () => { setUpdateRepo(repo); toast.success("מאגר עודכן"); };
-  const runCheck = async () => {
-    setUpdateRepo(repo);
-    setChecking(true);
-    setUpToDate(false);
-    try {
-      const res = await checkForUpdate(repo);
-      if (!res) { toast.error("יש להזין מאגר בפורמט owner/repo"); return; }
-      if (res.isNewer) setInfo(res);
-      else { setUpToDate(true); toast.success("אתה על הגרסה העדכנית ביותר"); }
-    } catch (e) {
-      toast.error("בדיקת עדכון נכשלה");
-      console.error(e);
-    } finally { setChecking(false); }
-  };
-
   return (
     <AppShell title="אודות" subtitle="מידע על התוכנה והפעילות שלה">
       <div dir="rtl" className="mx-auto max-w-5xl space-y-6">
