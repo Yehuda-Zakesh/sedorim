@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Moon, Sun, Monitor, Keyboard } from "lucide-react";
+import { Moon, Sun, Monitor, Keyboard, Search } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { AppSidebar, useSidebarCollapsed } from "./app-sidebar";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
