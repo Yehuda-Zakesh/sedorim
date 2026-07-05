@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Plus, Play, Square, Trash2, AlertTriangle, BookOpen } from "lucide-react";
 import {
   useLearning, todayISO, newId, FRAMEWORK_LABELS, hhmmToMin,
-  getTimer, startTimer, stopTimer, cancelTimer,
+  useTimer, startTimer, stopTimer, cancelTimer,
   type LearningFramework, type LearningEntry,
 } from "@/lib/kollel-store";
 import { isBeinHazmanim } from "@/lib/hebrew-calendar";
@@ -22,7 +22,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
   const [minutes, setMinutes] = useState(60);
   const [fromT, setFromT] = useState("20:00");
   const [toT, setToT] = useState("21:00");
-  const [timer, setTimer] = useState(getTimer());
+  const timer = useTimer();
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -59,18 +59,17 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
   const onStartTimer = () => {
     if (!enabled) return;
     if (timer) { toast.warning("טיימר אחר פעיל"); return; }
-    setTimer(startTimer(fw));
+    startTimer(fw);
     toast.success("הטיימר הופעל");
   };
   const onStopTimer = () => {
     const res = stopTimer();
-    setTimer(null);
     if (res) {
       add({ id: newId(), framework: res.framework, date: todayISO(), minutes: res.minutes, source: "timer" });
       toast.success(`נשמרו ${res.minutes} דקות`);
     }
   };
-  const onCancelTimer = () => { cancelTimer(); setTimer(null); toast("הטיימר בוטל ללא שמירה"); };
+  const onCancelTimer = () => { cancelTimer(); toast("הטיימר בוטל ללא שמירה"); };
 
   const myItems = items.filter((i) => i.framework === fw).slice(0, 8);
   const totalMin = items.filter((i) => i.framework === fw).reduce((s, i) => s + i.minutes, 0);

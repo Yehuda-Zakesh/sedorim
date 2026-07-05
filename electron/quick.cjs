@@ -1,13 +1,19 @@
-// SederPlusQuick.exe — minimal companion window that shares localStorage with
-// the main app by pointing at the same Chromium userData folder and the same
-// loopback origin. If SederPlus.exe is running, we just attach to its
-// server; otherwise we boot the bundled server ourselves on the same port.
+// SederPlusQuick.exe — minimal companion window. App data now lives in a
+// shared JSON file written by the Nitro server (src/lib/store.functions.ts),
+// read/written by whichever server instance the two EXEs attach to — not in
+// Chromium's per-process localStorage (see main.cjs for why that broke).
+// If SederPlus.exe is running, we just attach to its server; otherwise we
+// boot the bundled server ourselves on the same port.
 const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const path = require("path");
 const net = require("net");
 
 const SHARED_USER_DATA = path.join(app.getPath("appData"), "SederPlus");
 app.setPath("userData", SHARED_USER_DATA);
+// Same shared data folder used by SederPlus.exe — see main.cjs and
+// src/lib/store.functions.ts for why data now lives here instead of
+// Chromium's per-process localStorage.
+process.env.SEDORIM_DATA_DIR = SHARED_USER_DATA;
 
 const FIXED_PORT = 47821;
 

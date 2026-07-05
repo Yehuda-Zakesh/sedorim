@@ -1,5 +1,14 @@
 // Electron main process — boots the bundled Nitro server in-process,
 // then opens a BrowserWindow pointing at it. Fully offline.
+//
+// Data persistence: app data (seder/learning/timer entries) is stored in a
+// JSON file on disk via the Nitro server (src/lib/store.functions.ts), NOT
+// in Chromium's localStorage. This matters because SederPlus.exe and
+// SederPlusQuick.exe are separate OS processes — Chromium does not support
+// two processes safely sharing one profile's localStorage at the same time
+// (whichever one opens second can silently get a blank/reset storage
+// partition). The file-backed store, read/written by the one shared Nitro
+// server process, has no such limitation.
 const { app, BrowserWindow, Menu, shell } = require("electron");
 const path = require("path");
 const net = require("net");
@@ -8,6 +17,11 @@ const net = require("net");
 // same Chromium profile (same localStorage). Must be set BEFORE app is ready.
 const SHARED_USER_DATA = path.join(app.getPath("appData"), "SederPlus");
 app.setPath("userData", SHARED_USER_DATA);
+// The actual seder/learning/timer data now lives in a JSON file inside this
+// same shared folder, written by the Nitro server process (see
+// src/lib/store.functions.ts) — not in Chromium's localStorage, since two
+// separate EXEs cannot safely share one Chromium profile concurrently.
+process.env.SEDORIM_DATA_DIR = SHARED_USER_DATA;
 
 // Fixed loopback port so both EXEs share the same origin (= same localStorage
 // partition). If the port is already bound (other EXE running), we skip

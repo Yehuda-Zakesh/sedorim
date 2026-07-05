@@ -2,6 +2,7 @@ import {
   type SederEntry, type LearningEntry,
   calcSeder, monthlySummary, attendanceScore, entriesInMonth, getSederSnapshot,
 } from "./kollel-store";
+import { isLearningDay } from "./hebrew-calendar";
 
 export type Insight = {
   id: string;
@@ -142,11 +143,20 @@ export function forecastMonthlyNetMissing(): number | null {
   const y = now.getFullYear(), m = now.getMonth();
   const list = entriesInMonth(all, y, m);
   if (list.length < 3) return null;
-  const day = now.getDate();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+  let learningDaysElapsed = 0, learningDaysTotal = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(y, m, d);
+    if (!isLearningDay(dt)) continue;
+    learningDaysTotal++;
+    if (d <= now.getDate()) learningDaysElapsed++;
+  }
+  if (learningDaysTotal === 0 || learningDaysElapsed === 0) return null;
+
   let net = 0;
   for (const e of list) net += calcSeder(e).netMissingMin;
-  return Math.round((net / Math.max(1, day)) * daysInMonth);
+  return Math.round((net / learningDaysElapsed) * learningDaysTotal);
 }
 
 export function consistencyScore(): number {

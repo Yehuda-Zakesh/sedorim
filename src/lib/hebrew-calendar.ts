@@ -151,3 +151,39 @@ export function isBeinHazmanim(date: Date = new Date()): boolean {
   if (h.month === 1) return h.day >= 1 && h.day <= 30;                      // Nisan
   return false;
 }
+
+// Weekend = Friday + Saturday (per Kollel schedule convention in Israel).
+export function isWeekend(date: Date = new Date()): boolean {
+  const d = date.getDay(); // 0=Sun ... 5=Fri, 6=Sat
+  return d === 5 || d === 6;
+}
+
+// Yom Tov days — Israel (single-day) calendar.
+export function isYomTov(date: Date = new Date()): boolean {
+  const h = hebrewFromGregorian(date);
+  if (h.month === 7 && (h.day === 1 || h.day === 2)) return true;  // ראש השנה (יומיים גם בארץ)
+  if (h.month === 7 && h.day === 10) return true;                  // יום כיפור
+  if (h.month === 7 && h.day === 15) return true;                  // סוכות א׳
+  if (h.month === 7 && h.day === 22) return true;                  // שמיני עצרת
+  if (h.month === 1 && h.day === 15) return true;                  // פסח א׳
+  if (h.month === 1 && h.day === 21) return true;                  // שביעי של פסח
+  if (h.month === 3 && h.day === 6) return true;                   // שבועות
+  return false;
+}
+
+// Erev Yom Tov — kollel is not in session.
+export function isErevYomTov(date: Date = new Date()): boolean {
+  const h = hebrewFromGregorian(date);
+  if (h.month === 6 && h.day === 29) return true;                 // ערב ראש השנה
+  if (h.month === 7 && h.day === 9) return true;                  // ערב יום כיפור
+  if (h.month === 7 && h.day === 14) return true;                 // ערב סוכות
+  if (h.month === 1 && h.day === 14) return true;                 // ערב פסח
+  if (h.month === 3 && h.day === 5) return true;                  // ערב שבועות
+  return false;
+}
+
+// A day the kollel is expected to be in session: not weekend, not Yom Tov, not Erev Yom Tov.
+// (Chol HaMoed and Bein HaZmanim are NOT excluded here — those remain regular/reduced learning days.)
+export function isLearningDay(date: Date = new Date()): boolean {
+  return !isWeekend(date) && !isYomTov(date) && !isErevYomTov(date);
+}
