@@ -88,49 +88,6 @@ function AboutPage() {
           </p>
         </section>
 
-        {/* Auto update */}
-        <section className="rounded-2xl border border-border bg-card p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Download className="size-5 text-primary" />
-            <h3 className="text-base font-semibold">עדכוני תוכנה אוטומטיים</h3>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-            התוכנה בודקת אוטומטית פעם ביום האם קיימת גרסה חדשה במאגר ה-GitHub שהוגדר, ותציג התראה
-            עם אפשרות להוריד את הגרסה החדשה ישירות.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
-            <div>
-              <label className="text-xs text-muted-foreground">מאגר GitHub (owner/repo)</label>
-              <input
-                type="text"
-                value={repo}
-                onChange={(e) => setRepo(e.target.value)}
-                placeholder="לדוגמה: yehudazaks/kollel-tracker"
-                dir="ltr"
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-left"
-              />
-            </div>
-            <button
-              onClick={saveRepo}
-              className="rounded-md border border-border bg-card px-4 py-2 text-sm hover:bg-accent"
-            >שמור</button>
-            <button
-              onClick={runCheck}
-              disabled={checking || !repo.includes("/")}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {checking ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-              בדוק עכשיו
-            </button>
-          </div>
-          {upToDate && (
-            <div className="mt-3 inline-flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="size-4" />
-              הגרסה שלך עדכנית ({APP_VERSION})
-            </div>
-          )}
-        </section>
-
         {/* Credit */}
         <section className="rounded-2xl border border-border bg-card p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2 text-primary">
@@ -145,7 +102,6 @@ function AboutPage() {
           </p>
         </section>
       </div>
-      {info && <UpdatePrompt info={info} onClose={() => setInfo(null)} />}
     </AppShell>
   );
 }
