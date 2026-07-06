@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Search, Trash2, History as HistoryIcon, CalendarDays } from "lucide-react";
-import { useSeder, calcSeder, monthlySummary } from "@/lib/kollel-store";
+import { Search, Trash2, History as HistoryIcon, CalendarDays, BookOpen } from "lucide-react";
+import { useSeder, useLearning, calcSeder, monthlySummary, FRAMEWORK_LABELS } from "@/lib/kollel-store";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 import { CalendarView } from "./calendar";
@@ -17,7 +17,8 @@ type ExcusedFilter = "all" | "excused" | "non-excused";
 
 function HistoryPage() {
   const { entries, remove } = useSeder();
-  const [tab, setTab] = useState<"list" | "calendar">("list");
+  const learning = useLearning();
+  const [tab, setTab] = useState<"list" | "learning" | "calendar">("list");
   const [q, setQ] = useState("");
   const [sederFilter, setSederFilter] = useState<"all" | "1" | "2">("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -47,7 +48,11 @@ function HistoryPage() {
       <div className="mb-4 inline-flex rounded-lg border border-border bg-card p-1">
         <button onClick={() => setTab("list")}
           className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-          <HistoryIcon className="size-3.5" /> טבלת רישומים
+          <HistoryIcon className="size-3.5" /> נוכחות
+        </button>
+        <button onClick={() => setTab("learning")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <BookOpen className="size-3.5" /> לימוד נוסף
         </button>
         <button onClick={() => setTab("calendar")}
           className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "calendar" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
@@ -55,7 +60,9 @@ function HistoryPage() {
         </button>
       </div>
 
-      {tab === "calendar" ? <CalendarView /> : (
+      {tab === "calendar" ? <CalendarView /> : tab === "learning" ? (
+        <LearningHistory items={learning.items} onRemove={(id) => { learning.remove(id); toast("נמחק"); }} />
+      ) : (
       <>
       <div className="card-surface p-4 mb-4 space-y-3">
         <div className="relative">
