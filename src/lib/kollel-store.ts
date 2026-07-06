@@ -38,6 +38,47 @@ const LEGACY_ATT = "tracker.attendance.v1";
 const LEGACY_LRN = "tracker.learning.v1";
 const LEGACY_ARCHIVE = "tracker.legacy.archive.v1";
 
+const MIGRATED_FLAG = "kollel.serverStoreMigrated.v1";
+const LIVE_SEDER_KEY = "kollel.seder.v1";
+const LIVE_LRN_KEY = "kollel.learning.v1";
+const LIVE_TIMER_KEY = "kollel.timer.v1";
+
+// One-time migration for users upgrading from the localStorage-based build:
+// copies whatever is already sitting in localStorage into the new shared
+// server-side file, exactly once. Old keys are left in place afterwards
+// (untouched, just no longer read) as a safety net — nothing is deleted.
+async function migrateLegacyLocalStorageIfNeeded() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(MIGRATED_FLAG)) return;
+  try {
+    const remote = await loadStore();
+    const remoteHasData =
+      (Array.isArray(remote?.seder) && remote.seder.length > 0) ||
+      (Array.isArray(remote?.learning) && remote.learning.length > 0);
+    if (!remoteHasData) {
+      const sederRaw = localStorage.getItem(LIVE_SEDER_KEY);
+      const lrnRaw = localStorage.getItem(LIVE_LRN_KEY);
+      const timerRaw = localStorage.getItem(LIVE_TIMER_KEY);
+      if (sederRaw) {
+        const parsed = JSON.parse(sederRaw);
+        if (Array.isArray(parsed) && parsed.length) await saveStoreKey({ data: { key: "seder", value: parsed } });
+      }
+      if (lrnRaw) {
+        const parsed = JSON.parse(lrnRaw);
+        if (Array.isArray(parsed) && parsed.length) await saveStoreKey({ data: { key: "learning", value: parsed } });
+      }
+      if (timerRaw) {
+        const parsed = JSON.parse(timerRaw);
+        if (parsed) await saveStoreKey({ data: { key: "timer", value: parsed } });
+      }
+    }
+    localStorage.setItem(MIGRATED_FLAG, String(Date.now()));
+  } catch {
+    // Leave the flag unset on failure so we retry on the next launch instead
+    // of silently giving up on migrating the user's existing data.
+  }
+}
+
 // One-time legacy migration only — the old localStorage keys above are read
 // once (if present) and archived. This does NOT run for the live seder/
 // learning/timer data anymore; that now lives server-side (see below).
@@ -83,6 +124,7 @@ function applyRemoteStore(store: { seder?: unknown; learning?: unknown; timer?: 
 
 async function hydrate() {
   try {
+    await migrateLegacyLocalStorageIfNeeded();
     const store = await loadStore();
     applyRemoteStore(store);
   } catch {

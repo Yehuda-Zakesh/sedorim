@@ -4,6 +4,15 @@
 //   - SederPlus.exe  (full app)
 //   - SederPlusQuick.exe    (quick entry window)
 //
+// Data (seder/learning/timer entries) lives in a shared JSON file written
+// by the Nitro server — %APPDATA%\SederPlus\sedorim-data.json — NOT in
+// Chromium's localStorage. Existing users upgrading from an older build
+// (where data lived only in localStorage) get migrated automatically and
+// silently the first time the new EXE runs: see
+// migrateLegacyLocalStorageIfNeeded() in src/lib/kollel-store.ts. Nothing
+// is deleted from localStorage during that migration — it's copied, not
+// moved — so old data is never at risk even if the migration is interrupted.
+//
 // Usage (on Windows, in the project root):
 //   npm install
 //   npm run package:win
@@ -157,10 +166,14 @@ function main() {
       `  SederPlus-win32-x64\\SederPlus.exe\n` +
       `  SederPlusQuick-win32-x64\\SederPlusQuick.exe\n` +
       `  RunBoth.bat   <- double-click this to launch both together\n\n` +
-      `They share data via %APPDATA%\\SederPlus and a fixed local port ` +
-      `(127.0.0.1:47821). Whichever opens first starts the shared local ` +
-      `server; the second one just connects to it. Both can be open at the ` +
-      `same time, on the same machine, safely.`
+      `They share data via %APPDATA%\\SederPlus\\sedorim-data.json and a fixed ` +
+      `local port (127.0.0.1:47821). Whichever opens first starts the shared ` +
+      `local server; the second one just connects to it. Both can be open at ` +
+      `the same time, on the same machine, safely.\n\n` +
+      `Upgrading existing users: on first launch of this build, any data ` +
+      `still sitting in the old localStorage (from a pre-1.0.2 install) is ` +
+      `copied into sedorim-data.json automatically, once, with nothing ` +
+      `deleted from localStorage. No manual migration step is needed.`
   );
 }
 
