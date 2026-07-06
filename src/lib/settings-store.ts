@@ -59,8 +59,8 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   profile: { name: "תלמיד הכולל", classroom: "" },
   seder: {
-    s1Start: "09:30", s1End: "13:30",
-    s2Start: "16:00", s2End: "19:00",
+    s1Start: "09:00", s1End: "13:00",
+    s2Start: "15:45", s2End: "19:30",
     bonusThresholdMin: 15,
     alertMissingMinPerMonth: 180,
     defaultDeparture: "seder_end",
