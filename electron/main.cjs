@@ -66,7 +66,14 @@ async function ensureServer() {
     // just attach to their server instead of crashing.
     if (!(await isPortInUse(FIXED_PORT))) throw err;
   }
-  await new Promise((r) => setTimeout(r, 300));
+  // Poll for the port instead of a blind fixed sleep — usually near-instant
+  // (server is listening within a few ms of the import above resolving),
+  // with a generous cap for slower machines instead of always paying a
+  // flat 300ms on every launch.
+  for (let i = 0; i < 100; i++) {
+    if (await isPortInUse(FIXED_PORT)) break;
+    await new Promise((r) => setTimeout(r, 20));
+  }
   return FIXED_PORT;
 }
 
