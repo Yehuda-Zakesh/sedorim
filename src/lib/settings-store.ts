@@ -103,7 +103,12 @@ function read(): Settings {
 let settings: Settings = read();
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
-
+// Apply the saved theme/colors to the DOM immediately at module load —
+// not just inside a React useEffect — so the very first paint already
+// shows the user's chosen color instead of the CSS default, then flashing
+// to the real one a moment later. (applyAppearance is a function
+// declaration below, hoisted, so calling it here is safe.)
+applyAppearance();
 function persist() {
   if (typeof window === "undefined") return;
   try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* noop */ }

@@ -55,7 +55,7 @@ function buildServer() {
   console.log(`Server bundle ready at ${distNode}`);
 }
 
-function stageApp({ name, mainEntry, splashIconPng }) {
+function stageApp({ name, mainEntry }) {
   const appStagingDir = path.join(stagingDir, name);
   rmSync(appStagingDir, { recursive: true, force: true });
   mkdirSync(appStagingDir, { recursive: true });
@@ -77,9 +77,6 @@ function stageApp({ name, mainEntry, splashIconPng }) {
   );
 
   cpSync(path.join(root, "electron"), path.join(appStagingDir, "electron"), { recursive: true });
-  if (splashIconPng && existsSync(splashIconPng)) {
-    cpSync(splashIconPng, path.join(appStagingDir, "electron", "splash-icon.png"));
-  }
   cpSync(path.join(root, "dist-node"), path.join(appStagingDir, "dist-node"), { recursive: true });
 
   return appStagingDir;
@@ -148,13 +145,11 @@ function main() {
 
   const trackerIcon = path.join(root, "build", "tracker-icon.ico");
   const quickIcon = path.join(root, "build", "quick-icon.ico");
-  const trackerSplash = path.join(root, "build", "tracker-icon.png");
-  const quickSplash = path.join(root, "build", "quick-icon.png");
 
-  const tracker = stageApp({ name: "SederPlus", mainEntry: "main.cjs", splashIconPng: trackerSplash });
+  const tracker = stageApp({ name: "SederPlus", mainEntry: "main.cjs" });
   packageApp({ name: "SederPlus", appStagingDir: tracker, icon: trackerIcon });
 
-  const quick = stageApp({ name: "SederPlusQuick", mainEntry: "quick.cjs", splashIconPng: quickSplash });
+  const quick = stageApp({ name: "SederPlusQuick", mainEntry: "quick.cjs" });
   packageApp({ name: "SederPlusQuick", appStagingDir: quick, icon: quickIcon });
 
   writeRunBothLauncher();
