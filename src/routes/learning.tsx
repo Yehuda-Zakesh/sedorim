@@ -81,7 +81,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
     return (
       <div className="card-surface p-6 text-center text-sm text-muted-foreground">
         <AlertTriangle className="size-5 mx-auto mb-2 text-warning" />
-        מסגרת זו זמינה רק בתקופת בין הזמנים (אב, תשרי, ניסן).
+        מסגרת זו זמינה רק בתקופת בין הזמנים (אב מי׳ ואילך, תשרי מי״א ואילך, ניסן).
       </div>
     );
   }

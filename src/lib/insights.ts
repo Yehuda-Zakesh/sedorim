@@ -1,6 +1,7 @@
 import {
   type SederEntry, type LearningEntry,
   calcSeder, monthlySummary, attendanceScore, entriesInMonth, getSederSnapshot,
+  currentDayStreak, FRAMEWORK_LABELS,
 } from "./kollel-store";
 import { isLearningDay } from "./hebrew-calendar";
 
@@ -132,6 +133,140 @@ export function generateInsights(
       title: "מעט שעות לימוד נוסף החודש",
       detail: "הוסף רישום קצר השבוע כדי לשמור על קצב.",
     });
+  }
+
+  // ===== Smart insights =====
+  const monthEntries = entriesInMonth(entries, y, m);
+
+  // Streak
+  const streak = currentDayStreak();
+  if (streak >= 3) {
+    out.push({
+      id: "streak", tone: "success", category: "trend",
+      title: `רצף של ${streak} ימים רצופים של סדר מלא`,
+      detail: "המשך לשמור על הרצף — עקביות היא הכל.",
+    });
+  }
+
+  // Best day of week (last 60 entries)
+  const recent = entries.slice(0, 120);
+  if (recent.length >= 20) {
+    const dayStats: { good: number; total: number }[] = Array.from({ length: 7 }, () => ({ good: 0, total: 0 }));
+    for (const e of recent) {
+      const d = new Date(e.date).getDay();
+      const c = calcSeder(e);
+      dayStats[d].total++;
+      if (!e.absent && c.netMissingMin === 0) dayStats[d].good++;
+    }
+    const dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+    let worst = -1, worstRate = 1;
+    for (let i = 0; i < 7; i++) {
+      if (dayStats[i].total < 3) continue;
+      const rate = dayStats[i].good / dayStats[i].total;
+      if (rate < worstRate) { worstRate = rate; worst = i; }
+    }
+    if (worst >= 0 && worstRate < 0.6) {
+      out.push({
+        id: "weak-day", tone: "info", category: "opportunity",
+        title: `יום ${dayNames[worst]} הוא היום החלש שלך`,
+        detail: `רק ${Math.round(worstRate * 100)}% מהסדרים ביום זה מלאים. תכנן מראש להגעה בזמן.`,
+      });
+    }
+  }
+
+  // Seder 1 vs Seder 2 comparison this month
+  if (monthEntries.length >= 6) {
+    const s1 = monthEntries.filter((e) => e.seder === 1);
+    const s2 = monthEntries.filter((e) => e.seder === 2);
+    if (s1.length >= 3 && s2.length >= 3) {
+      const avg = (list: SederEntry[]) => list.reduce((s, e) => s + calcSeder(e).netMissingMin, 0) / list.length;
+      const a1 = avg(s1), a2 = avg(s2);
+      const diff = Math.abs(a1 - a2);
+      if (diff >= 5) {
+        const weaker = a1 > a2 ? "א׳" : "ב׳";
+        out.push({
+          id: "seder-gap", tone: "info", category: "opportunity",
+          title: `סדר ${weaker} חלש יותר החודש`,
+          detail: `פער של ${Math.round(diff)} דק׳ ממוצע לחסר. מיקוד בסדר זה ישפר את הציון.`,
+        });
+      }
+    }
+  }
+
+  // Average lateness improvement
+  if (cur.lateCount >= 2 && prev.lateCount >= 2) {
+    const avgLateCur = cur.totalMissing / Math.max(1, cur.lateCount + cur.earlyDepCount);
+    const avgLatePrev = prev.totalMissing / Math.max(1, prev.lateCount + prev.earlyDepCount);
+    const d = Math.round(avgLatePrev - avgLateCur);
+    if (d >= 3) {
+      out.push({
+        id: "punctual-up", tone: "success", category: "trend",
+        title: `שיפור בממוצע האיחור: ${d} דק׳ פחות`,
+        detail: "מגמת דיוק חיובית — כל דקה נחשבת.",
+      });
+    }
+  }
+
+  // Forecast-based warning
+  const forecast = forecastMonthlyNetMissing();
+  if (forecast !== null && forecast >= goals.alertMissingMinPerMonth && cur.netMissing < goals.alertMissingMinPerMonth) {
+    out.push({
+      id: "forecast-alert", tone: "warning", category: "recommendation",
+      title: `תחזית: ${fmtMin(forecast)} חסר עד סוף החודש`,
+      detail: `אם הקצב יימשך, תחצה את סף ההתראה (${fmtMin(goals.alertMissingMinPerMonth)}).`,
+    });
+  }
+
+  // Excused ratio insight
+  if (cur.totalMissing >= 60) {
+    const excusedPct = Math.round((cur.excused / cur.totalMissing) * 100);
+    if (excusedPct >= 70) {
+      out.push({
+        id: "excused-high", tone: "info", category: "trend",
+        title: `${excusedPct}% מהחסר החודש מוצדק`,
+        detail: "רוב ההיעדרויות מסומנות כמוצדקות — תיעוד טוב.",
+      });
+    } else if (excusedPct < 20 && cur.entries >= 8) {
+      out.push({
+        id: "excused-low", tone: "info", category: "opportunity",
+        title: "מעט חסר מסומן כמוצדק",
+        detail: "אם היו סיבות מוצדקות, סמן אותן כדי לקבל תמונה מדויקת.",
+      });
+    }
+  }
+
+  // Learning framework dominance
+  const monthKey = `${y}-${String(m + 1).padStart(2, "0")}`;
+  const monthLessons = lessons.filter((l) => l.date.slice(0, 7) === monthKey);
+  if (monthLessons.length >= 5) {
+    const byFw: Record<string, number> = {};
+    for (const l of monthLessons) byFw[l.framework] = (byFw[l.framework] || 0) + l.minutes;
+    const top = Object.entries(byFw).sort((a, b) => b[1] - a[1])[0];
+    if (top) {
+      out.push({
+        id: "learn-top-fw", tone: "info", category: "trend",
+        title: `המסגרת המובילה: ${FRAMEWORK_LABELS[top[0] as keyof typeof FRAMEWORK_LABELS]}`,
+        detail: `${fmtMin(top[1])} החודש במסגרת זו.`,
+      });
+    }
+  }
+
+  // Missing entries — detect gap
+  if (monthEntries.length >= 4) {
+    const daysSoFar = now.getDate();
+    let expectedEntries = 0;
+    for (let d = 1; d <= daysSoFar; d++) {
+      const dt = new Date(y, m, d);
+      if (isLearningDay(dt)) expectedEntries += 2;
+    }
+    const missingCount = Math.max(0, expectedEntries - monthEntries.length);
+    if (missingCount >= 4) {
+      out.push({
+        id: "gaps", tone: "warning", category: "recommendation",
+        title: `${missingCount} סדרים ללא רישום החודש`,
+        detail: "השלם את הרישומים החסרים לתמונה מדויקת של המצב.",
+      });
+    }
   }
 
   return out;
