@@ -142,11 +142,11 @@ export function formatHebrewMonthYear(h: HebrewDate): string {
   return `${hebrewMonthName(h.month, h.year)} ${hebrewYearLetters(h.year)}`;
 }
 
-// Bein Hazmanim windows: Av (entire month), Tishrei (after Simchat Torah), Nisan (entire month).
+// Bein Hazmanim windows: Av from י׳ ואילך, Tishrei from י״א ואילך, Nisan (entire month).
 export function isBeinHazmanim(date: Date = new Date()): boolean {
   const h = hebrewFromGregorian(date);
-  if (h.month === 5) return h.day >= 1 && h.day <= 30;                      // Av
-  if (h.month === 7) return h.day >= 23 && h.day <= 30;                     // Tishrei (post-חגים)
+  if (h.month === 5) return h.day >= 10 && h.day <= 30;                     // Av (מי׳ ואילך)
+  if (h.month === 7) return h.day >= 11 && h.day <= 30;                     // Tishrei (מי״א ואילך)
   if (h.month === 1) return h.day >= 1 && h.day <= 30;                      // Nisan
   return false;
 }
