@@ -186,3 +186,50 @@ export function isErevYomTov(date: Date = new Date()): boolean {
 export function isLearningDay(date: Date = new Date()): boolean {
   return !isWeekend(date) && !isYomTov(date) && !isErevYomTov(date);
 }
+
+// Fast days (תעניות). Returns name in Hebrew when the date is a fast day, else null.
+// Handles standard postponements: when the "natural" date falls on Shabbat, most fasts move to Sunday
+// (except Yom Kippur which is always kept on Shabbat and תענית אסתר which moves earlier to Thursday).
+export function fastDayName(date: Date = new Date()): string | null {
+  const h = hebrewFromGregorian(date);
+  const dow = date.getDay(); // 0=Sun ... 6=Sat
+
+  // צום גדליה — 3 תשרי; נדחה מ־3 שחל בשבת לי׳ד (הראשון של תשרי אחרי שבת = 4).
+  if (h.month === 7) {
+    if (h.day === 3 && dow !== 6) return "צום גדליה";
+    if (h.day === 4 && dow === 0) return "צום גדליה (נדחה)";
+  }
+  // עשרה בטבת — לעולם ביומו (אינו נדחה אף פעם).
+  if (h.month === 10 && h.day === 10) return "עשרה בטבת";
+  // תענית אסתר — י״ג אדר (או אדר ב׳ בשנה מעוברת); כשחל בשבת נדחה לחמישי י״א.
+  const adarMonth = isHebrewLeap(h.year) ? 13 : 12;
+  if (h.month === adarMonth) {
+    if (h.day === 13 && dow !== 6) return "תענית אסתר";
+    if (h.day === 11 && dow === 4) return "תענית אסתר (מוקדם)";
+  }
+  // י״ז בתמוז — נדחה מ־17 שחל בשבת לי״ח.
+  if (h.month === 4) {
+    if (h.day === 17 && dow !== 6) return "שבעה עשר בתמוז";
+    if (h.day === 18 && dow === 0) return "שבעה עשר בתמוז (נדחה)";
+  }
+  // תשעה באב — נדחה מ־9 שחל בשבת לי׳.
+  if (h.month === 5) {
+    if (h.day === 9 && dow !== 6) return "תשעה באב";
+    if (h.day === 10 && dow === 0) return "תשעה באב (נדחה)";
+  }
+  // תענית בכורות — י״ד ניסן (ערב פסח); כשחל בשבת מוקדם לחמישי י״ב.
+  if (h.month === 1) {
+    if (h.day === 14 && dow !== 6) return "תענית בכורות";
+    if (h.day === 12 && dow === 4) return "תענית בכורות (מוקדם)";
+  }
+  return null;
+}
+
+export function isFastDay(date: Date = new Date()): boolean {
+  return fastDayName(date) !== null;
+}
+
+// On fast days there is typically no afternoon seder (Seder ב׳).
+export function hasNoSederB(date: Date = new Date()): boolean {
+  return isFastDay(date);
+}
