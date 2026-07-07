@@ -7,7 +7,7 @@ import {
   type SederEntry, type SederNum,
 } from "@/lib/kollel-store";
 import { useSettings } from "@/lib/settings-store";
-import { formatHebrewDate } from "@/lib/hebrew-calendar";
+import { formatHebrewDate, fastDayName, hasNoSederB } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/attendance")({
@@ -47,6 +47,9 @@ function SederCard({
 }: { num: SederNum; date: string; existing?: SederEntry; onSaved: () => void }) {
   const { settings } = useSettings();
   const { upsert, remove } = useSeder();
+  const dayDate = new Date(date);
+  const fastName = fastDayName(dayDate);
+  const skipSederB = num === 2 && hasNoSederB(dayDate);
   const [form, setForm] = useState<SederFormState>(() =>
     existing ? fromEntry(existing) : defaultsFor(num, settings.seder));
 
@@ -97,6 +100,16 @@ function SederCard({
           </button>
         </div>
       </div>
+
+      {skipSederB && (
+        <div className="mb-3 rounded-md border-2 border-warning bg-warning/5 p-3 text-xs text-warning flex items-start gap-2">
+          <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold">היום {fastName} — אין סדר ב׳</div>
+            <div className="text-warning/80">אין צורך לרשום נוכחות לסדר ב׳ ביום זה.</div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div>
