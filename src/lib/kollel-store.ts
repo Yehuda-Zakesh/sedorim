@@ -3,7 +3,7 @@ import { logAudit } from "./audit-store";
 import { getSettings } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
 import { isLearningDay } from "./hebrew-calendar";
-import { loadStore, saveStoreKey } from "./store.functions";
+import { loadStore, saveStoreKey, saveStoreKeys } from "./store.functions";
 export type SederNum = 1 | 2;
 export type LearningFramework = "kollel-erev" | "torato-beyado" | "bein-hazmanim";
 
@@ -148,6 +148,17 @@ function persistKey(key: "seder" | "learning" | "timer", value: unknown) {
     .catch(() => { /* best-effort; next poll will reconcile */ });
 }
 
+// Use this instead of two separate persistKey() calls whenever seder +
+// learning change together (backup restore, snapshot restore). Two
+// independent writes leave a real window where the shared file — and the
+// 4s poll below, in this same window or the other EXE — can observe a
+// partial state with only one of the two updated.
+function persistKeys(partial: { seder?: SederEntry[]; learning?: LearningEntry[] }) {
+  saveStoreKeys({ data: partial })
+    .then((res) => { lastKnownUpdatedAt = res.updatedAt; })
+    .catch(() => { /* best-effort; next poll will reconcile */ });
+}
+
 // Cross-window sync: poll the shared server store so a write made in the
 // *other* EXE/window shows up here without a manual refresh.
 if (typeof window !== "undefined") {
@@ -281,6 +292,19 @@ function validateLearning(l: LearningEntry): { ok: true } | { ok: false; error: 
 // דקות אפקטיביות לחישוב סיכומים — תענית דיבור נספרת כפול.
 export function effectiveLearningMin(l: LearningEntry): number {
   return l.tanitDibur ? l.minutes * 2 : l.minutes;
+}
+
+// Replaces both seder + learning in one atomic write — use this (not
+// useSeder().replaceAll + useLearning().replaceAll back to back) whenever
+// restoring/importing both together, e.g. a backup file or a snapshot. See
+// persistKeys() for why: two separate saves leave a real window where a
+// concurrent reader can see only one of the two already updated.
+export function replaceAllData(sederList: SederEntry[], learningList: LearningEntry[]) {
+  sederEntries = sederList.filter((e) => validateSeder(e).ok)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
+  learningEntries = learningList.filter((l) => validateLearning(l).ok);
+  persistKeys({ seder: sederEntries, learning: learningEntries });
+  emit();
 }
 
 // ============ Hooks / API ============

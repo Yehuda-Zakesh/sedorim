@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import {
   Download, Upload, CheckCircle2, HardDrive, FileJson, Clock, Trash2, ShieldAlert, RotateCcw, AlertTriangle,
 } from "lucide-react";
-import { useSeder, useLearning } from "@/lib/kollel-store";
+import { useSeder, useLearning, replaceAllData } from "@/lib/kollel-store";
 import { useSnapshots, createSnapshot, deleteSnapshot, verifySnapshot, getLastAutoBackupTs, clearAllSnapshots } from "@/lib/auto-backup";
 import { logAudit } from "@/lib/audit-store";
 import { useSettings, resetSettings } from "@/lib/settings-store";
@@ -31,8 +31,8 @@ function BackupPage() {
 }
 
 export function BackupView() {
-  const { entries, replaceAll: replaceSeder, clearAll: clearSeder } = useSeder();
-  const { items, replaceAll: replaceLrn, clearAll: clearLrn } = useLearning();
+  const { entries, clearAll: clearSeder } = useSeder();
+  const { items, clearAll: clearLrn } = useLearning();
   const snapshots = useSnapshots();
   const { settings } = useSettings();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -59,8 +59,7 @@ export function BackupView() {
       const lrnArr = data.learning || [];
       if (!Array.isArray(sederArr) || !Array.isArray(lrnArr)) throw new Error("invalid");
       createSnapshot({ attendance: entries, learning: items }, "before-op");
-      replaceSeder(sederArr);
-      replaceLrn(lrnArr);
+      replaceAllData(sederArr, lrnArr);
       logAudit("backup.import", { detail: `${sederArr.length} סדרים · ${lrnArr.length} רישומי לימוד` });
       toast.success("השחזור הושלם");
     } catch {
@@ -79,8 +78,7 @@ export function BackupView() {
     if (!snap) return;
     if (!verifySnapshot(snap)) { toast.error("גיבוי פגום — checksum לא תואם"); return; }
     createSnapshot({ attendance: entries, learning: items }, "before-op");
-    replaceSeder((snap.payload.attendance as any[]) || []);
-    replaceLrn((snap.payload.learning as any[]) || []);
+    replaceAllData((snap.payload.attendance as any[]) || [], (snap.payload.learning as any[]) || []);
     logAudit("backup.restore", { recordId: id, detail: `שוחזר מ-${formatTs(snap.ts)}` });
     toast.success("הגיבוי שוחזר");
   };

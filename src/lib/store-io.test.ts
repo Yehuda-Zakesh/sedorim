@@ -82,3 +82,42 @@ describe("backup rotation", () => {
     expect(files.length).toBe(1);
   });
 });
+
+describe("saveKeys (atomic multi-key write)", () => {
+  it("updates seder + learning together — no window where only one is present", async () => {
+    const { readStore, saveKeys } = await import("./store-io");
+    await saveKeys({ seder: [{ id: "s1" }], learning: [{ id: "l1" }] });
+    const store = await readStore();
+    expect(store.seder).toEqual([{ id: "s1" }]);
+    expect(store.learning).toEqual([{ id: "l1" }]);
+  });
+
+  it("demonstrates why two separate saveKey calls are unsafe for a combined restore", async () => {
+    // This is the bug replaceAllData()/saveKeys() exists to avoid:
+    // importing/restoring seder + learning via two *independent* saveKey()
+    // calls leaves a real window, between the two writes landing, where a
+    // concurrent reader (the 4s cross-window poll) sees seder already
+    // restored but learning still at its old (pre-restore) value.
+    const { readStore, saveKey } = await import("./store-io");
+    await saveKey("learning", [{ id: "old-learning" }]); // pre-existing data
+
+    await saveKey("seder", [{ id: "restored-seder" }]); // first of the two restore writes lands
+    const partialSnapshot = await readStore(); // a poll landing exactly here...
+    await saveKey("learning", [{ id: "restored-learning" }]); // ...before the second write lands
+
+    // ...would see the new seder mixed with the STALE learning — a
+    // genuinely inconsistent, partially-restored state.
+    expect(partialSnapshot.seder).toEqual([{ id: "restored-seder" }]);
+    expect(partialSnapshot.learning).toEqual([{ id: "old-learning" }]); // stale!
+  });
+
+  it("saveKeys never exposes that partial state — a reader sees old or new, never mixed", async () => {
+    const { readStore, saveKey, saveKeys } = await import("./store-io");
+    await saveKey("learning", [{ id: "old-learning" }]);
+    await saveKeys({ seder: [{ id: "restored-seder" }], learning: [{ id: "restored-learning" }] });
+
+    const store = await readStore();
+    expect(store.seder).toEqual([{ id: "restored-seder" }]);
+    expect(store.learning).toEqual([{ id: "restored-learning" }]); // never stale
+  });
+});

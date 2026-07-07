@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { readStore, saveKey } from "./store-io";
+import { readStore, saveKey, saveKeys } from "./store-io";
 
 // Server-side, file-backed key/value store shared by every window/process
 // that talks to this Nitro server instance. Replaces per-window localStorage
@@ -28,4 +28,20 @@ export const saveStoreKey = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data }) => {
     return await saveKey(data.key, data.value);
+  });
+
+// Saves several keys atomically in a single write — use this (not repeated
+// saveStoreKey calls) whenever more than one key changes together, e.g.
+// restoring a backup file that contains both seder + learning. Two separate
+// saveStoreKey calls leave a real window where a concurrent reader (the
+// other EXE/window's poll) can observe a partial state with only one key
+// updated.
+export const saveStoreKeys = createServerFn({ method: "POST" })
+  .inputValidator(z.object({
+    seder: z.unknown().optional(),
+    learning: z.unknown().optional(),
+    timer: z.unknown().optional(),
+  }))
+  .handler(async ({ data }) => {
+    return await saveKeys(data);
   });

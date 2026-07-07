@@ -94,16 +94,21 @@ export async function maybeBackup(store: StoreShape): Promise<void> {
 //     meantime) we discard our attempt and retry against the fresh data.
 let writeQueue: Promise<unknown> = Promise.resolve();
 
-export async function saveKey(
-  key: "seder" | "learning" | "timer",
-  value: unknown,
+// Saves one or more keys in a single atomic read-modify-write. Callers that
+// need to replace several keys together (e.g. restoring a backup that
+// contains both seder + learning) MUST use this instead of separate
+// saveKey() calls — two independent writes leave a real window where the
+// shared file (and anything polling it, like the other EXE/window) can
+// observe a partial state with only one of the two keys updated.
+export async function saveKeys(
+  partial: Partial<Pick<StoreShape, "seder" | "learning" | "timer">>,
 ): Promise<{ ok: true; updatedAt: number }> {
   const attempt = async (): Promise<{ ok: true; updatedAt: number }> => {
     const file = storeFile();
     for (let i = 0; i < 5; i++) {
       const before = await fileMtime(file);
       const store = await readStore();
-      store[key] = value;
+      Object.assign(store, partial);
       store.updatedAt = Date.now();
       const dir = dataDir();
       await fs.mkdir(dir, { recursive: true });
@@ -121,9 +126,16 @@ export async function saveKey(
       void maybeBackup(store);
       return { ok: true, updatedAt: store.updatedAt };
     }
-    throw new Error("saveKey: too much write contention, giving up");
+    throw new Error("saveKeys: too much write contention, giving up");
   };
   const result = writeQueue.then(attempt, attempt) as Promise<{ ok: true; updatedAt: number }>;
   writeQueue = result.catch(() => {});
   return result;
+}
+
+export function saveKey(
+  key: "seder" | "learning" | "timer",
+  value: unknown,
+): Promise<{ ok: true; updatedAt: number }> {
+  return saveKeys({ [key]: value });
 }
