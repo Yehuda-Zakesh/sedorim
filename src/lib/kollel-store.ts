@@ -30,9 +30,15 @@ export type LearningEntry = {
   minutes: number;
   source: "manual" | "range" | "timer";
   note?: string;
+  tanitDibur?: boolean;  // לימוד בבית בתענית דיבור — כל דקה נחשבת ×2 בחישובים
 };
 
-export type TimerSession = { framework: LearningFramework; startedAt: number };
+export type TimerSession = {
+  framework: LearningFramework;
+  startedAt: number;
+  limitMinutes?: number;   // הגבלת זמן אופציונלית — בסיום עוצר ושומר אוטומטית
+  tanitDibur?: boolean;    // רק לכולל ערב — סימון תענית דיבור
+};
 
 const LEGACY_ATT = "tracker.attendance.v1";
 const LEGACY_LRN = "tracker.learning.v1";
@@ -272,6 +278,11 @@ function validateLearning(l: LearningEntry): { ok: true } | { ok: false; error: 
   return { ok: true };
 }
 
+// דקות אפקטיביות לחישוב סיכומים — תענית דיבור נספרת כפול.
+export function effectiveLearningMin(l: LearningEntry): number {
+  return l.tanitDibur ? l.minutes * 2 : l.minutes;
+}
+
 // ============ Hooks / API ============
 export function useSeder() {
   const [, force] = useState(0);
@@ -377,23 +388,29 @@ export function useTimer(): TimerSession | null {
   }, []);
   return timerSession;
 }
-export function startTimer(framework: LearningFramework): TimerSession {
-  const t = { framework, startedAt: Date.now() };
+export function startTimer(framework: LearningFramework, opts?: { limitMinutes?: number; tanitDibur?: boolean }): TimerSession {
+  const t: TimerSession = {
+    framework,
+    startedAt: Date.now(),
+    ...(opts?.limitMinutes && opts.limitMinutes > 0 ? { limitMinutes: opts.limitMinutes } : {}),
+    ...(opts?.tanitDibur ? { tanitDibur: true } : {}),
+  };
   timerSession = t;
   persistKey("timer", t);
   logAudit("learning.timer_start", { detail: framework });
   emit();
   return t;
 }
-export function stopTimer(): { framework: LearningFramework; minutes: number } | null {
+export function stopTimer(): { framework: LearningFramework; minutes: number; tanitDibur?: boolean } | null {
   const t = getTimer();
   if (!t) return null;
-  const minutes = Math.max(1, Math.round((Date.now() - t.startedAt) / 60000));
+  let minutes = Math.max(1, Math.round((Date.now() - t.startedAt) / 60000));
+  if (t.limitMinutes && minutes > t.limitMinutes) minutes = t.limitMinutes;
   timerSession = null;
   persistKey("timer", null);
   logAudit("learning.timer_stop", { detail: `${t.framework} · ${minutes} דק׳` });
   emit();
-  return { framework: t.framework, minutes };
+  return { framework: t.framework, minutes, tanitDibur: t.tanitDibur };
 }
 export function cancelTimer(): void {
   timerSession = null;
