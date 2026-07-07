@@ -206,6 +206,7 @@ function AttendancePage() {
   const e1 = dayEntries.find((x) => x.seder === 1);
   const e2 = dayEntries.find((x) => x.seder === 2);
   const heDate = formatHebrewDate(new Date(date));
+  const fastName = fastDayName(new Date(date));
 
   return (
     <AppShell title="נוכחות סדרים" subtitle={heDate}>
@@ -214,6 +215,11 @@ function AttendancePage() {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="rounded-md border border-input bg-card px-3 py-1.5 text-sm" />
         <span className="text-xs text-muted-foreground">{heDate}</span>
+        {fastName && (
+          <span className="mr-auto inline-flex items-center gap-1 rounded-full bg-warning/10 border border-warning/30 px-2.5 py-1 text-[11px] text-warning font-medium">
+            <AlertTriangle className="size-3" /> {fastName}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
