@@ -13,7 +13,7 @@ export type Insight = {
   category: "trend" | "opportunity" | "recommendation";
 };
 
-function fmtMin(m: number): string {
+export function fmtMin(m: number): string {
   if (m < 60) return `${m} דק׳`;
   const h = Math.floor(m / 60), r = m % 60;
   return r === 0 ? `${h} שע׳` : `${h}:${String(r).padStart(2, "0")} שע׳`;
