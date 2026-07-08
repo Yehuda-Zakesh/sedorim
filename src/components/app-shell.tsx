@@ -10,8 +10,16 @@ import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { OnboardingWizard } from "./onboarding-wizard";
 import { useAutoUpdateCheck } from "@/lib/updater";
 import { UpdatePrompt } from "./update-prompt";
+import { BUILD_COMMIT, BUILD_TIME } from "@/lib/build-info";
+import pkg from "../../package.json";
 
-export const APP_VERSION = "1.0.1";
+// Single source of truth: package.json's "version" field. BUILD_COMMIT/
+// BUILD_TIME (from build-info.ts) are only meaningful in a packaged EXE —
+// see that file for why. Together these let you check, from the About
+// screen, exactly what code a given install actually has — no more
+// guessing whether a repackage picked up the latest fixes.
+export const APP_VERSION = pkg.version;
+export { BUILD_COMMIT, BUILD_TIME };
 
 export function AppShell({ title, subtitle, actions, children }: {
   title: string; subtitle?: string; actions?: ReactNode; children: ReactNode;

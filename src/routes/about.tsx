@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AppShell, APP_VERSION } from "@/components/app-shell";
+import { AppShell, APP_VERSION, BUILD_COMMIT, BUILD_TIME } from "@/components/app-shell";
 import {
   ClipboardCheck, BookOpen, BarChart3, CalendarDays, History, FileText,
   Search, Settings, Shield, Zap, Sparkles, Info, HeartHandshake, Palette,
@@ -48,6 +48,11 @@ function AboutPage() {
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                 <span className="rounded-full bg-primary/15 text-primary px-3 py-1 font-medium">גרסה {APP_VERSION}</span>
+                {BUILD_COMMIT !== "dev" && (
+                  <span className="rounded-full bg-muted px-3 py-1 font-mono" title="השוו מול הקומיט האחרון ב-GitHub כדי לוודא שהחבילה עדכנית">
+                    build {BUILD_COMMIT}{BUILD_TIME ? ` · ${BUILD_TIME}` : ""}
+                  </span>
+                )}
                 <span className="rounded-full bg-muted px-3 py-1">עברית · RTL</span>
                 <span className="rounded-full bg-muted px-3 py-1">אחסון מקומי</span>
                 <span className="rounded-full bg-muted px-3 py-1">ללא הרשמה</span>
