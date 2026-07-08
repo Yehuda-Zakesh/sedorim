@@ -38,3 +38,4 @@ jobs:
           name: KollelTracker-windows
           path: release-win
           if-no-files-found: error
+          retention-days: 5
