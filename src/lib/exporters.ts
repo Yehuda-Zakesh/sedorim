@@ -1,4 +1,6 @@
 import * as XLSX from "xlsx";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { logAudit } from "./audit-store";
 import {
   type SederEntry, type LearningEntry,
@@ -231,56 +233,75 @@ export async function exportPdfReport(opts: {
   const html = buildReportHTML(opts.title, opts.entries, opts.lessons, sections, opts.range);
   const fname = opts.filename || `${opts.title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}`;
 
-  // Open a print window with the report content and trigger the browser's
-  // native print dialog. The user chooses "Save as PDF" to produce a real
-  // PDF file — reliable for Hebrew/RTL, no font-embedding issues.
- const win = window.open("", "_blank", "width=900,height=1000");
+  // Render the report HTML into a hidden off-screen container in the current
+  // page, rasterize it with html2canvas (splits across A4 pages), and write a
+  // real PDF file with jsPDF. No new window, no print dialog. Fonts are
+  // whatever the app already loads (Heebo via the app shell), so Hebrew/RTL
+  // renders correctly.
+  const host = document.createElement("div");
+  host.setAttribute("dir", "rtl");
+  host.setAttribute("lang", "he");
+  host.style.cssText =
+    "position:fixed;top:0;left:-10000px;width:794px;background:#fff;z-index:-1;pointer-events:none;";
+  host.innerHTML = html;
+  document.body.appendChild(host);
 
- if (!win) {
- // fallback יציב במקום קריסה
-   const printWindow = window;
-   printWindow.document.body.innerHTML = html;
-   setTimeout(() => {
-     printWindow.focus();
-     printWindow.print();
-   }, 300);
-   return;
- }
-  win.document.open();
-  win.document.write(`<!doctype html>
-<html dir="rtl" lang="he">
-<head>
-  <meta charset="utf-8" />
-  <title>${fname}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700&display=swap" rel="stylesheet" />
-  <style>
-    @page { size: A4; margin: 12mm; }
-    html, body { margin:0; padding:0; background:#fff; font-family:'Heebo','Segoe UI',Arial,sans-serif; }
-    #__print-actions { position:fixed; top:12px; left:12px; z-index:9999; display:flex; gap:8px; }
-    #__print-actions button { background:#1565C0; color:#fff; border:none; padding:8px 14px; border-radius:6px; font-size:13px; cursor:pointer; font-family:inherit; }
-    #__print-actions button.secondary { background:#e1e6ee; color:#1E3A5F; }
-    @media print { #__print-actions { display:none !important; } }
-  </style>
-</head>
-<body>
-  <div id="__print-actions">
-    <button onclick="window.print()">שמירה כ־PDF / הדפסה</button>
-    <button class="secondary" onclick="window.close()">סגירה</button>
-  </div>
-  ${html}
-  <script>
-    // Wait for fonts and layout, then auto-open the print dialog.
-    window.addEventListener('load', function() {
-      var run = function(){ setTimeout(function(){ window.focus(); window.print(); }, 400); };
-      if (document.fonts && document.fonts.ready) { document.fonts.ready.then(run); } else { run(); }
+  try {
+    // Wait for fonts (Heebo) before rasterizing so glyphs are correct.
+    if ((document as any).fonts?.ready) {
+      try { await (document as any).fonts.ready; } catch { /* ignore */ }
+    }
+    // Give layout a tick.
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+    const target = host.querySelector("#__report") as HTMLElement | null;
+    const node = target || host;
+
+    const canvas = await html2canvas(node, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      logging: false,
+      windowWidth: 794,
     });
-  </script>
-</body>
-</html>`);
-  win.document.close();
-  logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
+
+    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 8; // mm
+    const imgW = pageW - margin * 2;
+    const imgH = (canvas.height * imgW) / canvas.width;
+
+    if (imgH <= pageH - margin * 2) {
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, imgW, imgH);
+    } else {
+      // Slice the canvas into page-sized chunks so long reports paginate.
+      const pxPerMm = canvas.width / imgW;
+      const pageSlicePx = Math.floor((pageH - margin * 2) * pxPerMm);
+      let y = 0;
+      let first = true;
+      while (y < canvas.height) {
+        const sliceH = Math.min(pageSlicePx, canvas.height - y);
+        const slice = document.createElement("canvas");
+        slice.width = canvas.width;
+        slice.height = sliceH;
+        const ctx = slice.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        const sliceMm = sliceH / pxPerMm;
+        if (!first) pdf.addPage();
+        pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, imgW, sliceMm);
+        first = false;
+        y += sliceH;
+      }
+    }
+
+    pdf.save(`${fname}.pdf`);
+    logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
+  } finally {
+    host.remove();
+  }
 }
 
 export function exportXlsxWorkbook(opts: {
