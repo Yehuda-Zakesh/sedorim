@@ -14,6 +14,10 @@ on:
       - ".github/workflows/build-windows.yml"
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  actions: write   # needed to delete old artifacts from this workflow (see cleanup step below)
+
 jobs:
   build:
     runs-on: windows-latest
@@ -32,9 +36,28 @@ jobs:
       - name: Build + package Windows EXEs
         run: npm run package:win
 
+      - name: Delete previous artifacts from this workflow (keep storage quota free)
+        # Each build produces two full Electron apps (~hundreds of MB), and
+        # the free Actions storage quota is only 500MB — a handful of runs
+        # can exhaust it, which then fails EVERY upload (not just new ones)
+        # until something is deleted, with the quota itself only
+        # recalculating every 6–12h. Only the latest build actually matters
+        # here, so we delete everything older before uploading the new one.
+        shell: bash
+        run: |
+          gh api "repos/${{ github.repository }}/actions/artifacts" --paginate \
+            | jq -r '.artifacts[] | select(.name == "KollelTracker-windows") | .id' \
+            | while read -r id; do
+                echo "Deleting old artifact $id"
+                gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
+              done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
           name: KollelTracker-windows
           path: release-win
           if-no-files-found: error
+          retention-days: 3

@@ -142,12 +142,94 @@ export function formatHebrewMonthYear(h: HebrewDate): string {
   return `${hebrewMonthName(h.month, h.year)} ${hebrewYearLetters(h.year)}`;
 }
 
-// Bein Hazmanim windows per spec: Av 1–29, Elul 9–30, Tishrei 11–30, Nisan 1–30.
+// Bein Hazmanim windows: Av from י׳ ואילך, Tishrei from י״א ואילך, Nisan (entire month).
 export function isBeinHazmanim(date: Date = new Date()): boolean {
   const h = hebrewFromGregorian(date);
-  if (h.month === 5) return h.day >= 1 && h.day <= 29;                      // Av
-  if (h.month === 6) return h.day >= 9 && h.day <= 30;                      // Elul
-  if (h.month === 7) return h.day >= 11 && h.day <= 30;                     // Tishrei
+  if (h.month === 5) return h.day >= 10 && h.day <= 30;                     // Av (מי׳ ואילך)
+  if (h.month === 7) return h.day >= 11 && h.day <= 30;                     // Tishrei (מי״א ואילך)
   if (h.month === 1) return h.day >= 1 && h.day <= 30;                      // Nisan
   return false;
+}
+
+// Weekend = Friday + Saturday (per Kollel schedule convention in Israel).
+export function isWeekend(date: Date = new Date()): boolean {
+  const d = date.getDay(); // 0=Sun ... 5=Fri, 6=Sat
+  return d === 5 || d === 6;
+}
+
+// Yom Tov days — Israel (single-day) calendar.
+export function isYomTov(date: Date = new Date()): boolean {
+  const h = hebrewFromGregorian(date);
+  if (h.month === 7 && (h.day === 1 || h.day === 2)) return true;  // ראש השנה (יומיים גם בארץ)
+  if (h.month === 7 && h.day === 10) return true;                  // יום כיפור
+  if (h.month === 7 && h.day === 15) return true;                  // סוכות א׳
+  if (h.month === 7 && h.day === 22) return true;                  // שמיני עצרת
+  if (h.month === 1 && h.day === 15) return true;                  // פסח א׳
+  if (h.month === 1 && h.day === 21) return true;                  // שביעי של פסח
+  if (h.month === 3 && h.day === 6) return true;                   // שבועות
+  return false;
+}
+
+// Erev Yom Tov — kollel is not in session.
+export function isErevYomTov(date: Date = new Date()): boolean {
+  const h = hebrewFromGregorian(date);
+  if (h.month === 6 && h.day === 29) return true;                 // ערב ראש השנה
+  if (h.month === 7 && h.day === 9) return true;                  // ערב יום כיפור
+  if (h.month === 7 && h.day === 14) return true;                 // ערב סוכות
+  if (h.month === 1 && h.day === 14) return true;                 // ערב פסח
+  if (h.month === 3 && h.day === 5) return true;                  // ערב שבועות
+  return false;
+}
+
+// A day the kollel is expected to be in session: not weekend, not Yom Tov, not Erev Yom Tov.
+// (Chol HaMoed and Bein HaZmanim are NOT excluded here — those remain regular/reduced learning days.)
+export function isLearningDay(date: Date = new Date()): boolean {
+  return !isWeekend(date) && !isYomTov(date) && !isErevYomTov(date);
+}
+
+// Fast days (תעניות). Returns name in Hebrew when the date is a fast day, else null.
+// Handles standard postponements: when the "natural" date falls on Shabbat, most fasts move to Sunday
+// (except Yom Kippur which is always kept on Shabbat and תענית אסתר which moves earlier to Thursday).
+export function fastDayName(date: Date = new Date()): string | null {
+  const h = hebrewFromGregorian(date);
+  const dow = date.getDay(); // 0=Sun ... 6=Sat
+
+  // צום גדליה — 3 תשרי; נדחה מ־3 שחל בשבת לי׳ד (הראשון של תשרי אחרי שבת = 4).
+  if (h.month === 7) {
+    if (h.day === 3 && dow !== 6) return "צום גדליה";
+    if (h.day === 4 && dow === 0) return "צום גדליה (נדחה)";
+  }
+  // עשרה בטבת — לעולם ביומו (אינו נדחה אף פעם).
+  if (h.month === 10 && h.day === 10) return "עשרה בטבת";
+  // תענית אסתר — י״ג אדר (או אדר ב׳ בשנה מעוברת); כשחל בשבת נדחה לחמישי י״א.
+  const adarMonth = isHebrewLeap(h.year) ? 13 : 12;
+  if (h.month === adarMonth) {
+    if (h.day === 13 && dow !== 6) return "תענית אסתר";
+    if (h.day === 11 && dow === 4) return "תענית אסתר (מוקדם)";
+  }
+  // י״ז בתמוז — נדחה מ־17 שחל בשבת לי״ח.
+  if (h.month === 4) {
+    if (h.day === 17 && dow !== 6) return "שבעה עשר בתמוז";
+    if (h.day === 18 && dow === 0) return "שבעה עשר בתמוז (נדחה)";
+  }
+  // תשעה באב — נדחה מ־9 שחל בשבת לי׳.
+  if (h.month === 5) {
+    if (h.day === 9 && dow !== 6) return "תשעה באב";
+    if (h.day === 10 && dow === 0) return "תשעה באב (נדחה)";
+  }
+  // תענית בכורות — י״ד ניסן (ערב פסח); כשחל בשבת מוקדם לחמישי י״ב.
+  if (h.month === 1) {
+    if (h.day === 14 && dow !== 6) return "תענית בכורות";
+    if (h.day === 12 && dow === 4) return "תענית בכורות (מוקדם)";
+  }
+  return null;
+}
+
+export function isFastDay(date: Date = new Date()): boolean {
+  return fastDayName(date) !== null;
+}
+
+// On fast days there is typically no afternoon seder (Seder ב׳).
+export function hasNoSederB(date: Date = new Date()): boolean {
+  return isFastDay(date);
 }

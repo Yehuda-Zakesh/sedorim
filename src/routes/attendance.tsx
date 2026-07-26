@@ -7,7 +7,7 @@ import {
   type SederEntry, type SederNum,
 } from "@/lib/kollel-store";
 import { useSettings } from "@/lib/settings-store";
-import { formatHebrewDate } from "@/lib/hebrew-calendar";
+import { formatHebrewDate, fastDayName, hasNoSederB } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/attendance")({
@@ -47,6 +47,9 @@ function SederCard({
 }: { num: SederNum; date: string; existing?: SederEntry; onSaved: () => void }) {
   const { settings } = useSettings();
   const { upsert, remove } = useSeder();
+  const dayDate = new Date(date);
+  const fastName = fastDayName(dayDate);
+  const skipSederB = num === 2 && hasNoSederB(dayDate);
   const [form, setForm] = useState<SederFormState>(() =>
     existing ? fromEntry(existing) : defaultsFor(num, settings.seder));
 
@@ -97,6 +100,16 @@ function SederCard({
           </button>
         </div>
       </div>
+
+      {skipSederB && (
+        <div className="mb-3 rounded-md border-2 border-warning bg-warning/5 p-3 text-xs text-warning flex items-start gap-2">
+          <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold">היום {fastName} — אין סדר ב׳</div>
+            <div className="text-warning/80">אין צורך לרשום נוכחות לסדר ב׳ ביום זה.</div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -193,6 +206,7 @@ function AttendancePage() {
   const e1 = dayEntries.find((x) => x.seder === 1);
   const e2 = dayEntries.find((x) => x.seder === 2);
   const heDate = formatHebrewDate(new Date(date));
+  const fastName = fastDayName(new Date(date));
 
   return (
     <AppShell title="נוכחות סדרים" subtitle={heDate}>
@@ -201,6 +215,11 @@ function AttendancePage() {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="rounded-md border border-input bg-card px-3 py-1.5 text-sm" />
         <span className="text-xs text-muted-foreground">{heDate}</span>
+        {fastName && (
+          <span className="mr-auto inline-flex items-center gap-1 rounded-full bg-warning/10 border border-warning/30 px-2.5 py-1 text-[11px] text-warning font-medium">
+            <AlertTriangle className="size-3" /> {fastName}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Plus, Play, Square, Trash2, AlertTriangle, BookOpen } from "lucide-react";
+import { Plus, Play, Square, Trash2, AlertTriangle, BookOpen, Timer, MicOff } from "lucide-react";
 import {
-  useLearning, todayISO, newId, FRAMEWORK_LABELS, hhmmToMin,
-  getTimer, startTimer, stopTimer, cancelTimer,
+  useLearning, todayISO, newId, FRAMEWORK_LABELS, hhmmToMin, effectiveLearningMin,
+  useTimer, startTimer, stopTimer, cancelTimer,
   type LearningFramework, type LearningEntry,
 } from "@/lib/kollel-store";
 import { isBeinHazmanim } from "@/lib/hebrew-calendar";
@@ -22,7 +22,10 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
   const [minutes, setMinutes] = useState(60);
   const [fromT, setFromT] = useState("20:00");
   const [toT, setToT] = useState("21:00");
-  const [timer, setTimer] = useState(getTimer());
+  const [limitOn, setLimitOn] = useState(false);
+  const [limitMin, setLimitMin] = useState(60);
+  const [tanitDibur, setTanitDibur] = useState(false);
+  const timer = useTimer();
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -59,30 +62,51 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
   const onStartTimer = () => {
     if (!enabled) return;
     if (timer) { toast.warning("טיימר אחר פעיל"); return; }
-    setTimer(startTimer(fw));
+    startTimer(fw, {
+      limitMinutes: limitOn ? Math.max(1, limitMin) : undefined,
+      tanitDibur: fw === "kollel-erev" ? tanitDibur : false,
+    });
     toast.success("הטיימר הופעל");
   };
   const onStopTimer = () => {
     const res = stopTimer();
-    setTimer(null);
     if (res) {
-      add({ id: newId(), framework: res.framework, date: todayISO(), minutes: res.minutes, source: "timer" });
-      toast.success(`נשמרו ${res.minutes} דקות`);
+      add({
+        id: newId(), framework: res.framework, date: todayISO(),
+        minutes: res.minutes, source: "timer",
+        ...(res.tanitDibur ? { tanitDibur: true } : {}),
+      });
+      toast.success(
+        res.tanitDibur
+          ? `נשמרו ${res.minutes} דקות בתענית דיבור (נחשב ${res.minutes * 2})`
+          : `נשמרו ${res.minutes} דקות`
+      );
     }
   };
-  const onCancelTimer = () => { cancelTimer(); setTimer(null); toast("הטיימר בוטל ללא שמירה"); };
+  const onCancelTimer = () => { cancelTimer(); toast("הטיימר בוטל ללא שמירה"); };
 
   const myItems = items.filter((i) => i.framework === fw).slice(0, 8);
-  const totalMin = items.filter((i) => i.framework === fw).reduce((s, i) => s + i.minutes, 0);
+  const fwItems = items.filter((i) => i.framework === fw);
+  const totalMin = fwItems.reduce((s, i) => s + i.minutes, 0);
+  const effectiveTotalMin = fwItems.reduce((s, i) => s + effectiveLearningMin(i), 0);
+  const tanitMin = fwItems.filter((i) => i.tanitDibur).reduce((s, i) => s + i.minutes, 0);
   const isMine = timer?.framework === fw;
   const elapsedMin = isMine ? Math.floor((now - timer!.startedAt) / 60000) : 0;
   const elapsedSec = isMine ? Math.floor(((now - timer!.startedAt) % 60000) / 1000) : 0;
+  const limitReached = isMine && timer!.limitMinutes !== undefined
+    && (now - timer!.startedAt) / 60000 >= timer!.limitMinutes;
+
+  // Auto-stop when the configured limit is reached.
+  useEffect(() => {
+    if (limitReached) onStopTimer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limitReached]);
 
   if (!enabled) {
     return (
       <div className="card-surface p-6 text-center text-sm text-muted-foreground">
         <AlertTriangle className="size-5 mx-auto mb-2 text-warning" />
-        מסגרת זו זמינה רק בתקופת בין הזמנים (אב, אלול ט׳-ל׳, תשרי יא׳-ל׳, ניסן).
+        מסגרת זו זמינה רק בתקופת בין הזמנים (אב מי׳ ואילך, תשרי מי״א ואילך, ניסן).
       </div>
     );
   }
@@ -99,6 +123,16 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
             <div className="text-3xl font-bold tabular-nums">
               {String(elapsedMin).padStart(2, "0")}:{String(elapsedSec).padStart(2, "0")}
             </div>
+            {timer!.limitMinutes !== undefined && (
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                מוגבל ל־{timer!.limitMinutes} דק׳ · נותרו {Math.max(0, timer!.limitMinutes - elapsedMin)} דק׳
+              </div>
+            )}
+            {timer!.tanitDibur && (
+              <div className="mt-1 text-[11px] text-primary font-medium flex items-center gap-1">
+                <MicOff className="size-3" /> תענית דיבור — הזמן ייספר כפול בסיכום
+              </div>
+            )}
             <div className="mt-3 flex gap-2">
               <button onClick={onStopTimer}
                 className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-xs font-medium text-success-foreground">
@@ -139,26 +173,60 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
         </div>
 
         {!isMine && (
-          <button onClick={onStartTimer} disabled={!!timer}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-md border-2 border-dashed border-primary/40 px-4 py-3 text-sm font-medium text-primary hover:bg-primary/5 disabled:opacity-50">
-            <Play className="size-4" /> {timer ? "טיימר אחר פעיל" : "התחל טיימר"}
-          </button>
+          <div className="space-y-2">
+            <div className="rounded-lg border border-border p-3 space-y-2">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={limitOn} onChange={(e) => setLimitOn(e.target.checked)} />
+                <Timer className="size-3.5" />
+                הגבל את הטיימר לפרק זמן
+              </label>
+              {limitOn && (
+                <div className="flex items-center gap-2 pr-6">
+                  <input type="number" min={1} value={limitMin}
+                    onChange={(e) => setLimitMin(Math.max(1, +e.target.value || 1))}
+                    className="w-24 rounded-md border border-input bg-card px-2 py-1 text-sm" />
+                  <span className="text-xs text-muted-foreground">דקות · הטיימר ייעצר וישמר אוטומטית</span>
+                </div>
+              )}
+              {fw === "kollel-erev" && (
+                <label className="flex items-center gap-2 text-xs cursor-pointer pt-1 border-t border-border/50">
+                  <input type="checkbox" checked={tanitDibur} onChange={(e) => setTanitDibur(e.target.checked)} />
+                  <MicOff className="size-3.5" />
+                  לימוד בבית בתענית דיבור <span className="text-muted-foreground">(כל דקה נחשבת כפול בסיכום)</span>
+                </label>
+              )}
+            </div>
+            <button onClick={onStartTimer} disabled={!!timer}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-md border-2 border-dashed border-primary/40 px-4 py-3 text-sm font-medium text-primary hover:bg-primary/5 disabled:opacity-50">
+              <Play className="size-4" /> {timer ? "טיימר אחר פעיל" : "התחל טיימר"}
+            </button>
+          </div>
         )}
       </div>
 
       <div className="card-surface p-5">
         <div className="text-xs text-muted-foreground">סה״כ במסגרת זו</div>
-        <div className="text-3xl font-bold tabular-nums mt-1">{(totalMin / 60).toFixed(1)} <span className="text-sm text-muted-foreground">שע׳</span></div>
-        <div className="text-xs text-muted-foreground mt-1">{totalMin} דקות · {items.filter((i) => i.framework === fw).length} רישומים</div>
+        <div className="text-3xl font-bold tabular-nums mt-1">{(effectiveTotalMin / 60).toFixed(1)} <span className="text-sm text-muted-foreground">שע׳</span></div>
+        <div className="text-xs text-muted-foreground mt-1">{effectiveTotalMin} דקות · {fwItems.length} רישומים</div>
+        {tanitMin > 0 && (
+          <div className="mt-2 rounded-md bg-primary/5 border border-primary/20 p-2 text-[11px] text-primary flex items-start gap-1.5">
+            <MicOff className="size-3 mt-0.5 shrink-0" />
+            <span>נלמדו {tanitMin} דק׳ בתענית דיבור · נחשב כ־{tanitMin * 2} דק׳</span>
+          </div>
+        )}
 
         <h3 className="text-sm font-semibold mt-5 mb-2">רישומים אחרונים</h3>
         {myItems.length ? (
           <ul className="space-y-2">
             {myItems.map((i) => (
               <li key={i.id} className="flex items-center gap-2 text-xs">
-                <BookOpen className="size-3.5 text-muted-foreground" />
+                {i.tanitDibur
+                  ? <MicOff className="size-3.5 text-primary" />
+                  : <BookOpen className="size-3.5 text-muted-foreground" />}
                 <span className="flex-1 tabular-nums">{i.date}</span>
-                <span className="font-medium">{i.minutes} דק׳</span>
+                <span className="font-medium">
+                  {i.minutes} דק׳{i.tanitDibur && <span className="text-primary"> ×2</span>}
+                </span>
               </li>
             ))}
           </ul>

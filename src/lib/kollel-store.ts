@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { logAudit } from "./audit-store";
 import { getSettings } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
+import { isLearningDay } from "./hebrew-calendar";
+import { loadStore, saveStoreKey, saveStoreKeys } from "./store.functions";
 export type SederNum = 1 | 2;
 export type LearningFramework = "kollel-erev" | "torato-beyado" | "bein-hazmanim";
 
@@ -28,28 +30,64 @@ export type LearningEntry = {
   minutes: number;
   source: "manual" | "range" | "timer";
   note?: string;
+  tanitDibur?: boolean;  // לימוד בבית בתענית דיבור — כל דקה נחשבת ×2 בחישובים
 };
 
-export type TimerSession = { framework: LearningFramework; startedAt: number };
+export type TimerSession = {
+  framework: LearningFramework;
+  startedAt: number;
+  limitMinutes?: number;   // הגבלת זמן אופציונלית — בסיום עוצר ושומר אוטומטית
+  tanitDibur?: boolean;    // רק לכולל ערב — סימון תענית דיבור
+};
 
-const SEDER_KEY = "kollel.seder.v1";
-const LRN_KEY = "kollel.learning.v1";
-const TIMER_KEY = "kollel.timer.v1";
 const LEGACY_ATT = "tracker.attendance.v1";
 const LEGACY_LRN = "tracker.learning.v1";
 const LEGACY_ARCHIVE = "tracker.legacy.archive.v1";
 
-function load<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch { return fallback; }
-}
-function save<T>(key: string, value: T) {
+const MIGRATED_FLAG = "kollel.serverStoreMigrated.v1";
+const LIVE_SEDER_KEY = "kollel.seder.v1";
+const LIVE_LRN_KEY = "kollel.learning.v1";
+const LIVE_TIMER_KEY = "kollel.timer.v1";
+
+// One-time migration for users upgrading from the localStorage-based build:
+// copies whatever is already sitting in localStorage into the new shared
+// server-side file, exactly once. Old keys are left in place afterwards
+// (untouched, just no longer read) as a safety net — nothing is deleted.
+async function migrateLegacyLocalStorageIfNeeded() {
   if (typeof window === "undefined") return;
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* noop */ }
+  if (localStorage.getItem(MIGRATED_FLAG)) return;
+  try {
+    const remote = await loadStore();
+    const remoteHasData =
+      (Array.isArray(remote?.seder) && remote.seder.length > 0) ||
+      (Array.isArray(remote?.learning) && remote.learning.length > 0);
+    if (!remoteHasData) {
+      const sederRaw = localStorage.getItem(LIVE_SEDER_KEY);
+      const lrnRaw = localStorage.getItem(LIVE_LRN_KEY);
+      const timerRaw = localStorage.getItem(LIVE_TIMER_KEY);
+      if (sederRaw) {
+        const parsed = JSON.parse(sederRaw);
+        if (Array.isArray(parsed) && parsed.length) await saveStoreKey({ data: { key: "seder", value: parsed } });
+      }
+      if (lrnRaw) {
+        const parsed = JSON.parse(lrnRaw);
+        if (Array.isArray(parsed) && parsed.length) await saveStoreKey({ data: { key: "learning", value: parsed } });
+      }
+      if (timerRaw) {
+        const parsed = JSON.parse(timerRaw);
+        if (parsed) await saveStoreKey({ data: { key: "timer", value: parsed } });
+      }
+    }
+    localStorage.setItem(MIGRATED_FLAG, String(Date.now()));
+  } catch {
+    // Leave the flag unset on failure so we retry on the next launch instead
+    // of silently giving up on migrating the user's existing data.
+  }
 }
+
+// One-time legacy migration only — the old localStorage keys above are read
+// once (if present) and archived. This does NOT run for the live seder/
+// learning/timer data anymore; that now lives server-side (see below).
 
 // One-time silent legacy archive
 function archiveLegacyOnce() {
@@ -67,25 +105,73 @@ function archiveLegacyOnce() {
 }
 archiveLegacyOnce();
 
-let sederEntries: SederEntry[] = load<SederEntry[]>(SEDER_KEY, []);
-let learningEntries: LearningEntry[] = load<LearningEntry[]>(LRN_KEY, []);
+// ============ Server-backed store ============
+// The in-memory arrays below are the synchronous source of truth for all UI
+// code (unchanged API). They're hydrated once from the shared server-side
+// JSON file on startup, kept fresh via short polling (to pick up changes
+// made in the *other* window/EXE), and written back — fire-and-forget — on
+// every mutation. This avoids relying on Chromium localStorage, which two
+// separate EXE processes cannot safely share (see electron/main.cjs).
+let sederEntries: SederEntry[] = [];
+let learningEntries: LearningEntry[] = [];
+let timerSession: TimerSession | null = null;
+let lastKnownUpdatedAt = 0;
+let hydrated = false;
 
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
 
-// Cross-window sync: when another Chromium window (e.g. KollelQuick.exe)
-// writes to the same localStorage, the `storage` event fires here. Reload
-// the in-memory caches and notify subscribers so the UI updates live.
+function applyRemoteStore(store: { seder?: unknown; learning?: unknown; timer?: unknown; updatedAt?: number }) {
+  sederEntries = (store.seder as SederEntry[] | undefined) ?? [];
+  learningEntries = (store.learning as LearningEntry[] | undefined) ?? [];
+  timerSession = (store.timer as TimerSession | null | undefined) ?? null;
+  lastKnownUpdatedAt = store.updatedAt ?? 0;
+}
+
+async function hydrate() {
+  try {
+    await migrateLegacyLocalStorageIfNeeded();
+    const store = await loadStore();
+    applyRemoteStore(store);
+  } catch {
+    // Server not reachable yet (very early startup) — keep empty defaults;
+    // the next poll tick will retry.
+  } finally {
+    hydrated = true;
+    emit();
+  }
+}
+
+function persistKey(key: "seder" | "learning" | "timer", value: unknown) {
+  saveStoreKey({ data: { key, value } })
+    .then((res) => { lastKnownUpdatedAt = res.updatedAt; })
+    .catch(() => { /* best-effort; next poll will reconcile */ });
+}
+
+// Use this instead of two separate persistKey() calls whenever seder +
+// learning change together (backup restore, snapshot restore). Two
+// independent writes leave a real window where the shared file — and the
+// 4s poll below, in this same window or the other EXE — can observe a
+// partial state with only one of the two updated.
+function persistKeys(partial: { seder?: SederEntry[]; learning?: LearningEntry[] }) {
+  saveStoreKeys({ data: partial })
+    .then((res) => { lastKnownUpdatedAt = res.updatedAt; })
+    .catch(() => { /* best-effort; next poll will reconcile */ });
+}
+
+// Cross-window sync: poll the shared server store so a write made in the
+// *other* EXE/window shows up here without a manual refresh.
 if (typeof window !== "undefined") {
-  window.addEventListener("storage", (e) => {
-    if (e.key === SEDER_KEY) {
-      sederEntries = load<SederEntry[]>(SEDER_KEY, []);
-      emit();
-    } else if (e.key === LRN_KEY) {
-      learningEntries = load<LearningEntry[]>(LRN_KEY, []);
-      emit();
-    }
-  });
+  hydrate();
+  setInterval(async () => {
+    try {
+      const store = await loadStore();
+      if ((store.updatedAt ?? 0) > lastKnownUpdatedAt) {
+        applyRemoteStore(store);
+        emit();
+      }
+    } catch { /* offline hiccup — try again next tick */ }
+  }, 4000);
 }
 
 function snapshotIfConfigured() {
@@ -203,6 +289,24 @@ function validateLearning(l: LearningEntry): { ok: true } | { ok: false; error: 
   return { ok: true };
 }
 
+// דקות אפקטיביות לחישוב סיכומים — תענית דיבור נספרת כפול.
+export function effectiveLearningMin(l: LearningEntry): number {
+  return l.tanitDibur ? l.minutes * 2 : l.minutes;
+}
+
+// Replaces both seder + learning in one atomic write — use this (not
+// useSeder().replaceAll + useLearning().replaceAll back to back) whenever
+// restoring/importing both together, e.g. a backup file or a snapshot. See
+// persistKeys() for why: two separate saves leave a real window where a
+// concurrent reader can see only one of the two already updated.
+export function replaceAllData(sederList: SederEntry[], learningList: LearningEntry[]) {
+  sederEntries = sederList.filter((e) => validateSeder(e).ok)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
+  learningEntries = learningList.filter((l) => validateLearning(l).ok);
+  persistKeys({ seder: sederEntries, learning: learningEntries });
+  emit();
+}
+
 // ============ Hooks / API ============
 export function useSeder() {
   const [, force] = useState(0);
@@ -223,7 +327,7 @@ export function useSeder() {
       if (!prev) snapshotIfConfigured();
       sederEntries = [e, ...sederEntries.filter((x) => x.id !== e.id)]
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
-      save(SEDER_KEY, sederEntries);
+      persistKey("seder", sederEntries);
       logAudit(prev ? "seder.update" : "seder.create", { recordId: e.id, oldValue: prev, newValue: e });
       maybeAutoBackup({ attendance: sederEntries as unknown, learning: learningEntries as unknown });
       emit();
@@ -233,20 +337,20 @@ export function useSeder() {
       if (!prev) return;
       snapshotIfConfigured();
       sederEntries = sederEntries.filter((x) => x.id !== id);
-      save(SEDER_KEY, sederEntries);
+      persistKey("seder", sederEntries);
       logAudit("seder.delete", { recordId: id, oldValue: prev });
       emit();
     },
     replaceAll(list: SederEntry[]) {
       sederEntries = list.filter((e) => validateSeder(e).ok)
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
-      save(SEDER_KEY, sederEntries);
+      persistKey("seder", sederEntries);
       emit();
     },
     clearAll() {
       snapshotIfConfigured();
       sederEntries = [];
-      save(SEDER_KEY, sederEntries);
+      persistKey("seder", sederEntries);
       emit();
     },
   };
@@ -268,7 +372,7 @@ export function useLearning() {
         throw new ValidationError(v.error);
       }
       learningEntries = [item, ...learningEntries];
-      save(LRN_KEY, learningEntries);
+      persistKey("learning", learningEntries);
       logAudit("learning.create", { recordId: item.id, newValue: item });
       maybeAutoBackup({ attendance: sederEntries as unknown, learning: learningEntries as unknown });
       emit();
@@ -277,19 +381,19 @@ export function useLearning() {
       const prev = learningEntries.find((i) => i.id === id);
       if (!prev) return;
       learningEntries = learningEntries.filter((i) => i.id !== id);
-      save(LRN_KEY, learningEntries);
+      persistKey("learning", learningEntries);
       logAudit("learning.delete", { recordId: id, oldValue: prev });
       emit();
     },
     replaceAll(list: LearningEntry[]) {
       learningEntries = list.filter((l) => validateLearning(l).ok);
-      save(LRN_KEY, learningEntries);
+      persistKey("learning", learningEntries);
       emit();
     },
     clearAll() {
       snapshotIfConfigured();
       learningEntries = [];
-      save(LRN_KEY, learningEntries);
+      persistKey("learning", learningEntries);
       emit();
     },
   };
@@ -297,24 +401,45 @@ export function useLearning() {
 
 // ============ Timer ============
 export function getTimer(): TimerSession | null {
-  return load<TimerSession | null>(TIMER_KEY, null);
+  return timerSession;
 }
-export function startTimer(framework: LearningFramework): TimerSession {
-  const t = { framework, startedAt: Date.now() };
-  save(TIMER_KEY, t);
+export function useTimer(): TimerSession | null {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force((n) => n + 1);
+    listeners.add(fn);
+    return () => { listeners.delete(fn); };
+  }, []);
+  return timerSession;
+}
+export function startTimer(framework: LearningFramework, opts?: { limitMinutes?: number; tanitDibur?: boolean }): TimerSession {
+  const t: TimerSession = {
+    framework,
+    startedAt: Date.now(),
+    ...(opts?.limitMinutes && opts.limitMinutes > 0 ? { limitMinutes: opts.limitMinutes } : {}),
+    ...(opts?.tanitDibur ? { tanitDibur: true } : {}),
+  };
+  timerSession = t;
+  persistKey("timer", t);
   logAudit("learning.timer_start", { detail: framework });
+  emit();
   return t;
 }
-export function stopTimer(): { framework: LearningFramework; minutes: number } | null {
+export function stopTimer(): { framework: LearningFramework; minutes: number; tanitDibur?: boolean } | null {
   const t = getTimer();
   if (!t) return null;
-  const minutes = Math.max(1, Math.round((Date.now() - t.startedAt) / 60000));
-  save<TimerSession | null>(TIMER_KEY, null);
+  let minutes = Math.max(1, Math.round((Date.now() - t.startedAt) / 60000));
+  if (t.limitMinutes && minutes > t.limitMinutes) minutes = t.limitMinutes;
+  timerSession = null;
+  persistKey("timer", null);
   logAudit("learning.timer_stop", { detail: `${t.framework} · ${minutes} דק׳` });
-  return { framework: t.framework, minutes };
+  emit();
+  return { framework: t.framework, minutes, tanitDibur: t.tanitDibur };
 }
 export function cancelTimer(): void {
-  save<TimerSession | null>(TIMER_KEY, null);
+  timerSession = null;
+  persistKey("timer", null);
+  emit();
 }
 
 // ============ Aggregations ============
@@ -394,6 +519,7 @@ export function currentDayStreak(): number {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (!isLearningDay(d)) continue; // weekend / יום טוב / ערב יום טוב — לא שוברים רצף
     const list = byDate[iso];
     if (!list) { if (i === 0) continue; break; }
     const good = list.some((e) => {

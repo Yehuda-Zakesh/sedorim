@@ -1,14 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { AppShell, APP_VERSION } from "@/components/app-shell";
+import { AppShell, APP_VERSION, BUILD_COMMIT, BUILD_TIME } from "@/components/app-shell";
 import {
   ClipboardCheck, BookOpen, BarChart3, CalendarDays, History, FileText,
   Search, Settings, Shield, Zap, Sparkles, Info, HeartHandshake, Palette,
-  Download, RefreshCw, Loader2, CheckCircle2,
 } from "lucide-react";
-import { checkForUpdate, getUpdateRepo, setUpdateRepo, type UpdateInfo } from "@/lib/updater";
-import { UpdatePrompt } from "@/components/update-prompt";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -36,27 +31,6 @@ const features = [
 ];
 
 function AboutPage() {
-  const [repo, setRepo] = useState(getUpdateRepo());
-  const [checking, setChecking] = useState(false);
-  const [info, setInfo] = useState<UpdateInfo | null>(null);
-  const [upToDate, setUpToDate] = useState(false);
-
-  const saveRepo = () => { setUpdateRepo(repo); toast.success("מאגר עודכן"); };
-  const runCheck = async () => {
-    setUpdateRepo(repo);
-    setChecking(true);
-    setUpToDate(false);
-    try {
-      const res = await checkForUpdate(repo);
-      if (!res) { toast.error("יש להזין מאגר בפורמט owner/repo"); return; }
-      if (res.isNewer) setInfo(res);
-      else { setUpToDate(true); toast.success("אתה על הגרסה העדכנית ביותר"); }
-    } catch (e) {
-      toast.error("בדיקת עדכון נכשלה");
-      console.error(e);
-    } finally { setChecking(false); }
-  };
-
   return (
     <AppShell title="אודות" subtitle="מידע על התוכנה והפעילות שלה">
       <div dir="rtl" className="mx-auto max-w-5xl space-y-6">
@@ -67,13 +41,18 @@ function AboutPage() {
               <Info className="size-7" />
             </div>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold tracking-tight">מעקב כולל · Kollel Tracker</h2>
+              <h2 className="text-2xl font-bold tracking-tight">סדר פלוס</h2>
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                 תוכנה אישית ומקצועית לניהול הנוכחות והלימוד היומי בכולל. כל המידע נשמר מקומית במחשב שלך —
-                שקוף, פרטי ותמיד זמין. מותאמת במיוחד לצרכי בני התורה, עם חישובי מלגה, לוח עברי ודוחות מוכנים לשליחה.
+                שקוף, פרטי ותמיד זמין. מותאמת במיוחד לאברכי כולל כתר תורה, לוח עברי ודוחות מוכנים לשליחה.
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                 <span className="rounded-full bg-primary/15 text-primary px-3 py-1 font-medium">גרסה {APP_VERSION}</span>
+                {BUILD_COMMIT !== "dev" && (
+                  <span className="rounded-full bg-muted px-3 py-1 font-mono" title="השוו מול הקומיט האחרון ב-GitHub כדי לוודא שהחבילה עדכנית">
+                    build {BUILD_COMMIT}{BUILD_TIME ? ` · ${BUILD_TIME}` : ""}
+                  </span>
+                )}
                 <span className="rounded-full bg-muted px-3 py-1">עברית · RTL</span>
                 <span className="rounded-full bg-muted px-3 py-1">אחסון מקומי</span>
                 <span className="rounded-full bg-muted px-3 py-1">ללא הרשמה</span>
@@ -114,49 +93,6 @@ function AboutPage() {
           </p>
         </section>
 
-        {/* Auto update */}
-        <section className="rounded-2xl border border-border bg-card p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Download className="size-5 text-primary" />
-            <h3 className="text-base font-semibold">עדכוני תוכנה אוטומטיים</h3>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-            התוכנה בודקת אוטומטית פעם ביום האם קיימת גרסה חדשה במאגר ה-GitHub שהוגדר, ותציג התראה
-            עם אפשרות להוריד את הגרסה החדשה ישירות.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
-            <div>
-              <label className="text-xs text-muted-foreground">מאגר GitHub (owner/repo)</label>
-              <input
-                type="text"
-                value={repo}
-                onChange={(e) => setRepo(e.target.value)}
-                placeholder="לדוגמה: yehudazaks/kollel-tracker"
-                dir="ltr"
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-left"
-              />
-            </div>
-            <button
-              onClick={saveRepo}
-              className="rounded-md border border-border bg-card px-4 py-2 text-sm hover:bg-accent"
-            >שמור</button>
-            <button
-              onClick={runCheck}
-              disabled={checking || !repo.includes("/")}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {checking ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-              בדוק עכשיו
-            </button>
-          </div>
-          {upToDate && (
-            <div className="mt-3 inline-flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="size-4" />
-              הגרסה שלך עדכנית ({APP_VERSION})
-            </div>
-          )}
-        </section>
-
         {/* Credit */}
         <section className="rounded-2xl border border-border bg-card p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2 text-primary">
@@ -171,7 +107,6 @@ function AboutPage() {
           </p>
         </section>
       </div>
-      {info && <UpdatePrompt info={info} onClose={() => setInfo(null)} />}
     </AppShell>
   );
 }

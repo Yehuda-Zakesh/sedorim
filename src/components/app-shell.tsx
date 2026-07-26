@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Moon, Sun, Monitor, Keyboard } from "lucide-react";
+import { Moon, Sun, Monitor, Keyboard, Search } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { AppSidebar, useSidebarCollapsed } from "./app-sidebar";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
@@ -9,8 +10,16 @@ import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { OnboardingWizard } from "./onboarding-wizard";
 import { useAutoUpdateCheck } from "@/lib/updater";
 import { UpdatePrompt } from "./update-prompt";
+import { BUILD_COMMIT, BUILD_TIME } from "@/lib/build-info";
+import pkg from "../../package.json";
 
-export const APP_VERSION = "1.0.0";
+// Single source of truth: package.json's "version" field. BUILD_COMMIT/
+// BUILD_TIME (from build-info.ts) are only meaningful in a packaged EXE —
+// see that file for why. Together these let you check, from the About
+// screen, exactly what code a given install actually has — no more
+// guessing whether a repackage picked up the latest fixes.
+export const APP_VERSION = pkg.version;
+export { BUILD_COMMIT, BUILD_TIME };
 
 export function AppShell({ title, subtitle, actions, children }: {
   title: string; subtitle?: string; actions?: ReactNode; children: ReactNode;
@@ -42,6 +51,10 @@ export function AppShell({ title, subtitle, actions, children }: {
             </div>
             <div className="flex items-center gap-2">
               {actions}
+              <Link to="/search" title="חיפוש"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition">
+                <Search className="size-4" />
+              </Link>
               <button onClick={() => setHelpOpen(true)} title="קיצורי מקלדת (?)"
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent transition">
                 <Keyboard className="size-4" />

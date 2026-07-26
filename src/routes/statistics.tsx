@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { TrendingUp, TrendingDown, Target, Flame, Award, BarChart3, Sparkles } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Flame, Award, BarChart3, Sparkles, Gauge, CalendarClock } from "lucide-react";
 import { useSeder, useLearning, monthlySummary, attendanceScore, calcSeder, currentDayStreak } from "@/lib/kollel-store";
+import { forecastMonthlyNetMissing, consistencyScore, fmtMin } from "@/lib/insights";
 import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
 import { InsightsView } from "./insights";
 
@@ -37,6 +38,8 @@ function StatisticsPage() {
   const yoyScore = attendanceScore(y - 1, m);
   const streak = currentDayStreak();
   const bestMonth = [...months].sort((a, b) => b.score - a.score)[0];
+  const forecastNet = forecastMonthlyNetMissing();
+  const consistency = consistencyScore();
 
   // weekday breakdown
   const weekday: { d: string; net: number; count: number }[] =
@@ -79,11 +82,25 @@ function StatisticsPage() {
 
       {tab === "insights" ? <InsightsView /> : (
       <>
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <Kpi label="ציון החודש" value={`${curScore}`} icon={Target} trend={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`} up={curScore >= yoyScore} />
         <Kpi label="חודש מצטיין" value={bestMonth?.hebLabel || "—"} icon={Award} trend={`${bestMonth?.score || 0} נק׳`} up />
         <Kpi label="רצף ימים" value={streak.toString()} icon={Flame} trend="ימים" up={streak > 0} />
         <Kpi label="שעות לימוד" value={totalLearnHours} icon={TrendingUp} trend="סך הכל" up />
+        <Kpi
+          label="צפי חוסר בסוף החודש"
+          value={forecastNet === null ? "—" : fmtMin(forecastNet)}
+          icon={CalendarClock}
+          trend={forecastNet === null ? "אין מספיק נתונים החודש" : "לפי הקצב הנוכחי, בימי לימוד"}
+          up={forecastNet !== null && forecastNet <= 0}
+        />
+        <Kpi
+          label="ציון עקביות"
+          value={consistency === 0 ? "—" : `${consistency}`}
+          icon={Gauge}
+          trend={consistency === 0 ? "אין מספיק נתונים" : "יציבות מחודש לחודש"}
+          up={consistency >= 60}
+        />
       </section>
 
       <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">

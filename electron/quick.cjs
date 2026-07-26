@@ -1,13 +1,19 @@
-// KollelQuick.exe — minimal companion window that shares localStorage with
-// the main app by pointing at the same Chromium userData folder and the same
-// loopback origin. If KollelTracker.exe is running, we just attach to its
-// server; otherwise we boot the bundled server ourselves on the same port.
+// SederPlusQuick.exe — minimal companion window. App data now lives in a
+// shared JSON file written by the Nitro server (src/lib/store.functions.ts),
+// read/written by whichever server instance the two EXEs attach to — not in
+// Chromium's per-process localStorage (see main.cjs for why that broke).
+// If SederPlus.exe is running, we just attach to its server; otherwise we
+// boot the bundled server ourselves on the same port.
 const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const path = require("path");
 const net = require("net");
 
-const SHARED_USER_DATA = path.join(app.getPath("appData"), "KollelTracker");
+const SHARED_USER_DATA = path.join(app.getPath("appData"), "SederPlus");
 app.setPath("userData", SHARED_USER_DATA);
+// Same shared data folder used by SederPlus.exe — see main.cjs and
+// src/lib/store.functions.ts for why data now lives here instead of
+// Chromium's per-process localStorage.
+process.env.SEDORIM_DATA_DIR = SHARED_USER_DATA;
 
 const FIXED_PORT = 47821;
 
@@ -46,7 +52,11 @@ async function ensureServer() {
     // just attach to their server instead of crashing.
     if (!(await isPortInUse(FIXED_PORT))) throw err;
   }
-  await new Promise((r) => setTimeout(r, 300));
+  // Poll for the port instead of a blind fixed sleep — see main.cjs.
+  for (let i = 0; i < 100; i++) {
+    if (await isPortInUse(FIXED_PORT)) break;
+    await new Promise((r) => setTimeout(r, 20));
+  }
   return FIXED_PORT;
 }
 
@@ -68,9 +78,14 @@ function attachWindowOpenHandler(win) {
   });
 }
 
+// Splash screen removed — spinning up an extra BrowserWindow (a whole
+// second Chromium renderer process) on startup was making the app open
+// noticeably slower. show:false + ready-to-show already avoids a white
+// flash without that cost.
+
 // The full app, opened as a second window IN THIS SAME PROCESS (same
 // session/localStorage — no cross-process storage race like launching a
-// separate KollelTracker.exe would have). Reused/focused on repeat clicks.
+// separate SederPlus.exe would have). Reused/focused on repeat clicks.
 let mainAppWin = null;
 
 async function openMainApp() {
@@ -82,8 +97,9 @@ async function openMainApp() {
   mainAppWin = new BrowserWindow({
     width: 1280,
     height: 820,
-    title: "KollelTracker",
+    title: "סדר פלוס",
     autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -91,6 +107,10 @@ async function openMainApp() {
     },
   });
   attachWindowOpenHandler(mainAppWin);
+  mainAppWin.once("ready-to-show", () => mainAppWin.show());
+  setTimeout(() => {
+    if (mainAppWin && !mainAppWin.isDestroyed() && !mainAppWin.isVisible()) mainAppWin.show();
+  }, 20_000);
   mainAppWin.on("closed", () => { mainAppWin = null; });
   mainAppWin.loadURL(`http://127.0.0.1:${port}/`);
 }
@@ -102,9 +122,10 @@ async function createWindow() {
   const win = new BrowserWindow({
     width: 480,
     height: 680,
-    title: "כניסה מהירה — כולל",
+    title: "כניסה מהירה — סדר פלוס",
     autoHideMenuBar: true,
     resizable: true,
+    show: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -113,6 +134,10 @@ async function createWindow() {
     },
   });
   attachWindowOpenHandler(win);
+  win.once("ready-to-show", () => win.show());
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show();
+  }, 20_000);
   Menu.setApplicationMenu(null);
   win.loadURL(`http://127.0.0.1:${port}/quick`);
 }

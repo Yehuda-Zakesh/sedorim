@@ -17,11 +17,13 @@
     "skipLibCheck": true,
     "strict": true,
     "noUnusedLocals": false,
+    "resolveJsonModule": true,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@sedorim/auth-middleware": ["./src/integrations/supabase/auth-attacher.ts"]
     }
   }
 }

@@ -59,8 +59,8 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   profile: { name: "תלמיד הכולל", classroom: "" },
   seder: {
-    s1Start: "09:30", s1End: "13:30",
-    s2Start: "16:00", s2End: "19:00",
+    s1Start: "09:00", s1End: "13:00",
+    s2Start: "15:45", s2End: "19:30",
     bonusThresholdMin: 15,
     alertMissingMinPerMonth: 180,
     defaultDeparture: "seder_end",
@@ -103,7 +103,12 @@ function read(): Settings {
 let settings: Settings = read();
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
-
+// Apply the saved theme/colors to the DOM immediately at module load —
+// not just inside a React useEffect — so the very first paint already
+// shows the user's chosen color instead of the CSS default, then flashing
+// to the real one a moment later. (applyAppearance is a function
+// declaration below, hoisted, so calling it here is safe.)
+applyAppearance();
 function persist() {
   if (typeof window === "undefined") return;
   try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* noop */ }
