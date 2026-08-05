@@ -5,7 +5,11 @@ import {
   ChevronDown, User, Bell, Palette, Globe, Shield, Database, Search,
   RotateCcw, Type, Contrast, Target, Clock, ShieldCheck, DatabaseBackup,
 } from "lucide-react";
-import { useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, type BgTheme, updateSettings } from "@/lib/settings-store";
+import {
+  useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, type BgTheme, updateSettings,
+  getSederTimesFor, setSederTimesFromToday, removeSederScheduleEntry, addSederOverride, removeSederOverride,
+  type SederTimes,
+} from "@/lib/settings-store";
 import { toast } from "sonner";
 import { AuditView } from "./audit";
 import { BackupView } from "./backup";
@@ -69,16 +73,7 @@ function SettingsPage() {
                   )}
                   {s.id === "seder" && (
                     <>
-                      <div className="grid grid-cols-2 gap-3">
-                        <TimeField label="סדר א׳ — תחילה" value={settings.seder.s1Start}
-                          onChange={(v) => update({ seder: { ...settings.seder, s1Start: v } })} />
-                        <TimeField label="סדר א׳ — סיום" value={settings.seder.s1End}
-                          onChange={(v) => update({ seder: { ...settings.seder, s1End: v } })} />
-                        <TimeField label="סדר ב׳ — תחילה" value={settings.seder.s2Start}
-                          onChange={(v) => update({ seder: { ...settings.seder, s2Start: v } })} />
-                        <TimeField label="סדר ב׳ — סיום" value={settings.seder.s2End}
-                          onChange={(v) => update({ seder: { ...settings.seder, s2End: v } })} />
-                      </div>
+                      <SederHoursManager />
                       <NumberField label="סף בונוס להגעה מוקדמת (דק׳)" min={0} max={60} value={settings.seder.bonusThresholdMin}
                         onChange={(v) => update({ seder: { ...settings.seder, bonusThresholdMin: v } })} />
                       <NumberField label="סף התראה לדקות חסרות בחודש" min={0} max={1440} value={settings.seder.alertMissingMinPerMonth}
@@ -216,6 +211,150 @@ function NumberField({ label, value, min, max, onChange }: { label: string; valu
     </div>
   );
 }
+
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function TimesGrid({ times, onChange }: { times: SederTimes; onChange: (t: SederTimes) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <TimeField label="סדר א׳ — תחילה" value={times.s1Start} onChange={(v) => onChange({ ...times, s1Start: v })} />
+      <TimeField label="סדר א׳ — סיום" value={times.s1End} onChange={(v) => onChange({ ...times, s1End: v })} />
+      <TimeField label="סדר ב׳ — תחילה" value={times.s2Start} onChange={(v) => onChange({ ...times, s2Start: v })} />
+      <TimeField label="סדר ב׳ — סיום" value={times.s2End} onChange={(v) => onChange({ ...times, s2End: v })} />
+    </div>
+  );
+}
+
+function SederHoursManager() {
+  const { settings } = useSettings();
+  const current = getSederTimesFor(todayIso());
+  const [draft, setDraft] = useState<SederTimes>(current);
+  const [from, setFrom] = useState(todayIso());
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(current);
+
+  // temporary override form
+  const [ovOpen, setOvOpen] = useState(false);
+  const [ovFrom, setOvFrom] = useState(todayIso());
+  const [ovTo, setOvTo] = useState(todayIso());
+  const [ovLabel, setOvLabel] = useState("");
+  const [ovTimes, setOvTimes] = useState<SederTimes>(current);
+
+  const schedule = [...(settings.sederSchedule || [])].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1));
+  const overrides = [...(settings.sederOverrides || [])].sort((a, b) => (a.from < b.from ? 1 : -1));
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <div className="text-sm font-semibold">שעות הסדרים הנוכחיות</div>
+            <div className="text-[11px] text-muted-foreground">
+              שינוי יחול מהתאריך שנבחר ואילך בלבד — רישומים קודמים ממשיכים להיחשב לפי השעות שהיו אז.
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">בתוקף מתאריך</label>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+              className="mt-1 block rounded-md border border-input bg-card px-3 py-1.5 text-sm" />
+          </div>
+        </div>
+        <TimesGrid times={draft} onChange={setDraft} />
+        <div className="flex items-center gap-2">
+          <button disabled={!dirty}
+            onClick={() => { setSederTimesFromToday(draft, from); toast.success(`השעות עודכנו מתאריך ${from} ואילך`); }}
+            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40">
+            שמור שינוי
+          </button>
+          {dirty && (
+            <button onClick={() => setDraft(current)} className="text-xs text-muted-foreground hover:text-foreground">ביטול</button>
+          )}
+        </div>
+      </div>
+
+      {schedule.length > 0 && (
+        <div className="rounded-lg border border-border p-4">
+          <div className="text-sm font-semibold mb-2">היסטוריית שעות</div>
+          <ul className="space-y-2">
+            {schedule.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-muted-foreground tabular-nums">
+                  {e.effectiveFrom === "0001-01-01" ? "עד השינוי הראשון" : `מ־${e.effectiveFrom}`}
+                </span>
+                <span className="tabular-nums">{e.times.s1Start}–{e.times.s1End} · {e.times.s2Start}–{e.times.s2End}</span>
+                <button onClick={() => { removeSederScheduleEntry(e.id); toast("נמחק"); }}
+                  className="text-muted-foreground hover:text-destructive">מחק</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold">שינוי זמני לטווח תאריכים</div>
+            <div className="text-[11px] text-muted-foreground">בתום הטווח השעות חוזרות אוטומטית להגדרה השמורה.</div>
+          </div>
+          <button onClick={() => setOvOpen((v) => !v)}
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent/40">
+            {ovOpen ? "סגור" : "הוסף טווח"}
+          </button>
+        </div>
+
+        {ovOpen && (
+          <div className="space-y-3 border-t border-border pt-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground">מתאריך</label>
+                <input type="date" value={ovFrom} onChange={(e) => setOvFrom(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">עד תאריך</label>
+                <input type="date" value={ovTo} onChange={(e) => setOvTo(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">תיאור (אופציונלי)</label>
+                <input value={ovLabel} maxLength={40} onChange={(e) => setOvLabel(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <TimesGrid times={ovTimes} onChange={setOvTimes} />
+            <button
+              onClick={() => {
+                if (ovTo < ovFrom) { toast.error("תאריך הסיום מוקדם מתאריך ההתחלה"); return; }
+                addSederOverride({ from: ovFrom, to: ovTo, label: ovLabel || undefined, times: ovTimes });
+                setOvOpen(false); setOvLabel("");
+                toast.success("נוסף שינוי זמני");
+              }}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+              שמור טווח
+            </button>
+          </div>
+        )}
+
+        {overrides.length > 0 && (
+          <ul className="space-y-2 border-t border-border pt-3">
+            {overrides.map((o) => (
+              <li key={o.id} className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-muted-foreground tabular-nums">{o.from} → {o.to}{o.label ? ` · ${o.label}` : ""}</span>
+                <span className="tabular-nums">{o.times.s1Start}–{o.times.s1End} · {o.times.s2Start}–{o.times.s2End}</span>
+                <button onClick={() => { removeSederOverride(o.id); toast("נמחק"); }}
+                  className="text-muted-foreground hover:text-destructive">מחק</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SelectField({ label, value, options, onChange }: { label: string; value: string; options: { v: string; l: string }[]; onChange: (v: string) => void }) {
   return (
     <div className="grid grid-cols-3 gap-3 items-center">

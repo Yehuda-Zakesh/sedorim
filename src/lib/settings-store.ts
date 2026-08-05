@@ -18,9 +18,17 @@ export type SederConfig = {
   defaultDeparture: "seder_end" | "blank";
 };
 
+export type SederTimes = { s1Start: string; s1End: string; s2Start: string; s2End: string };
+/** A permanent change of seder hours, valid from `effectiveFrom` (ISO date) onwards. */
+export type SederScheduleEntry = { id: string; effectiveFrom: string; times: SederTimes };
+/** A temporary change for a closed date range; hours revert afterwards. */
+export type SederOverride = { id: string; from: string; to: string; label?: string; times: SederTimes };
+
 export type Settings = {
   profile: { name: string; classroom: string };
   seder: SederConfig;
+  sederSchedule: SederScheduleEntry[];
+  sederOverrides: SederOverride[];
   notifications: {
     dailyReminder: boolean;
     latenessAlert: boolean;
@@ -66,6 +74,8 @@ export const DEFAULT_SETTINGS: Settings = {
     defaultDeparture: "seder_end",
   },
   notifications: { dailyReminder: true, latenessAlert: true, weeklySummary: false },
+  sederSchedule: [],
+  sederOverrides: [],
   appearance: { fontSize: "normal", highContrast: false, compactMode: false, colorTheme: "blue", background: "white" },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
   language: { dateFormat: "mixed" },
@@ -132,6 +142,57 @@ export function resetSettings() {
   applyAppearance();
   logAudit("backup.reset_settings", { oldValue: prev, newValue: settings });
   emit();
+}
+
+// ============ Date-aware seder hours ============
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function baseTimes(s: Settings = settings): SederTimes {
+  return { s1Start: s.seder.s1Start, s1End: s.seder.s1End, s2Start: s.seder.s2Start, s2End: s.seder.s2End };
+}
+
+/** Seder hours that were in effect on a given ISO date (temporary override wins). */
+export function getSederTimesFor(dateISO: string): SederTimes {
+  const ov = (settings.sederOverrides || [])
+    .filter((o) => dateISO >= o.from && dateISO <= o.to)
+    .sort((a, b) => (a.from < b.from ? 1 : -1))[0];
+  if (ov) return ov.times;
+
+  const sched = [...(settings.sederSchedule || [])].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : 1));
+  let times: SederTimes | null = null;
+  for (const e of sched) {
+    if (e.effectiveFrom <= dateISO) times = e.times;
+  }
+  return times || baseTimes();
+}
+
+/** Applies new seder hours from today onwards — past records keep their original hours. */
+export function setSederTimesFromToday(times: SederTimes, effectiveFrom = todayIso()) {
+  const sched = [...(settings.sederSchedule || [])];
+  if (sched.length === 0) {
+    // Snapshot the previous hours so earlier dates stay unchanged.
+    sched.push({ id: `base-${Date.now()}`, effectiveFrom: "0001-01-01", times: baseTimes() });
+  }
+  const idx = sched.findIndex((e) => e.effectiveFrom === effectiveFrom);
+  if (idx >= 0) sched[idx] = { ...sched[idx], times };
+  else sched.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, effectiveFrom, times });
+  updateSettings({ sederSchedule: sched, seder: { ...settings.seder, ...times } });
+}
+
+export function removeSederScheduleEntry(id: string) {
+  updateSettings({ sederSchedule: (settings.sederSchedule || []).filter((e) => e.id !== id) });
+}
+
+export function addSederOverride(o: Omit<SederOverride, "id">) {
+  const item: SederOverride = { ...o, id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+  updateSettings({ sederOverrides: [...(settings.sederOverrides || []), item] });
+}
+
+export function removeSederOverride(id: string) {
+  updateSettings({ sederOverrides: (settings.sederOverrides || []).filter((o) => o.id !== id) });
 }
 
 export function useSettings() {

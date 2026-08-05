@@ -6,7 +6,7 @@ import {
   useSeder, todayISO, calcSeder, newId,
   type SederEntry, type SederNum,
 } from "@/lib/kollel-store";
-import { useSettings } from "@/lib/settings-store";
+import { useSettings, getSederTimesFor } from "@/lib/settings-store";
 import { formatHebrewDate, fastDayName, hasNoSederB } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 
@@ -22,10 +22,11 @@ type SederFormState = {
   manualAdjustMin: number; note: string;
 };
 
-function defaultsFor(seder: SederNum, sederCfg: ReturnType<typeof useSettings>["settings"]["seder"]): SederFormState {
+function defaultsFor(seder: SederNum, date: string): SederFormState {
+  const t = getSederTimesFor(date);
   return {
-    arrival: seder === 1 ? sederCfg.s1Start : sederCfg.s2Start,
-    departure: seder === 1 ? sederCfg.s1End : sederCfg.s2End,
+    arrival: seder === 1 ? t.s1Start : t.s2Start,
+    departure: seder === 1 ? t.s1End : t.s2End,
     absent: false, ohevei: false,
     excusedAll: false, excusedMinutes: 0, excusedReason: "",
     manualAdjustMin: 0, note: "",
@@ -45,16 +46,16 @@ function fromEntry(e: SederEntry): SederFormState {
 function SederCard({
   num, date, existing, onSaved,
 }: { num: SederNum; date: string; existing?: SederEntry; onSaved: () => void }) {
-  const { settings } = useSettings();
   const { upsert, remove } = useSeder();
+  useSettings();
   const dayDate = new Date(date);
   const fastName = fastDayName(dayDate);
   const skipSederB = num === 2 && hasNoSederB(dayDate);
   const [form, setForm] = useState<SederFormState>(() =>
-    existing ? fromEntry(existing) : defaultsFor(num, settings.seder));
+    existing ? fromEntry(existing) : defaultsFor(num, date));
 
   useEffect(() => {
-    setForm(existing ? fromEntry(existing) : defaultsFor(num, settings.seder));
+    setForm(existing ? fromEntry(existing) : defaultsFor(num, date));
   }, [existing?.id, num, date]); // eslint-disable-line
 
   const preview: SederEntry = {
@@ -76,8 +77,9 @@ function SederCard({
     catch (e) { toast.error(e instanceof Error ? e.message : "שגיאה"); }
   };
 
-  const startStr = num === 1 ? settings.seder.s1Start : settings.seder.s2Start;
-  const endStr = num === 1 ? settings.seder.s1End : settings.seder.s2End;
+  const times = getSederTimesFor(date);
+  const startStr = num === 1 ? times.s1Start : times.s2Start;
+  const endStr = num === 1 ? times.s1End : times.s2End;
 
   const tryOhevei = () => {
     if (!calc.isOhevei && form.ohevei) {

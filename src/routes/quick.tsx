@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { Zap, LogIn, LogOut as LogOutIcon, Check, Clock, Pencil, LayoutDashboard } from "lucide-react";
 import { useSeder, type SederEntry } from "@/lib/kollel-store";
-import { getSettings, applyAppearance } from "@/lib/settings-store";
+import { getSettings, applyAppearance, getSederTimesFor } from "@/lib/settings-store";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -124,8 +124,9 @@ function QuickApp() {
       <main className="flex-1 mx-auto w-full max-w-md px-5 py-6 space-y-4">
         {[1, 2].map((n) => {
           const s = n as 1 | 2;
-          const start = s === 1 ? settings.seder.s1Start : settings.seder.s2Start;
-          const end = s === 1 ? settings.seder.s1End : settings.seder.s2End;
+          const t = getSederTimesFor(date);
+          const start = s === 1 ? t.s1Start : t.s2Start;
+          const end = s === 1 ? t.s1End : t.s2End;
           const entry = findEntry(s);
           return (
             <section key={s} className="rounded-2xl border border-border bg-card p-5 shadow-sm">

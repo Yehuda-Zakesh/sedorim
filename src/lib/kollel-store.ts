@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { logAudit } from "./audit-store";
-import { getSettings } from "./settings-store";
+import { getSettings, getSederTimesFor } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
 import { isLearningDay } from "./hebrew-calendar";
 import { loadStore, saveStoreKey, saveStoreKeys } from "./store.functions";
@@ -218,8 +218,9 @@ export type SederCalc = {
 
 export function calcSeder(entry: SederEntry): SederCalc {
   const s = getSettings().seder;
-  const startStr = entry.seder === 1 ? s.s1Start : s.s2Start;
-  const endStr = entry.seder === 1 ? s.s1End : s.s2End;
+  const t = getSederTimesFor(entry.date);
+  const startStr = entry.seder === 1 ? t.s1Start : t.s2Start;
+  const endStr = entry.seder === 1 ? t.s1End : t.s2End;
   const startMin = hhmmToMin(startStr) ?? 0;
   const endMin = hhmmToMin(endStr) ?? 0;
   const sederLengthMin = Math.max(0, endMin - startMin);
