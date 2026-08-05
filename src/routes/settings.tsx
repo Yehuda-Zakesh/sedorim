@@ -355,16 +355,6 @@ function SederHoursManager() {
   );
 }
 
-function NumberFieldUnused({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
-  return (
-    <div className="grid grid-cols-3 gap-3 items-center">
-      <label className="text-xs text-muted-foreground">{label}</label>
-      <input type="number" min={min} max={max} value={value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, +e.target.value || 0)))}
-        className="col-span-2 rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-    </div>
-  );
-}
 function SelectField({ label, value, options, onChange }: { label: string; value: string; options: { v: string; l: string }[]; onChange: (v: string) => void }) {
   return (
     <div className="grid grid-cols-3 gap-3 items-center">
