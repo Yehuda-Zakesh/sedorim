@@ -18,9 +18,17 @@ export type SederConfig = {
   defaultDeparture: "seder_end" | "blank";
 };
 
+export type SederTimes = { s1Start: string; s1End: string; s2Start: string; s2End: string };
+/** A permanent change of seder hours, valid from `effectiveFrom` (ISO date) onwards. */
+export type SederScheduleEntry = { id: string; effectiveFrom: string; times: SederTimes };
+/** A temporary change for a closed date range; hours revert afterwards. */
+export type SederOverride = { id: string; from: string; to: string; label?: string; times: SederTimes };
+
 export type Settings = {
   profile: { name: string; classroom: string };
   seder: SederConfig;
+  sederSchedule: SederScheduleEntry[];
+  sederOverrides: SederOverride[];
   notifications: {
     dailyReminder: boolean;
     latenessAlert: boolean;
@@ -66,6 +74,8 @@ export const DEFAULT_SETTINGS: Settings = {
     defaultDeparture: "seder_end",
   },
   notifications: { dailyReminder: true, latenessAlert: true, weeklySummary: false },
+  sederSchedule: [],
+  sederOverrides: [],
   appearance: { fontSize: "normal", highContrast: false, compactMode: false, colorTheme: "blue", background: "white" },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
   language: { dateFormat: "mixed" },
