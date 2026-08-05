@@ -5,7 +5,11 @@ import {
   ChevronDown, User, Bell, Palette, Globe, Shield, Database, Search,
   RotateCcw, Type, Contrast, Target, Clock, ShieldCheck, DatabaseBackup,
 } from "lucide-react";
-import { useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, type BgTheme, updateSettings } from "@/lib/settings-store";
+import {
+  useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, type BgTheme, updateSettings,
+  getSederTimesFor, setSederTimesFromToday, removeSederScheduleEntry, addSederOverride, removeSederOverride,
+  type SederTimes,
+} from "@/lib/settings-store";
 import { toast } from "sonner";
 import { AuditView } from "./audit";
 import { BackupView } from "./backup";
@@ -69,16 +73,7 @@ function SettingsPage() {
                   )}
                   {s.id === "seder" && (
                     <>
-                      <div className="grid grid-cols-2 gap-3">
-                        <TimeField label="סדר א׳ — תחילה" value={settings.seder.s1Start}
-                          onChange={(v) => update({ seder: { ...settings.seder, s1Start: v } })} />
-                        <TimeField label="סדר א׳ — סיום" value={settings.seder.s1End}
-                          onChange={(v) => update({ seder: { ...settings.seder, s1End: v } })} />
-                        <TimeField label="סדר ב׳ — תחילה" value={settings.seder.s2Start}
-                          onChange={(v) => update({ seder: { ...settings.seder, s2Start: v } })} />
-                        <TimeField label="סדר ב׳ — סיום" value={settings.seder.s2End}
-                          onChange={(v) => update({ seder: { ...settings.seder, s2End: v } })} />
-                      </div>
+                      <SederHoursManager />
                       <NumberField label="סף בונוס להגעה מוקדמת (דק׳)" min={0} max={60} value={settings.seder.bonusThresholdMin}
                         onChange={(v) => update({ seder: { ...settings.seder, bonusThresholdMin: v } })} />
                       <NumberField label="סף התראה לדקות חסרות בחודש" min={0} max={1440} value={settings.seder.alertMissingMinPerMonth}
