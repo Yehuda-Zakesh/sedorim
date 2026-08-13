@@ -15,5 +15,8 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = "2"
+# See the note in ../full/Cargo.toml — without `custom-protocol` the built
+# EXE loads build.devUrl (http://localhost:5173) instead of the frontend
+# embedded in the binary, and fails with ERR_CONNECTION_REFUSED.
+tauri = { version = "2", features = ["custom-protocol"] }
 seder-plus-core = { path = "../core" }

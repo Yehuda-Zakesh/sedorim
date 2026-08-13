@@ -15,5 +15,13 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = "2"
+# `custom-protocol` is what makes generate_context!() embed ../../dist into
+# the binary and serve it over Tauri's asset protocol. WITHOUT IT the built
+# EXE points at `build.devUrl` (http://localhost:5173) instead and shows
+# ERR_CONNECTION_REFUSED — Tauri's own CLI passes this feature on release
+# builds, and we build with plain cargo, so it has to be declared here.
+#
+# Consequence: ../../dist must exist before compiling this crate. Run
+# `npm run build` first, or just use `npm run exe`, which does both.
+tauri = { version = "2", features = ["custom-protocol"] }
 seder-plus-core = { path = "../core" }

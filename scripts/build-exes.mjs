@@ -89,6 +89,10 @@ function main() {
 
     for (const app of APPS) {
       console.log(`\n== ${app.exe} — ${app.label} ==`);
+      // Plain cargo, no Tauri CLI. What makes that work is the
+      // `custom-protocol` feature declared in each crate's Cargo.toml —
+      // without it the EXE loads build.devUrl (localhost:5173) instead of the
+      // frontend embedded in the binary. Don't remove it.
       run("cargo", [
         "build",
         "--release",
