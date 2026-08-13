@@ -236,5 +236,13 @@ export function resetOnboarding() { onboarded.set(false); }
  */
 export function useNeedsOnboarding(): boolean {
   const hydrated = useHydrated();
-  return hydrated && !onboarded.use();
+  // Both hooks unconditionally: `hydrated && !onboarded.use()` short-circuits
+  // before the first render's hydration lands, so onboarded.use()'s hooks were
+  // skipped on that render and ran on the next one — "Rendered more hooks than
+  // during the previous render". Only ever visible in the EXEs, where
+  // loadStore() is a real async call into Rust; in a browser the localStorage
+  // fallback resolves in a microtask and hydration is already done by the
+  // first render.
+  const isOnboardedNow = onboarded.use();
+  return hydrated && !isOnboardedNow;
 }
