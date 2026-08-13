@@ -32,6 +32,17 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">
           משהו נכשל. אפשר לנסות שוב או לחזור לדף הבית.
         </p>
+        {/* The actual message, not just "something failed" — this is a local
+            single-user app, and without it a fault here is undiagnosable
+            without attaching a debugger to the packaged EXE. */}
+        {error?.message && (
+          <p
+            dir="ltr"
+            className="mt-4 max-h-32 overflow-auto rounded-md border border-border bg-muted/40 p-3 text-start font-mono text-xs text-muted-foreground"
+          >
+            {error.message}
+          </p>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {

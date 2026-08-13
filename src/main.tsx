@@ -4,16 +4,17 @@ import { RouterProvider, createHashHistory, createRouter } from "@tanstack/react
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
 
-// SederPlusQuick.exe opens index.html?mode=quick (see
-// src-tauri/core/src/lib.rs), which is all the frontend needs to know about
-// which EXE it's running inside.
-if (
-  new URLSearchParams(window.location.search).get("mode") === "quick" &&
-  !window.location.hash.startsWith("#/")
-) {
-  // Same document, so this is just seeding the initial route below — it does
-  // not reload the page.
-  window.location.hash = "#/quick";
+// The EXEs open index.html with no hash at all, and SederPlusQuick.exe adds
+// ?mode=quick (see src-tauri/core/src/lib.rs) — that query is all the
+// frontend needs to know about which one it's running inside.
+//
+// Seed a real route before createHashHistory() reads the URL below. Without
+// this the history starts on an empty path rather than "/", which fails to
+// resolve and lands the user on the root error page until they navigate
+// somewhere by hand. Setting the hash on the same document does not reload.
+if (!window.location.hash.startsWith("#/")) {
+  const quick = new URLSearchParams(window.location.search).get("mode") === "quick";
+  window.location.hash = quick ? "#/quick" : "#/";
 }
 
 // Hash routing, deliberately: the frontend is embedded in the EXE and served
