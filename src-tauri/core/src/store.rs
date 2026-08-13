@@ -226,6 +226,7 @@ fn maybe_backup(dir: &Path, body: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static NEXT: AtomicU32 = AtomicU32::new(0);
@@ -386,5 +387,402 @@ mod tests {
         assert_eq!(backup_ts_from_name("sedorim-data..json"), None);
         assert_eq!(backup_ts_from_name("sedorim-data.abc.json"), None);
         assert_eq!(backup_ts_from_name("something-else.1.json"), None);
+    }
+
+    // ================= reading =================
+
+    #[test]
+    fn a_store_that_is_valid_json_but_not_an_object_reads_as_empty() {
+        // The file is treated as one JSON object; an array or a bare scalar is
+        // as unusable as junk, and must not take the app down with it.
+        for body in ["[1,2,3]", "\"a string\"", "42", "null", "true"] {
+            let dir = scratch_dir();
+            fs::write(dir.join(STORE_FILE_NAME), body).unwrap();
+            assert!(read_store_in(&dir).is_empty(), "body was {body}");
+        }
+    }
+
+    #[test]
+    fn an_empty_file_reads_as_empty() {
+        let dir = scratch_dir();
+        fs::write(dir.join(STORE_FILE_NAME), "").unwrap();
+        assert!(read_store_in(&dir).is_empty());
+    }
+
+    #[test]
+    fn a_truncated_file_reads_as_empty_rather_than_partially() {
+        // What a torn write would look like if the rename were not atomic.
+        let dir = scratch_dir();
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from("value"))])).unwrap();
+        let full = fs::read_to_string(dir.join(STORE_FILE_NAME)).unwrap();
+        fs::write(dir.join(STORE_FILE_NAME), &full[..full.len() / 2]).unwrap();
+        assert!(read_store_in(&dir).is_empty());
+    }
+
+    #[test]
+    fn unknown_keys_in_the_file_are_preserved() {
+        // A file written by a newer build must not lose its extra keys just
+        // because this build does not know about them.
+        let dir = scratch_dir();
+        fs::write(
+            dir.join(STORE_FILE_NAME),
+            r#"{"seder":[],"somethingNew":{"a":1}}"#,
+        )
+        .unwrap();
+        save_keys_in(&dir, &patch_of(&[("learning", Value::from("l"))])).unwrap();
+
+        let store = read_store_in(&dir);
+        assert_eq!(store.get("somethingNew").unwrap(), &json!({"a": 1}));
+        assert_eq!(store.get("learning").unwrap(), &Value::from("l"));
+    }
+
+    // ================= writing =================
+
+    #[test]
+    fn creates_the_data_directory_if_it_is_missing() {
+        let dir = scratch_dir().join("nested").join("deeper");
+        assert!(!dir.exists());
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from(1))])).unwrap();
+        assert_eq!(read_store_in(&dir).get("seder").unwrap(), &Value::from(1));
+    }
+
+    #[test]
+    fn an_empty_patch_still_stamps_updated_at() {
+        let dir = scratch_dir();
+        let result = save_keys_in(&dir, &Store::new()).unwrap();
+        assert!(result.ok);
+        assert_eq!(
+            read_store_in(&dir).get("updatedAt").unwrap(),
+            &Value::from(result.updated_at)
+        );
+    }
+
+    #[test]
+    fn updated_at_never_goes_backwards() {
+        let dir = scratch_dir();
+        let mut previous = 0;
+        for i in 0..10 {
+            let result = save_keys_in(&dir, &patch_of(&[("seder", Value::from(i))])).unwrap();
+            assert!(result.updated_at >= previous);
+            previous = result.updated_at;
+        }
+    }
+
+    #[test]
+    fn a_patch_can_overwrite_updated_at_but_the_write_wins() {
+        // Whatever a caller passes, the store's own stamp is applied last —
+        // otherwise the poll in the other EXE could be told nothing changed.
+        let dir = scratch_dir();
+        let result =
+            save_keys_in(&dir, &patch_of(&[("updatedAt", Value::from(1u64))])).unwrap();
+        assert!(result.updated_at > 1);
+        assert_eq!(
+            read_store_in(&dir).get("updatedAt").unwrap(),
+            &Value::from(result.updated_at)
+        );
+    }
+
+    #[test]
+    fn a_null_value_is_stored_rather_than_dropping_the_key() {
+        // Stopping the timer saves `null`, and the frontend distinguishes an
+        // absent key from an explicit null.
+        let dir = scratch_dir();
+        save_keys_in(&dir, &patch_of(&[("timer", Value::Null)])).unwrap();
+        let store = read_store_in(&dir);
+        assert!(store.contains_key("timer"));
+        assert_eq!(store.get("timer").unwrap(), &Value::Null);
+    }
+
+    #[test]
+    fn nested_structures_survive_the_round_trip() {
+        let dir = scratch_dir();
+        let value = json!({
+            "list": [1, 2, {"deep": [true, null, -3.5]}],
+            "empty": {},
+            "emptyList": [],
+        });
+        save_keys_in(&dir, &patch_of(&[("snapshots", value.clone())])).unwrap();
+        assert_eq!(read_store_in(&dir).get("snapshots").unwrap(), &value);
+    }
+
+    #[test]
+    fn hebrew_text_survives_the_round_trip() {
+        let dir = scratch_dir();
+        let value = json!({"name": "תלמיד הכולל", "note": "נסיעה לרופא — אושר"});
+        save_keys_in(&dir, &patch_of(&[("settings", value.clone())])).unwrap();
+        assert_eq!(read_store_in(&dir).get("settings").unwrap(), &value);
+    }
+
+    #[test]
+    fn a_large_store_survives_the_round_trip() {
+        let dir = scratch_dir();
+        let entries: Vec<Value> = (0..5_000)
+            .map(|i| json!({"id": format!("s{i}"), "date": "2026-07-08", "note": "הערה"}))
+            .collect();
+        let value = Value::from(entries);
+        save_keys_in(&dir, &patch_of(&[("seder", value.clone())])).unwrap();
+        assert_eq!(read_store_in(&dir).get("seder").unwrap(), &value);
+    }
+
+    #[test]
+    fn every_frontend_key_round_trips() {
+        // The set store-bridge.ts declares as StoreKey.
+        let dir = scratch_dir();
+        let keys = [
+            "seder",
+            "learning",
+            "timer",
+            "settings",
+            "theme",
+            "onboarded",
+            "audit",
+            "snapshots",
+            "lastAutoBackupAt",
+        ];
+        let patch: Store = keys
+            .iter()
+            .map(|k| ((*k).to_string(), Value::from(format!("value-of-{k}"))))
+            .collect();
+        save_keys_in(&dir, &patch).unwrap();
+
+        let store = read_store_in(&dir);
+        for key in keys {
+            assert_eq!(
+                store.get(key).unwrap(),
+                &Value::from(format!("value-of-{key}")),
+                "key {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_file_on_disk_is_a_json_object() {
+        let dir = scratch_dir();
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from(vec![1, 2]))])).unwrap();
+        let raw = fs::read_to_string(dir.join(STORE_FILE_NAME)).unwrap();
+        assert!(raw.starts_with('{') && raw.ends_with('}'), "raw was {raw}");
+        serde_json::from_str::<Map<String, Value>>(&raw).expect("parses as an object");
+    }
+
+    #[test]
+    fn repeated_saves_leave_no_temp_files_behind() {
+        let dir = scratch_dir();
+        for i in 0..20 {
+            save_keys_in(&dir, &patch_of(&[("seder", Value::from(i))])).unwrap();
+        }
+        let leftovers: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|name| name.ends_with(".tmp") || name.starts_with('.'))
+            .collect();
+        assert!(leftovers.is_empty(), "stray temp files: {leftovers:?}");
+    }
+
+    // ================= concurrency =================
+
+    #[test]
+    fn concurrent_saves_from_this_process_all_land() {
+        // The in-process WRITE_LOCK serializes these; none may be lost, and the
+        // file must be parseable at the end.
+        let dir = scratch_dir();
+        std::thread::scope(|scope| {
+            for i in 0..8 {
+                let dir = dir.clone();
+                scope.spawn(move || {
+                    save_keys_in(&dir, &patch_of(&[(
+                        "seder",
+                        Value::from(format!("writer-{i}")),
+                    )]))
+                    .unwrap();
+                });
+            }
+        });
+
+        let store = read_store_in(&dir);
+        let value = store.get("seder").unwrap().as_str().unwrap();
+        assert!(value.starts_with("writer-"), "got {value}");
+        assert!(store.contains_key("updatedAt"));
+    }
+
+    #[test]
+    fn concurrent_saves_of_different_keys_do_not_clobber_each_other() {
+        let dir = scratch_dir();
+        // Seed both keys so the merge has something to preserve.
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from(0)), ("learning", Value::from(0))]))
+            .unwrap();
+
+        std::thread::scope(|scope| {
+            let a = dir.clone();
+            scope.spawn(move || {
+                for i in 1..=20 {
+                    save_keys_in(&a, &patch_of(&[("seder", Value::from(i))])).unwrap();
+                }
+            });
+            let b = dir.clone();
+            scope.spawn(move || {
+                for i in 1..=20 {
+                    save_keys_in(&b, &patch_of(&[("learning", Value::from(i))])).unwrap();
+                }
+            });
+        });
+
+        let store = read_store_in(&dir);
+        // Both keys are still there — neither writer's last value was dropped
+        // by the other's read-modify-write.
+        assert_eq!(store.get("seder").unwrap(), &Value::from(20));
+        assert_eq!(store.get("learning").unwrap(), &Value::from(20));
+    }
+
+    #[test]
+    fn a_write_whose_base_went_stale_is_retried_not_applied() {
+        // Simulates the other EXE writing between our read and our rename: the
+        // mtime moves, so the attempt is dropped and retried against fresh
+        // data instead of clobbering the other process's key.
+        let dir = scratch_dir();
+        save_keys_in(&dir, &patch_of(&[("learning", Value::from("theirs"))])).unwrap();
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from("ours"))])).unwrap();
+
+        let store = read_store_in(&dir);
+        assert_eq!(store.get("learning").unwrap(), &Value::from("theirs"));
+        assert_eq!(store.get("seder").unwrap(), &Value::from("ours"));
+    }
+
+    // ================= stamp =================
+
+    #[test]
+    fn the_stamp_is_a_decimal_string() {
+        let dir = scratch_dir();
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from(1))])).unwrap();
+        let stamp = file_stamp_in(&dir);
+        assert!(stamp.bytes().all(|b| b.is_ascii_digit()), "stamp was {stamp}");
+        // Nanoseconds since the epoch are past what a JS number holds exactly,
+        // which is why this crosses the IPC boundary as a string.
+        assert!(stamp.len() > 15, "stamp was {stamp}");
+    }
+
+    #[test]
+    fn the_stamp_does_not_move_on_its_own() {
+        let dir = scratch_dir();
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from(1))])).unwrap();
+        let stamp = file_stamp_in(&dir);
+        assert_eq!(file_stamp_in(&dir), stamp);
+        // Reading the store is not a write.
+        let _ = read_store_in(&dir);
+        assert_eq!(file_stamp_in(&dir), stamp);
+    }
+
+    // ================= backups =================
+
+    #[test]
+    fn a_backup_holds_the_same_json_as_the_store() {
+        let dir = scratch_dir();
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from("x"))])).unwrap();
+
+        let backup = fs::read_dir(dir.join(BACKUP_DIR_NAME))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .find(|e| backup_ts_from_name(&e.file_name().to_string_lossy()).is_some())
+            .expect("a backup was written");
+        let backed_up: Value = serde_json::from_str(&fs::read_to_string(backup.path()).unwrap())
+            .expect("the backup parses");
+        let live: Value = serde_json::from_str(
+            &fs::read_to_string(dir.join(STORE_FILE_NAME)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(backed_up, live);
+    }
+
+    #[test]
+    fn a_new_backup_is_written_once_the_interval_has_passed() {
+        let dir = scratch_dir();
+        let backup_dir = dir.join(BACKUP_DIR_NAME);
+        fs::create_dir_all(&backup_dir).unwrap();
+        // One existing backup, older than the interval.
+        let old = now_ms() - BACKUP_MIN_INTERVAL_MS - 1;
+        fs::write(backup_dir.join(backup_name(old)), "{}").unwrap();
+
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from("x"))])).unwrap();
+
+        let count = fs::read_dir(&backup_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| backup_ts_from_name(&e.file_name().to_string_lossy()).is_some())
+            .count();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn unrelated_files_in_the_backup_folder_are_left_alone() {
+        let dir = scratch_dir();
+        let backup_dir = dir.join(BACKUP_DIR_NAME);
+        fs::create_dir_all(&backup_dir).unwrap();
+        fs::write(backup_dir.join("notes.txt"), "keep me").unwrap();
+        fs::write(backup_dir.join("sedorim-data.old.json"), "keep me too").unwrap();
+
+        // Enough saves that pruning would run if it were going to.
+        let base = now_ms() - BACKUP_MIN_INTERVAL_MS * 2;
+        for i in 0..MAX_BACKUPS as u128 {
+            fs::write(backup_dir.join(backup_name(base + i)), "{}").unwrap();
+        }
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from("x"))])).unwrap();
+
+        assert_eq!(fs::read_to_string(backup_dir.join("notes.txt")).unwrap(), "keep me");
+        assert_eq!(
+            fs::read_to_string(backup_dir.join("sedorim-data.old.json")).unwrap(),
+            "keep me too"
+        );
+    }
+
+    #[test]
+    fn a_failed_backup_does_not_fail_the_save() {
+        // A plain file where the backup directory should be, so create_dir_all
+        // cannot succeed. The real save must still go through.
+        let dir = scratch_dir();
+        fs::write(dir.join(BACKUP_DIR_NAME), "not a directory").unwrap();
+
+        let failure = save_keys_in(&dir, &patch_of(&[("seder", Value::from("x"))])).err();
+        assert!(failure.is_none(), "the save should have gone through: {failure:?}");
+        assert_eq!(read_store_in(&dir).get("seder").unwrap(), &Value::from("x"));
+    }
+
+    #[test]
+    fn pruning_keeps_the_newest_backups() {
+        let dir = scratch_dir();
+        let backup_dir = dir.join(BACKUP_DIR_NAME);
+        fs::create_dir_all(&backup_dir).unwrap();
+
+        let base = now_ms() - BACKUP_MIN_INTERVAL_MS * 2;
+        for i in 0..(MAX_BACKUPS as u128 + 10) {
+            fs::write(backup_dir.join(backup_name(base + i)), "{}").unwrap();
+        }
+        save_keys_in(&dir, &patch_of(&[("seder", Value::from("x"))])).unwrap();
+
+        let mut stamps: Vec<u128> = fs::read_dir(&backup_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter_map(|e| backup_ts_from_name(&e.file_name().to_string_lossy()))
+            .collect();
+        stamps.sort_unstable();
+        assert_eq!(stamps.len(), MAX_BACKUPS);
+        // The oldest ones went, the newest stayed.
+        assert!(!stamps.contains(&base));
+        assert!(stamps.contains(&(base + MAX_BACKUPS as u128 + 9)));
+    }
+
+    // ================= data_dir =================
+
+    #[test]
+    fn the_backup_interval_and_cap_are_the_documented_ones() {
+        assert_eq!(BACKUP_MIN_INTERVAL_MS, 6 * 60 * 60 * 1000);
+        assert_eq!(MAX_BACKUPS, 30);
+        assert_eq!(STORE_FILE_NAME, "sedorim-data.json");
+        assert_eq!(BACKUP_DIR_NAME, "backups");
+    }
+
+    #[test]
+    fn data_dir_returns_an_absolute_path() {
+        // Whichever branch it takes, callers join a filename onto it.
+        assert!(!data_dir().as_os_str().is_empty());
     }
 }

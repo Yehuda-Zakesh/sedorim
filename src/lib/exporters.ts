@@ -4,7 +4,7 @@ import jsPDF from "jspdf";
 import { logAudit } from "./audit-store";
 import { saveBinaryFile } from "./save-file";
 import {
-  type SederEntry, type LearningEntry,
+  type SederEntry, type LearningEntry, type MonthClosing,
   calcSeder, monthlySummary, attendanceScore, FRAMEWORK_LABELS,
 } from "./kollel-store";
 import { formatHebrewDate } from "./hebrew-calendar";
@@ -32,6 +32,55 @@ function fmtMin(m: number): string {
 
 function inRange(d: string, range?: { from: string; to: string }) {
   return (!range?.from || d >= range.from) && (!range?.to || d <= range.to);
+}
+
+// Shared print shell for every PDF this module produces: fixed 794px (A4 at
+// 96dpi) so html2canvas rasterizes at a predictable page width.
+function reportShell(title: string, subtitle: string, body: string): string {
+  return `
+<div id="__report" dir="rtl" lang="he" style="
+  width:794px; padding:40px; background:#fff; color:#1a1a1a;
+  font-family: 'Heebo', 'Segoe UI', Arial, sans-serif;">
+  <style>
+    #__report h1 { font-size:28px; margin:0 0 4px; color:#1E3A5F; }
+    #__report .sub { color:#5a6478; margin-bottom:24px; font-size:13px; }
+    #__report .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+    #__report .kpi { border:1px solid #e1e6ee; border-radius:10px; padding:14px; background:#f7f9fc; }
+    #__report .kpi-label { font-size:11px; color:#5a6478; }
+    #__report .kpi-val { font-size:24px; font-weight:700; color:#1565C0; margin-top:6px; }
+    #__report .card { border:1px solid #e1e6ee; border-radius:12px; padding:18px; margin-bottom:16px; background:#fff; }
+    #__report .card h3 { margin:0 0 12px; font-size:15px; color:#1E3A5F; border-bottom:1px solid #eef2f7; padding-bottom:8px; }
+    #__report table { width:100%; border-collapse:collapse; font-size:12px; }
+    #__report th, #__report td { padding:7px 10px; text-align:right; border-bottom:1px solid #eef2f7; }
+    #__report th { background:#f7f9fc; font-weight:600; color:#3a4761; }
+    #__report table.compact { font-size:11px; }
+    #__report table.compact th, #__report table.compact td { padding:6px 5px; }
+    #__report tr.total td { background:#f7f9fc; font-weight:700; border-top:2px solid #c8d3e4; }
+    #__report .bars { display:flex; flex-direction:column; gap:8px; }
+    #__report .bar-row { display:grid; grid-template-columns: 130px 1fr 50px; align-items:center; gap:10px; font-size:12px; }
+    #__report .bar { height:14px; background:#eef2f7; border-radius:7px; overflow:hidden; }
+    #__report .bar-fill { height:100%; border-radius:7px; }
+    #__report .muted { color:#5a6478; font-size:11px; margin-top:8px; }
+    #__report .footer { margin-top:24px; padding-top:12px; border-top:1px solid #eef2f7; color:#5a6478; font-size:10px; display:flex; justify-content:space-between; }
+    #__report ul { margin:0; padding-right:18px; font-size:12px; }
+    #__report ul li { margin:4px 0; }
+  </style>
+
+  <header style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid #1565C0; padding-bottom:14px; margin-bottom:20px;">
+    <div>
+      <h1>${title}</h1>
+      <div class="sub">${subtitle}</div>
+    </div>
+    <div style="text-align:left; color:#1E3A5F; font-weight:700;">המעקב שלי · כולל</div>
+  </header>
+
+  ${body}
+
+  <div class="footer">
+    <span>דוח אישי — מסמך פנימי</span>
+    <span>הופק אוטומטית · המעקב שלי</span>
+  </div>
+</div>`;
 }
 
 function buildReportHTML(
@@ -173,68 +222,25 @@ function buildReportHTML(
     </section>
   `;
 
-  return `
-<div id="__report" dir="rtl" lang="he" style="
-  width:794px; padding:40px; background:#fff; color:#1a1a1a;
-  font-family: 'Heebo', 'Segoe UI', Arial, sans-serif;">
-  <style>
-    #__report h1 { font-size:28px; margin:0 0 4px; color:#1E3A5F; }
-    #__report .sub { color:#5a6478; margin-bottom:24px; font-size:13px; }
-    #__report .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
-    #__report .kpi { border:1px solid #e1e6ee; border-radius:10px; padding:14px; background:#f7f9fc; }
-    #__report .kpi-label { font-size:11px; color:#5a6478; }
-    #__report .kpi-val { font-size:24px; font-weight:700; color:#1565C0; margin-top:6px; }
-    #__report .card { border:1px solid #e1e6ee; border-radius:12px; padding:18px; margin-bottom:16px; background:#fff; }
-    #__report .card h3 { margin:0 0 12px; font-size:15px; color:#1E3A5F; border-bottom:1px solid #eef2f7; padding-bottom:8px; }
-    #__report table { width:100%; border-collapse:collapse; font-size:12px; }
-    #__report th, #__report td { padding:7px 10px; text-align:right; border-bottom:1px solid #eef2f7; }
-    #__report th { background:#f7f9fc; font-weight:600; color:#3a4761; }
-    #__report .bars { display:flex; flex-direction:column; gap:8px; }
-    #__report .bar-row { display:grid; grid-template-columns: 130px 1fr 50px; align-items:center; gap:10px; font-size:12px; }
-    #__report .bar { height:14px; background:#eef2f7; border-radius:7px; overflow:hidden; }
-    #__report .bar-fill { height:100%; border-radius:7px; }
-    #__report .muted { color:#5a6478; font-size:11px; margin-top:8px; }
-    #__report .footer { margin-top:24px; padding-top:12px; border-top:1px solid #eef2f7; color:#5a6478; font-size:10px; display:flex; justify-content:space-between; }
-    #__report ul { margin:0; padding-right:18px; font-size:12px; }
-    #__report ul li { margin:4px 0; }
-  </style>
-
-  <header style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid #1565C0; padding-bottom:14px; margin-bottom:20px;">
-    <div>
-      <h1>${title}</h1>
-      <div class="sub">${range ? `טווח: ${range.from} → ${range.to}` : ""} · הופק ${heDate}</div>
-    </div>
-    <div style="text-align:left; color:#1E3A5F; font-weight:700;">המעקב שלי · כולל</div>
-  </header>
-
-  ${kpiHtml}
+  return reportShell(
+    title,
+    `${range ? `טווח: ${range.from} → ${range.to}` : ""} · הופק ${heDate}`,
+    `${kpiHtml}
   ${chartHtml}
   ${yearlyHtml}
   ${monthTableHtml}
   ${excusedHtml}
   ${oheveiHtml}
-  ${learnHtml}
-
-  <div class="footer">
-    <span>דוח אישי — מסמך פנימי</span>
-    <span>הופק אוטומטית · המעקב שלי</span>
-  </div>
-</div>`;
+  ${learnHtml}`,
+  );
 }
 
-/** Resolves false when the user cancels the save dialog. */
-export async function exportPdfReport(opts: {
-  title: string;
-  entries: SederEntry[];
-  lessons: LearningEntry[];
-  sections?: ReportSections;
-  range?: { from: string; to: string };
-  filename?: string;
-}): Promise<boolean> {
-  const sections = opts.sections ?? DEFAULT_SECTIONS;
-  const html = buildReportHTML(opts.title, opts.entries, opts.lessons, sections, opts.range);
-  const fname = opts.filename || `${opts.title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}`;
-
+/**
+ * Rasterizes report HTML (a #__report block from reportShell) into a paginated
+ * A4 PDF and hands the bytes to the native save dialog.
+ * Resolves false when the user cancels that dialog.
+ */
+async function renderHtmlToPdf(html: string, fname: string): Promise<boolean> {
   // Render the report HTML into a hidden off-screen container in the current
   // page, rasterize it with html2canvas (splits across A4 pages), and write a
   // real PDF file with jsPDF. No new window, no print dialog. Fonts are
@@ -302,12 +308,125 @@ export async function exportPdfReport(opts: {
     // Not pdf.save(): that builds an <a download>, which does nothing inside
     // a WebView. Hand the bytes to the native save dialog instead.
     const bytes = new Uint8Array(pdf.output("arraybuffer") as ArrayBuffer);
-    if (!(await saveBinaryFile(`${fname}.pdf`, bytes))) return false; // cancelled
-    logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
-    return true;
+    return await saveBinaryFile(`${fname}.pdf`, bytes); // false = cancelled
   } finally {
     host.remove();
   }
+}
+
+function defaultPdfName(title: string): string {
+  return `${title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}`;
+}
+
+/** Resolves false when the user cancels the save dialog. */
+export async function exportPdfReport(opts: {
+  title: string;
+  entries: SederEntry[];
+  lessons: LearningEntry[];
+  sections?: ReportSections;
+  range?: { from: string; to: string };
+  filename?: string;
+}): Promise<boolean> {
+  const sections = opts.sections ?? DEFAULT_SECTIONS;
+  const html = buildReportHTML(opts.title, opts.entries, opts.lessons, sections, opts.range);
+  const fname = opts.filename || defaultPdfName(opts.title);
+  if (!(await renderHtmlToPdf(html, fname))) return false;
+  logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
+  return true;
+}
+
+function closingKpiHtml(c: MonthClosing): string {
+  const kpi = (label: string, value: string | number) =>
+    `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-val">${value}</div></div>`;
+  return `
+    <section class="card">
+      <h3>${c.gregorianLabel} · ${c.hebrewLabel}${c.closed ? "" : " — סיכום ביניים (החודש טרם הסתיים)"}</h3>
+      <div class="grid">
+        ${kpi("סה״כ דקות", c.seder.totalMissing)}
+        ${kpi("מתוכן מוצדקות", c.seder.excused)}
+        ${kpi("סדרי אוהבי ה׳", c.seder.oheveiCount)}
+        ${kpi("איחורים", c.seder.lateCount)}
+        ${kpi("חיסורים", c.seder.absenceCount)}
+        ${kpi("דקות כולל ערב", c.learning.kollelErev)}
+        ${kpi("דקות תורתו בידו", c.learning.toratoBeyado)}
+        ${kpi("חסר נטו", c.seder.netMissing)}
+      </div>
+      <p class="muted">${c.seder.entries} רישומי סדר · בונוס ${c.seder.bonus} דק׳ · לא מוצדק ${c.seder.nonExcused} דק׳${
+        c.learning.kollelErev !== c.learning.kollelErevRaw
+          ? ` · כולל ערב בפועל ${c.learning.kollelErevRaw} דק׳ (תענית דיבור נספרת כפול)`
+          : ""
+      }</p>
+    </section>`;
+}
+
+function closingTableHtml(closings: MonthClosing[]): string {
+  const t = closings.reduce((a, c) => ({
+    entries: a.entries + c.seder.entries,
+    totalMissing: a.totalMissing + c.seder.totalMissing,
+    excused: a.excused + c.seder.excused,
+    bonus: a.bonus + c.seder.bonus,
+    netMissing: a.netMissing + c.seder.netMissing,
+    ohevei: a.ohevei + c.seder.oheveiCount,
+    late: a.late + c.seder.lateCount,
+    absent: a.absent + c.seder.absenceCount,
+    erev: a.erev + c.learning.kollelErev,
+    torato: a.torato + c.learning.toratoBeyado,
+  }), { entries: 0, totalMissing: 0, excused: 0, bonus: 0, netMissing: 0, ohevei: 0, late: 0, absent: 0, erev: 0, torato: 0 });
+
+  return `
+    <section class="card">
+      <h3>שורות סיכום חודשי</h3>
+      <table class="compact">
+        <thead><tr>
+          <th>חודש</th><th>רישומים</th><th>סה״כ דקות</th><th>מוצדקות</th><th>בונוס</th><th>חסר נטו</th>
+          <th>אוהבי ה׳</th><th>איחורים</th><th>חיסורים</th><th>כולל ערב</th><th>תורתו בידו</th>
+        </tr></thead>
+        <tbody>
+          ${closings.map((c) => `<tr>
+            <td>${c.gregorianLabel}<br><span class="muted">${c.hebrewLabel}${c.closed ? "" : " · פתוח"}</span></td>
+            <td>${c.seder.entries}</td>
+            <td>${c.seder.totalMissing}</td>
+            <td>${c.seder.excused}</td>
+            <td>${c.seder.bonus}</td>
+            <td>${c.seder.netMissing}</td>
+            <td>${c.seder.oheveiCount}</td>
+            <td>${c.seder.lateCount}</td>
+            <td>${c.seder.absenceCount}</td>
+            <td>${c.learning.kollelErev}</td>
+            <td>${c.learning.toratoBeyado}</td>
+          </tr>`).join("")}
+          <tr class="total">
+            <td>סה״כ (${closings.length} חודשים)</td>
+            <td>${t.entries}</td><td>${t.totalMissing}</td><td>${t.excused}</td><td>${t.bonus}</td>
+            <td>${t.netMissing}</td><td>${t.ohevei}</td><td>${t.late}</td><td>${t.absent}</td>
+            <td>${t.erev}</td><td>${t.torato}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted">דקות כולל ערב ותורתו בידו — דקות אפקטיביות, כאשר לימוד בתענית דיבור נספר כפול.</p>
+    </section>`;
+}
+
+/**
+ * Monthly closing lines only — no per-seder detail. One month renders as a KPI
+ * card, several render as one summary row each plus a totals row.
+ * Resolves false when the user cancels the save dialog.
+ */
+export async function exportMonthClosingsPdf(opts: {
+  closings: MonthClosing[];
+  title?: string;
+  filename?: string;
+}): Promise<boolean> {
+  const { closings } = opts;
+  if (!closings.length) return false;
+  const single = closings.length === 1;
+  const title = opts.title || (single ? `סיכום חודש ${closings[0].gregorianLabel}` : "סיכומי חודשים");
+  const body = single ? closingKpiHtml(closings[0]) : closingTableHtml(closings);
+  const html = reportShell(title, `נעילת חודש · הופק ${formatHebrewDate(new Date())}`, body);
+  const fname = opts.filename || defaultPdfName(title);
+  if (!(await renderHtmlToPdf(html, fname))) return false;
+  logAudit("report.export", { detail: `PDF · ${title}`, newValue: { filename: fname, months: closings.map((c) => c.monthKey) } });
+  return true;
 }
 
 /** Resolves false when the user cancels the save dialog. */

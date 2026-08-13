@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { logAudit } from "./audit-store";
 import { getSettings, getSederTimesFor } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
-import { isLearningDay } from "./hebrew-calendar";
+import { isLearningDay, hebrewFromGregorian, hebrewMonthName, hebrewYearLetters, formatHebrewMonthYear } from "./hebrew-calendar";
 import { loadStore, saveStoreKey, saveStoreKeys, storeStamp } from "./store-bridge";
 export type SederNum = 1 | 2;
 export type LearningFramework = "kollel-erev" | "torato-beyado" | "bein-hazmanim";
@@ -477,8 +477,7 @@ export type MonthlySummary = {
   netMissing: number;
 };
 
-export function monthlySummary(year: number, monthIdx: number): MonthlySummary {
-  const list = entriesInMonth(sederEntries, year, monthIdx);
+export function summarizeEntries(list: SederEntry[]): MonthlySummary {
   const out: MonthlySummary = {
     totalMissing: 0, excused: 0, nonExcused: 0, bonus: 0,
     lateCount: 0, absenceCount: 0, earlyDepCount: 0, oheveiCount: 0,
@@ -495,6 +494,87 @@ export function monthlySummary(year: number, monthIdx: number): MonthlySummary {
     if (c.isLate) out.lateCount++;
     if (c.isEarlyDeparture) out.earlyDepCount++;
     if (c.isOhevei) out.oheveiCount++;
+  }
+  return out;
+}
+
+export function monthlySummary(year: number, monthIdx: number): MonthlySummary {
+  return summarizeEntries(entriesInMonth(sederEntries, year, monthIdx));
+}
+
+// ============ Monthly closing (נעילת חודש) ============
+// A per-month closing line: the seder totals for the month plus the extra
+// learning minutes logged in it. Built from whatever list is handed in, so the
+// History screen can close each month over exactly the rows it displays.
+
+const GREGORIAN_MONTHS_HE = [
+  "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
+  "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר",
+];
+
+export type MonthLearningTotals = {
+  kollelErev: number;        // דקות אפקטיביות (תענית דיבור נספרת כפול)
+  kollelErevRaw: number;     // דקות בפועל, לפני הכפלה
+  toratoBeyado: number;
+  beinHazmanim: number;
+};
+
+export type MonthClosing = {
+  monthKey: string;          // YYYY-MM
+  gregorianLabel: string;    // "אוגוסט 2026"
+  hebrewLabel: string;       // "תמוז–אב תשפ״ו"
+  closed: boolean;           // האם החודש הסתיים (אחרת: סיכום ביניים)
+  seder: MonthlySummary;
+  learning: MonthLearningTotals;
+};
+
+// "אב תשפ״ו" for a Gregorian month fully inside one Hebrew month, otherwise
+// the two-month span it straddles ("תמוז–אב תשפ״ו").
+function hebrewMonthLabelFor(year: number, monthIdx: number): string {
+  const first = hebrewFromGregorian(new Date(year, monthIdx, 1));
+  const last = hebrewFromGregorian(new Date(year, monthIdx + 1, 0));
+  if (first.month === last.month && first.year === last.year) return formatHebrewMonthYear(first);
+  const a = hebrewMonthName(first.month, first.year);
+  const b = hebrewMonthName(last.month, last.year);
+  if (first.year !== last.year) {
+    return `${a} ${hebrewYearLetters(first.year)}–${b} ${hebrewYearLetters(last.year)}`;
+  }
+  return `${a}–${b} ${hebrewYearLetters(last.year)}`;
+}
+
+export function monthClosing(monthKey: string, entries: SederEntry[], lessons: LearningEntry[]): MonthClosing {
+  const [year, month] = monthKey.split("-").map(Number);
+  const monthIdx = month - 1;
+  const learning: MonthLearningTotals = { kollelErev: 0, kollelErevRaw: 0, toratoBeyado: 0, beinHazmanim: 0 };
+  for (const l of lessons) {
+    if (!l.date.startsWith(monthKey)) continue;
+    const eff = effectiveLearningMin(l);
+    if (l.framework === "kollel-erev") { learning.kollelErev += eff; learning.kollelErevRaw += l.minutes; }
+    else if (l.framework === "torato-beyado") learning.toratoBeyado += eff;
+    else learning.beinHazmanim += eff;
+  }
+  // Closed once the last day of the month has passed.
+  const lastDay = new Date(year, monthIdx + 1, 0);
+  const closed = lastDay.getTime() < new Date(new Date().toDateString()).getTime();
+  return {
+    monthKey,
+    gregorianLabel: `${GREGORIAN_MONTHS_HE[monthIdx] ?? monthKey} ${year}`,
+    hebrewLabel: hebrewMonthLabelFor(year, monthIdx),
+    closed,
+    seder: summarizeEntries(entries.filter((e) => e.date.startsWith(monthKey))),
+    learning,
+  };
+}
+
+/** Groups seder entries by calendar month, preserving the order they arrive in. */
+export function groupEntriesByMonth(list: SederEntry[]): { monthKey: string; items: SederEntry[] }[] {
+  const out: { monthKey: string; items: SederEntry[] }[] = [];
+  const index = new Map<string, SederEntry[]>();
+  for (const e of list) {
+    const key = e.date.slice(0, 7);
+    let bucket = index.get(key);
+    if (!bucket) { bucket = []; index.set(key, bucket); out.push({ monthKey: key, items: bucket }); }
+    bucket.push(e);
   }
   return out;
 }

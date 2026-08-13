@@ -1,8 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Search, Trash2, History as HistoryIcon, CalendarDays, BookOpen } from "lucide-react";
-import { useSeder, useLearning, calcSeder, monthlySummary, FRAMEWORK_LABELS } from "@/lib/kollel-store";
+import { Search, Trash2, History as HistoryIcon, CalendarDays, BookOpen, FileDown, Loader2, Lock, LockOpen } from "lucide-react";
+import {
+  useSeder, useLearning, calcSeder, monthlySummary, monthClosing, groupEntriesByMonth,
+  FRAMEWORK_LABELS, type MonthClosing,
+} from "@/lib/kollel-store";
+import { exportMonthClosingsPdf } from "@/lib/exporters";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
 import { toast } from "sonner";
 import { CalendarView } from "./calendar";
@@ -24,6 +28,7 @@ function HistoryPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [excusedFilter, setExcusedFilter] = useState<ExcusedFilter>("all");
   const [month, setMonth] = useState("");
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
 
   const filtered = entries.filter((e) => {
     if (sederFilter !== "all" && String(e.seder) !== sederFilter) return false;
@@ -42,6 +47,21 @@ function HistoryPage() {
 
   const now = new Date();
   const summary = monthlySummary(now.getFullYear(), now.getMonth());
+
+  // Each month gets closed at its end with a summary row under its rows. The
+  // closing is computed over the *displayed* rows so the numbers always add up
+  // to what's on screen, even with filters active.
+  const monthGroups = groupEntriesByMonth(filtered)
+    .map((g) => ({ ...g, closing: monthClosing(g.monthKey, g.items, learning.items) }));
+
+  const exportClosings = async (closings: MonthClosing[], busyKey: string) => {
+    setPdfBusy(busyKey);
+    try {
+      // False means the save dialog was cancelled, not that anything failed.
+      if (await exportMonthClosingsPdf({ closings })) toast.success("הסיכום יוצא ל-PDF");
+    } catch (e) { toast.error("הייצוא נכשל"); console.error(e); }
+    finally { setPdfBusy(null); }
+  };
 
   return (
     <AppShell title="היסטוריה" subtitle={`${entries.length} רישומים סה״כ`}>
@@ -98,6 +118,18 @@ function HistoryPage() {
         </div>
       </div>
 
+      {monthGroups.length > 1 && (
+        <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span>{monthGroups.length} חודשים · שורת סיכום בסיום כל חודש</span>
+          <button onClick={() => exportClosings(monthGroups.map((g) => g.closing), "__all")}
+            disabled={pdfBusy !== null}
+            className="inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-1.5 font-medium text-foreground hover:bg-accent disabled:opacity-50">
+            {pdfBusy === "__all" ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />}
+            ייצוא שורות הסיכום ל-PDF
+          </button>
+        </div>
+      )}
+
       <div className="card-surface overflow-x-auto">
         <table className="w-full text-sm min-w-[800px]">
           <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -114,32 +146,58 @@ function HistoryPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((e) => {
-              const c = calcSeder(e);
-              const tags: string[] = [];
-              if (e.absent) tags.push("היעדרות");
-              if (c.isLate) tags.push("איחור");
-              if (c.isEarlyDeparture) tags.push("יצא מוקדם");
-              if (c.isOhevei) tags.push("אוהבי ה׳");
-              return (
-                <tr key={e.id} className="border-t border-border hover:bg-accent/40">
-                  <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(e.date))}>{e.date}</td>
-                  <td className="px-3 py-3">{e.seder === 1 ? "א׳" : "ב׳"}</td>
-                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.arrival || "—")}</td>
-                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.departure || "—")}</td>
-                  <td className="px-3 py-3 tabular-nums">{c.netMissingMin}</td>
-                  <td className="px-3 py-3 tabular-nums">{c.bonusMin}</td>
-                  <td className="px-3 py-3 tabular-nums">{c.excusedMin}</td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground">{tags.join(", ") || "מלא"}</td>
-                  <td className="px-3 py-3">
-                    <button onClick={() => { remove(e.id); toast("נמחק"); }}
-                      className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
-                      <Trash2 className="size-3.5" />
-                    </button>
+            {monthGroups.map((g) => (
+              <Fragment key={g.monthKey}>
+                <tr className="border-t border-border bg-muted/40">
+                  <td colSpan={9} className="px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs font-semibold">
+                      {g.closing.closed
+                        ? <Lock className="size-3 text-muted-foreground" />
+                        : <LockOpen className="size-3 text-primary" />}
+                      {g.closing.gregorianLabel}
+                      <span className="font-normal text-muted-foreground">· {g.closing.hebrewLabel}</span>
+                      {!g.closing.closed && (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">חודש פתוח</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
-              );
-            })}
+
+                {g.items.map((e) => {
+                  const c = calcSeder(e);
+                  const tags: string[] = [];
+                  if (e.absent) tags.push("היעדרות");
+                  if (c.isLate) tags.push("איחור");
+                  if (c.isEarlyDeparture) tags.push("יצא מוקדם");
+                  if (c.isOhevei) tags.push("אוהבי ה׳");
+                  return (
+                    <tr key={e.id} className="border-t border-border hover:bg-accent/40">
+                      <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(e.date))}>{e.date}</td>
+                      <td className="px-3 py-3">{e.seder === 1 ? "א׳" : "ב׳"}</td>
+                      <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.arrival || "—")}</td>
+                      <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.departure || "—")}</td>
+                      <td className="px-3 py-3 tabular-nums">{c.netMissingMin}</td>
+                      <td className="px-3 py-3 tabular-nums">{c.bonusMin}</td>
+                      <td className="px-3 py-3 tabular-nums">{c.excusedMin}</td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground">{tags.join(", ") || "מלא"}</td>
+                      <td className="px-3 py-3">
+                        <button onClick={() => { remove(e.id); toast("נמחק"); }}
+                          className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                <MonthClosingRow
+                  closing={g.closing}
+                  busy={pdfBusy === g.monthKey}
+                  disabled={pdfBusy !== null}
+                  onExport={() => exportClosings([g.closing], g.monthKey)}
+                />
+              </Fragment>
+            ))}
           </tbody>
         </table>
         {!filtered.length && <div className="p-10 text-center text-sm text-muted-foreground">לא נמצאו רישומים</div>}
@@ -161,6 +219,53 @@ function HistoryPage() {
       </>
       )}
     </AppShell>
+  );
+}
+
+// Closing line for one month: the seder totals plus the extra-learning minutes
+// logged in it, with a PDF export of this summary alone.
+function MonthClosingRow({ closing, busy, disabled, onExport }: {
+  closing: MonthClosing;
+  busy: boolean;
+  disabled: boolean;
+  onExport: () => void;
+}) {
+  const { seder, learning } = closing;
+  const erevTitle = learning.kollelErev !== learning.kollelErevRaw
+    ? `${learning.kollelErevRaw} דק׳ בפועל · תענית דיבור נספרת כפול`
+    : undefined;
+  return (
+    <tr className="border-t-2 border-primary/40 bg-primary/5">
+      <td colSpan={9} className="px-3 py-3">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <span className="text-xs font-semibold">
+            {closing.closed ? "סיכום חודש" : "סיכום עד כה"} — {closing.gregorianLabel}
+          </span>
+          <ClosingStat label="סה״כ דקות" value={seder.totalMissing} />
+          <ClosingStat label="מוצדקות" value={seder.excused} />
+          <ClosingStat label="אוהבי ה׳" value={seder.oheveiCount} />
+          <ClosingStat label="איחורים" value={seder.lateCount} />
+          <ClosingStat label="חיסורים" value={seder.absenceCount} />
+          <ClosingStat label="כולל ערב" value={learning.kollelErev} title={erevTitle} />
+          <ClosingStat label="תורתו בידו" value={learning.toratoBeyado} />
+          <button onClick={onExport} disabled={disabled}
+            title="ייצוא שורת הסיכום של החודש ל-PDF"
+            className="ms-auto inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50">
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />}
+            PDF
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function ClosingStat({ label, value, title }: { label: string; value: number; title?: string }) {
+  return (
+    <span className="flex items-baseline gap-1.5 text-xs" title={title}>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-sm font-bold tabular-nums">{value}</span>
+    </span>
   );
 }
 

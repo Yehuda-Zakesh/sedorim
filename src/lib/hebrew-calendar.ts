@@ -3,7 +3,17 @@
 // Month numbering: 1=Nisan, 2=Iyar, 3=Sivan, 4=Tammuz, 5=Av, 6=Elul,
 // 7=Tishrei, 8=Cheshvan, 9=Kislev, 10=Tevet, 11=Shvat, 12=Adar (or Adar I in leap), 13=Adar II.
 
-const HEBREW_EPOCH = -1373427; // R.D. of 1 Tishri 1 A.M.
+// R.D. of 1 Tishri 1 A.M.
+//
+// -1373427 is the constant R/D publish alongside *their* elapsed-days routine,
+// which returns the molad-corrected day count on its own. The variant used
+// here (elapsedDays below, the Emacs-calendar formulation) already folds the
+// dehiyyot into its own return value with a different origin, so pairing it
+// with the published epoch put every Hebrew date one day late — which showed
+// up as Rosh Hashanah landing on Sunday/Wednesday/Friday (לא אד״ו ראש) in
+// 145 of 201 years. With this value the two agree on every day from 1950 to
+// 2090; hebrew-calendar.test.ts pins that down.
+const HEBREW_EPOCH = -1373428;
 
 const mod = (a: number, b: number) => ((a % b) + b) % b;
 const quot = (a: number, b: number) => Math.floor(a / b);

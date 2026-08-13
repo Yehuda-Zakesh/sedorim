@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rust": "cargo test --manifest-path src-tauri/core/Cargo.toml",
+    "test:all": "vitest run && cargo test --manifest-path src-tauri/core/Cargo.toml",
     "format": "prettier --write .",
     "exe": "node scripts/build-exes.mjs"
   },

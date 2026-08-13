@@ -218,8 +218,12 @@ const onboarded = sharedValue<boolean>({
   key: "onboarded",
   legacyKey: LEGACY_ONBOARD_KEY,
   fallback: false,
-  // The legacy key held the bare string "1".
-  parse: (raw) => raw === true || raw === "1",
+  // The legacy key held the bare string "1" — which readLegacy in
+  // shared-state.ts hands over as the *number* 1, since "1" happens to be
+  // valid JSON and JSON.parse never throws on it. Accept all three forms:
+  // missing the numeric one showed the onboarding wizard a second time to
+  // everyone upgrading from a pre-1.1 build.
+  parse: (raw) => raw === true || raw === "1" || raw === 1,
 });
 
 export function isOnboarded(): boolean { return onboarded.get(); }

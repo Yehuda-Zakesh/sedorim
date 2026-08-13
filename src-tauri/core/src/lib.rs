@@ -166,6 +166,94 @@ fn build_quick_window(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn url(s: &str) -> Url {
+        Url::parse(s).expect("test URL parses")
+    }
+
+    #[test]
+    fn the_apps_own_pages_are_internal() {
+        for s in [
+            "tauri://localhost/index.html",
+            "tauri://localhost/index.html?mode=quick",
+            "ipc://localhost",
+            "asset://localhost/icon.png",
+            "about:blank",
+        ] {
+            assert!(is_internal_url(&url(s)), "{s} should be internal");
+        }
+    }
+
+    #[test]
+    fn generated_content_the_page_makes_itself_is_internal() {
+        // html2canvas and jsPDF both produce these, and the report export would
+        // break if navigating to them were blocked.
+        assert!(is_internal_url(&url("blob:http://localhost/abc-123")));
+        assert!(is_internal_url(&url("data:image/jpeg;base64,AAAA")));
+    }
+
+    #[test]
+    fn the_vite_dev_server_is_internal() {
+        for s in [
+            "http://localhost:5173/",
+            "http://localhost:5173/index.html?mode=quick",
+            "http://127.0.0.1:5173/",
+            "https://tauri.localhost/index.html",
+        ] {
+            assert!(is_internal_url(&url(s)), "{s} should be internal");
+        }
+    }
+
+    #[test]
+    fn remote_sites_are_external() {
+        for s in [
+            "https://github.com/",
+            "https://api.github.com/repos/a/b/releases/latest",
+            "http://example.com/",
+            "https://localhost.evil.com/",
+            "https://evil.com/?q=localhost",
+            "https://notlocalhost/",
+        ] {
+            assert!(!is_internal_url(&url(s)), "{s} should be external");
+        }
+    }
+
+    #[test]
+    fn a_hostname_merely_ending_in_localhost_is_external() {
+        // The check is an exact host match, not a suffix match — otherwise
+        // `tauri.localhost.evil.com` would be trusted.
+        assert!(!is_internal_url(&url("https://tauri.localhost.evil.com/")));
+        assert!(!is_internal_url(&url("https://x-localhost/")));
+    }
+
+    #[test]
+    fn other_schemes_are_external() {
+        // Anything that could hand the OS something to run, or reach a
+        // filesystem path, is refused rather than followed.
+        for s in [
+            "file:///C:/Windows/System32/cmd.exe",
+            "javascript:alert(1)",
+            "vbscript:msgbox",
+            "ms-msdt:/id",
+            "smb://server/share",
+            "ftp://example.com/",
+            "mailto:someone@example.com",
+        ] {
+            assert!(!is_internal_url(&url(s)), "{s} should be external");
+        }
+    }
+
+    #[test]
+    fn ipv6_loopback_is_not_on_the_list() {
+        // Documenting the current rule: only the three literal hosts match, so
+        // a dev server bound to [::1] would be treated as external.
+        assert!(!is_internal_url(&url("http://[::1]:5173/")));
+    }
+}
+
 pub fn run(context: tauri::Context, mode: Mode) {
     tauri::Builder::default()
         // Both plugins are driven from Rust only (save_file_as,
