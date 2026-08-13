@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="he">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Deliberately no <title> here: document.title takes the *first* title
+         element, so a static one would win over the per-route titles that
+         <HeadContent> appends (see src/routes/__root.tsx). The window title
+         comes from src-tauri until React mounts a moment later. -->
+    <meta name="description" content="מערכת לניהול שמירת סדרים ישיבת כתר תורה" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Heebo, same as before. It comes off the network, so offline the app
+         falls back to the next font in --font-sans (Segoe UI). Dropping a
+         local copy into public/fonts/ and swapping this for an @font-face
+         rule would make the Hebrew rendering offline-proof. -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+[package]
+name = "seder-plus-full"
+version = "1.0.3"
+description = "Seder Plus — kollel attendance and learning tracker"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+# The bin name is the EXE name: target/release/SederPlus.exe
+[[bin]]
+name = "SederPlus"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = "2"
+seder-plus-core = { path = "../core" }

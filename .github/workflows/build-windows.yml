@@ -1,22 +1,21 @@
-name: Build Windows EXE
+name: Build Windows EXEs
 
 on:
   push:
     branches: [main]
     paths:
       - "src/**"
-      - "electron/**"
-      - "scripts/package-win.mjs"
+      - "src-tauri/**"
+      - "index.html"
+      - "scripts/build-exes.mjs"
       - "package.json"
       - "package-lock.json"
-      - "patches/**"
-      - "vite.electron.config.ts"
+      - "vite.config.ts"
       - ".github/workflows/build-windows.yml"
   workflow_dispatch: {}
 
 permissions:
   contents: read
-  actions: write   # needed to delete old artifacts from this workflow (see cleanup step below)
 
 jobs:
   build:
@@ -30,34 +29,33 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Rust builds are the slow part of this workflow; without a cache every
+      # run recompiles Tauri and its dependency tree from scratch.
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # `npm install`, not `npm ci`: package-lock.json still carries the old
+      # Electron/TanStack-Start dependency set and needs reconciling. Run
+      # `npm install` locally once and commit the refreshed lock file, then
+      # this can go back to `npm ci`.
       - name: Install dependencies
         run: npm install
 
-      - name: Build + package Windows EXEs
-        run: npm run package:win
+      - name: Build both EXEs
+        run: npm run exe
 
-      - name: Delete previous artifacts from this workflow (keep storage quota free)
-        # Each build produces two full Electron apps (~hundreds of MB), and
-        # the free Actions storage quota is only 500MB — a handful of runs
-        # can exhaust it, which then fails EVERY upload (not just new ones)
-        # until something is deleted, with the quota itself only
-        # recalculating every 6–12h. Only the latest build actually matters
-        # here, so we delete everything older before uploading the new one.
-        shell: bash
-        run: |
-          gh api "repos/${{ github.repository }}/actions/artifacts" --paginate \
-            | jq -r '.artifacts[] | select(.name == "KollelTracker-windows") | .id' \
-            | while read -r id; do
-                echo "Deleting old artifact $id"
-                gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
-              done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload build
+      # The whole build is now two ~10MB files instead of two ~250MB app
+      # folders, so it fits the free artifact quota many times over — no more
+      # deleting previous artifacts just to make room for the next upload.
+      - name: Upload EXEs
         uses: actions/upload-artifact@v4
         with:
-          name: KollelTracker-windows
+          name: SederPlus-windows
           path: release-win
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 30

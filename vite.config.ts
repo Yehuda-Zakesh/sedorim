@@ -1,29 +1,40 @@
-// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
-// or the app will break with duplicate plugins:
-//   - tanstackStart, viteReact, tailwindcss, tsConfigPaths, nitro (build-only using cloudflare as a default target),
-//     componentTagger (dev-only), VITE_* env injection, @ path alias, React/TanStack dedupe,
-//     error logger plugins, and sandbox detection (port/host/strictPort).
-// You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
+// Plain Vite SPA. The output in dist/ is embedded straight into the two EXEs
+// by Tauri (see src-tauri/), so there is no server, no SSR and no Nitro build
+// step any more — the app was already 100% client-side, every route included.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
-    server: { entry: "server" },
+  plugins: [
+    // Must come before the React plugin: it generates src/routeTree.gen.ts
+    // from the files in src/routes.
+    tanstackRouter({ target: "react", autoCodeSplitting: false }),
+    react(),
+    tailwindcss(),
+  ],
+  resolve: {
+    alias: { "@": path.resolve(dirname, "./src") },
   },
-  vite: {
-    resolve: {
-      alias: {
-        // Normal web/Lovable build: real Supabase auth middleware. The
-        // Electron/packaged build (vite.electron.config.ts) points this
-        // same specifier at a no-op stub instead — see src/start.ts.
-        "@sedorim/auth-middleware": path.resolve(dirname, "src/integrations/supabase/auth-attacher.ts"),
-      },
-    },
+  server: {
+    // Fixed, because src-tauri/*/tauri.conf.json points devUrl here.
+    port: 5173,
+    strictPort: true,
+  },
+  build: {
+    // Only ever runs in WebView2 (Edge/Chromium), so there is nothing to gain
+    // from transpiling down to older syntax.
+    target: "chrome110",
+    // The bundle ships inside the EXE and loads off local disk: one chunk is
+    // faster to start than several, and sourcemaps would only bloat the
+    // binary.
+    sourcemap: false,
+    chunkSizeWarningLimit: 2000,
   },
 });

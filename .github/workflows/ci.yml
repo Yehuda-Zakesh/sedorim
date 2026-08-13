@@ -8,7 +8,7 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  check:
+  frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,13 +19,40 @@ jobs:
         with:
           node-version: 22
 
+      # See the note in build-windows.yml — switch back to `npm ci` once the
+      # refreshed package-lock.json is committed.
       - name: Install dependencies
         run: npm install
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
 
       - name: Run unit tests
         run: npm test
+
+      # Catches a broken frontend build before the (much slower) Windows EXE
+      # workflow gets that far.
+      - name: Build frontend
+        run: npm run build
+
+  rust:
+    # On Windows, not Linux: the core crate links against Tauri, which on
+    # Linux would need a pile of webkit2gtk/gtk system packages installed
+    # first. Windows is also what actually ships, so this tests the real
+    # target — including the file locking and rename semantics the store
+    # depends on.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Test the shared core
+        run: cargo test --manifest-path src-tauri/core/Cargo.toml

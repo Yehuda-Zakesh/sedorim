@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import { logAudit } from "./audit-store";
 import { getSettings } from "./settings-store";
+import { sharedValue } from "./shared-state";
 
 export type BackupSnapshot = {
   id: string;
@@ -11,25 +11,24 @@ export type BackupSnapshot = {
   payload: { attendance: unknown; learning: unknown };
 };
 
-const KEY = "tracker.backups.v1";
-const META_KEY = "tracker.backups.meta.v1";
+// Both in the shared data file, so the snapshot list and the auto-backup
+// clock are the same whichever EXE you look from. See shared-state.ts.
+const store = sharedValue<BackupSnapshot[]>({
+  key: "snapshots",
+  legacyKey: "tracker.backups.v1",
+  fallback: [],
+  parse: (raw) => (Array.isArray(raw) ? (raw as BackupSnapshot[]) : []),
+});
 
-function readAll(): BackupSnapshot[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as BackupSnapshot[]) : [];
-  } catch { return []; }
-}
-
-let snapshots: BackupSnapshot[] = readAll();
-const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((fn) => fn());
-
-function persist() {
-  if (typeof window === "undefined") return;
-  try { localStorage.setItem(KEY, JSON.stringify(snapshots)); } catch { /* quota */ }
-}
+const lastAutoBackup = sharedValue<number>({
+  key: "lastAutoBackupAt",
+  legacyKey: "tracker.backups.meta.v1",
+  fallback: 0,
+  parse: (raw) => {
+    const ts = typeof raw === "string" ? parseInt(raw, 10) : raw;
+    return typeof ts === "number" && Number.isFinite(ts) ? ts : 0;
+  },
+});
 
 function checksum(text: string): string {
   let h = 0;
@@ -54,10 +53,8 @@ export function createSnapshot(
     payload: data,
   };
   const retention = Math.max(1, getSettings().data.backupRetention);
-  snapshots = [snap, ...snapshots].slice(0, retention);
-  persist();
+  store.set([snap, ...store.get()].slice(0, retention));
   if (trigger === "auto") logAudit("backup.auto", { recordId: snap.id, detail: `${snap.size} bytes` });
-  emit();
   return snap;
 }
 
@@ -65,45 +62,29 @@ export function verifySnapshot(snap: BackupSnapshot): boolean {
   return checksum(JSON.stringify(snap.payload)) === snap.checksum;
 }
 
-export function listSnapshots(): readonly BackupSnapshot[] { return snapshots; }
+export function listSnapshots(): readonly BackupSnapshot[] { return store.get(); }
 
 export function deleteSnapshot(id: string) {
-  snapshots = snapshots.filter((s) => s.id !== id);
-  persist();
-  emit();
+  store.set(store.get().filter((s) => s.id !== id));
 }
 
 export function clearAllSnapshots() {
-  snapshots = [];
-  persist();
-  emit();
+  store.set([]);
 }
 
-export function useSnapshots() {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const fn = () => force((n) => n + 1);
-    listeners.add(fn);
-    return () => { listeners.delete(fn); };
-  }, []);
-  return snapshots;
+export function useSnapshots(): readonly BackupSnapshot[] {
+  return store.use();
 }
 
-export function getLastAutoBackupTs(): number {
-  if (typeof window === "undefined") return 0;
-  try { return parseInt(localStorage.getItem(META_KEY) || "0", 10) || 0; } catch { return 0; }
-}
-function setLastAutoBackupTs(ts: number) {
-  if (typeof window === "undefined") return;
-  try { localStorage.setItem(META_KEY, String(ts)); } catch { /* noop */ }
-}
+export function getLastAutoBackupTs(): number { return lastAutoBackup.get(); }
 
 export function maybeAutoBackup(data: { attendance: unknown; learning: unknown }) {
   const s = getSettings();
   if (s.data.autoBackup === "off") return;
   const intervalMs = s.data.autoBackup === "daily" ? 86_400_000 : 7 * 86_400_000;
-  const last = getLastAutoBackupTs();
-  if (Date.now() - last < intervalMs) return;
+  if (Date.now() - lastAutoBackup.get() < intervalMs) return;
+  // Stamped before the snapshot so a failure mid-write can't leave the clock
+  // unset and re-trigger a backup on every single mutation.
+  lastAutoBackup.set(Date.now());
   createSnapshot(data, "auto");
-  setLastAutoBackupTs(Date.now());
 }

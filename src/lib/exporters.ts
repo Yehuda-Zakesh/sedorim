@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { logAudit } from "./audit-store";
+import { saveBinaryFile } from "./save-file";
 import {
   type SederEntry, type LearningEntry,
   calcSeder, monthlySummary, attendanceScore, FRAMEWORK_LABELS,
@@ -221,6 +222,7 @@ function buildReportHTML(
 </div>`;
 }
 
+/** Resolves false when the user cancels the save dialog. */
 export async function exportPdfReport(opts: {
   title: string;
   entries: SederEntry[];
@@ -228,7 +230,7 @@ export async function exportPdfReport(opts: {
   sections?: ReportSections;
   range?: { from: string; to: string };
   filename?: string;
-}) {
+}): Promise<boolean> {
   const sections = opts.sections ?? DEFAULT_SECTIONS;
   const html = buildReportHTML(opts.title, opts.entries, opts.lessons, sections, opts.range);
   const fname = opts.filename || `${opts.title.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}`;
@@ -297,18 +299,23 @@ export async function exportPdfReport(opts: {
       }
     }
 
-    pdf.save(`${fname}.pdf`);
+    // Not pdf.save(): that builds an <a download>, which does nothing inside
+    // a WebView. Hand the bytes to the native save dialog instead.
+    const bytes = new Uint8Array(pdf.output("arraybuffer") as ArrayBuffer);
+    if (!(await saveBinaryFile(`${fname}.pdf`, bytes))) return false; // cancelled
     logAudit("report.export", { detail: `PDF · ${opts.title}`, newValue: { filename: fname } });
+    return true;
   } finally {
     host.remove();
   }
 }
 
-export function exportXlsxWorkbook(opts: {
+/** Resolves false when the user cancels the save dialog. */
+export async function exportXlsxWorkbook(opts: {
   entries: SederEntry[];
   lessons: LearningEntry[];
   filename?: string;
-}) {
+}): Promise<boolean> {
   const { entries, lessons } = opts;
   const wb = XLSX.utils.book_new();
   wb.Workbook = { Views: [{ RTL: true }] };
@@ -369,6 +376,10 @@ export function exportXlsxWorkbook(opts: {
   XLSX.utils.book_append_sheet(wb, wsMon, "סיכום חודשי");
 
   const fname = opts.filename || `kollel_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  XLSX.writeFile(wb, fname);
+  // Not XLSX.writeFile(): like jsPDF's save() it relies on <a download>,
+  // which a WebView ignores. Serialize here and save through Rust instead.
+  const bytes = new Uint8Array(XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer);
+  if (!(await saveBinaryFile(fname, bytes))) return false; // cancelled
   logAudit("report.export", { detail: `XLSX · ${fname}` });
+  return true;
 }

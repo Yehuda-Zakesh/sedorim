@@ -8,6 +8,7 @@ import { useSeder, useLearning, replaceAllData } from "@/lib/kollel-store";
 import { useSnapshots, createSnapshot, deleteSnapshot, verifySnapshot, getLastAutoBackupTs, clearAllSnapshots } from "@/lib/auto-backup";
 import { logAudit } from "@/lib/audit-store";
 import { useSettings, resetSettings } from "@/lib/settings-store";
+import { saveTextFile } from "@/lib/save-file";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/backup")({
@@ -39,16 +40,21 @@ export function BackupView() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const exportData = () => {
+  const exportData = async () => {
     const payload = { version: 3, exportedAt: new Date().toISOString(), kind: "kollel", seder: entries, learning: items };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url;
-    a.download = `kollel-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    logAudit("backup.export", { detail: formatSize(blob.size) });
-    toast.success("הגיבוי הורד");
+    const json = JSON.stringify(payload, null, 2);
+    const filename = `kollel-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    try {
+      // Goes through the native save dialog — a WebView has no working
+      // <a download>. See src/lib/save-file.ts.
+      if (!(await saveTextFile(filename, json))) return; // cancelled
+    } catch (e) {
+      console.error(e);
+      toast.error("הייצוא נכשל");
+      return;
+    }
+    logAudit("backup.export", { detail: formatSize(new TextEncoder().encode(json).length) });
+    toast.success("הגיבוי נשמר");
   };
 
   const handleImport = async (file: File) => {

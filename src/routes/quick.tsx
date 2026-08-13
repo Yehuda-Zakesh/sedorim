@@ -4,6 +4,7 @@ import { Zap, LogIn, LogOut as LogOutIcon, Check, Clock, Pencil, LayoutDashboard
 import { useSeder, type SederEntry } from "@/lib/kollel-store";
 import { getSettings, applyAppearance, getSederTimesFor } from "@/lib/settings-store";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
+import { invoke, isDesktop } from "@/lib/tauri";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -88,13 +89,17 @@ function QuickApp() {
   const navigate = useNavigate();
 
   function openMainApp() {
-    const api = (window as any).electronAPI;
-    if (api?.openMainApp) {
-      api.openMainApp();
-    } else {
-      // Web (no Electron bridge): just navigate this tab to the full app.
+    if (!isDesktop) {
+      // `npm run dev` in a browser: just navigate this tab to the full app.
       navigate({ to: "/" });
+      return;
     }
+    // Opens the full app as a second window in this same process, so both
+    // share one WebView session. Reused and refocused on repeat clicks.
+    invoke("open_main_window").catch((e) => {
+      console.error(e);
+      toast.error("פתיחת האפליקציה נכשלה");
+    });
   }
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { sharedValue } from "./shared-state";
 
 export type AuditAction =
   | "seder.create"
@@ -29,25 +29,16 @@ export type AuditEntry = {
   detail?: string;
 };
 
-const KEY = "tracker.audit.v1";
 const MAX = 1000;
 
-function read(): AuditEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as AuditEntry[]) : [];
-  } catch { return []; }
-}
-
-let entries: AuditEntry[] = read();
-const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((fn) => fn());
-
-function write() {
-  if (typeof window === "undefined") return;
-  try { localStorage.setItem(KEY, JSON.stringify(entries.slice(0, MAX))); } catch { /* noop */ }
-}
+// In the shared data file, so the log covers what was done in *both* EXEs —
+// entries made from the quick window included. See shared-state.ts.
+const store = sharedValue<AuditEntry[]>({
+  key: "audit",
+  legacyKey: "tracker.audit.v1",
+  fallback: [],
+  parse: (raw) => (Array.isArray(raw) ? (raw as AuditEntry[]).slice(0, MAX) : []),
+});
 
 export function logAudit(action: AuditAction, payload: Omit<AuditEntry, "id" | "ts" | "action"> = {}) {
   const entry: AuditEntry = {
@@ -56,27 +47,17 @@ export function logAudit(action: AuditAction, payload: Omit<AuditEntry, "id" | "
     action,
     ...payload,
   };
-  entries = [entry, ...entries].slice(0, MAX);
-  write();
-  emit();
+  store.set([entry, ...store.get()].slice(0, MAX));
 }
 
-export function getAuditEntries(): readonly AuditEntry[] { return entries; }
+export function getAuditEntries(): readonly AuditEntry[] { return store.get(); }
 
 export function clearAudit() {
-  entries = [];
-  write();
-  emit();
+  store.set([]);
 }
 
-export function useAudit() {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const fn = () => force((n) => n + 1);
-    listeners.add(fn);
-    return () => { listeners.delete(fn); };
-  }, []);
-  return entries;
+export function useAudit(): readonly AuditEntry[] {
+  return store.use();
 }
 
 export const ACTION_LABELS: Record<AuditAction, string> = {

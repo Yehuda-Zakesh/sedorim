@@ -1,9 +1,13 @@
 # Routes
 
-TanStack Start uses **file-based routing**. Every `.tsx` file in this directory
-is a route. Do **not** create `src/pages/`, `src/routes/_app/index.tsx`, or
-`app/layout.tsx` — those are Next.js / Remix conventions. The only root layout
-is `src/routes/__root.tsx`.
+TanStack Router uses **file-based routing**. Every `.tsx` file in this
+directory is a route. Do **not** create `src/pages/`,
+`src/routes/_app/index.tsx`, or `app/layout.tsx` — those are Next.js / Remix
+conventions. The only root layout is `src/routes/__root.tsx`.
+
+Routing is client-side only, with the route in the URL hash (`#/reports`) —
+the app is served straight out of the EXE, so a real path would have nothing
+to resolve against. See `src/main.tsx`.
 
 ## Conventions
 

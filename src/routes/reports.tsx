@@ -38,7 +38,7 @@ function ReportsPage() {
         const now = new Date();
         const y = now.getFullYear(), m = now.getMonth();
         const last = new Date(y, m + 1, 0).getDate();
-        await exportPdfReport({
+        return exportPdfReport({
           title: "דוח נוכחות חודשי — כולל", entries, lessons, sections,
           range: { from: `${y}-${String(m + 1).padStart(2, "0")}-01`, to: `${y}-${String(m + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}` },
         });
@@ -49,7 +49,7 @@ function ReportsPage() {
       icon: FileText, format: "PDF" as const,
       run: async () => {
         const y = new Date().getFullYear();
-        await exportPdfReport({
+        return exportPdfReport({
           title: `דוח שנתי ${y}`, entries, lessons, sections,
           range: { from: `${y}-01-01`, to: `${y}-12-31` },
         });
@@ -59,7 +59,7 @@ function ReportsPage() {
       key: "exec", title: "תקציר מנהלים", desc: "KPI ותרשימים בלבד",
       icon: FileText, format: "PDF" as const,
       run: async () => {
-        await exportPdfReport({
+        return exportPdfReport({
           title: "תקציר מנהלים", entries, lessons,
           sections: { ...DEFAULT_SECTIONS, monthlyTable: false, learning: false, excusedSummary: false, oheveiList: false },
         });
@@ -69,7 +69,7 @@ function ReportsPage() {
       key: "learn", title: "דוח לימוד נוסף", desc: "כל המסגרות והשעות",
       icon: FileText, format: "PDF" as const,
       run: async () => {
-        await exportPdfReport({
+        return exportPdfReport({
           title: "דוח לימוד נוסף", entries, lessons,
           sections: { kpis: false, charts: false, yearlyBreakdown: false, monthlyTable: false, excusedSummary: false, oheveiList: false, learning: true },
         });
@@ -78,13 +78,15 @@ function ReportsPage() {
     {
       key: "xlsx", title: "ייצוא לאקסל", desc: "סדרים, לימוד, סיכום חודשי",
       icon: FileSpreadsheet, format: "XLSX" as const,
-      run: async () => exportXlsxWorkbook({ entries, lessons }),
+      run: () => exportXlsxWorkbook({ entries, lessons }),
     },
   ], [entries, lessons, sections]);
 
-  const runPreset = async (key: string, fn: () => Promise<void>) => {
+  // The exporters resolve false when the user cancels the save dialog, which
+  // must not be reported as a successful export.
+  const runPreset = async (key: string, fn: () => Promise<boolean>) => {
     setBusy(key);
-    try { await fn(); toast.success("הדוח הופק"); }
+    try { if (await fn()) toast.success("הדוח הופק"); }
     catch (e) { toast.error("ההפקה נכשלה"); console.error(e); }
     finally { setBusy(null); }
   };
@@ -93,17 +95,19 @@ function ReportsPage() {
     if (from && to && from > to) { toast.error("טווח לא תקין"); return; }
     setBusy("custom");
     try {
+      let exported: boolean;
       if (fmt === "xlsx") {
         const inEnts = entries.filter((e) => (!from || e.date >= from) && (!to || e.date <= to));
         const inLsn = lessons.filter((l) => (!from || l.date >= from) && (!to || l.date <= to));
-        exportXlsxWorkbook({ entries: inEnts, lessons: inLsn });
+        exported = await exportXlsxWorkbook({ entries: inEnts, lessons: inLsn });
       } else {
-        await exportPdfReport({
+        exported = await exportPdfReport({
           title: "דוח מותאם אישית", entries, lessons, sections,
           range: from && to ? { from, to } : undefined,
         });
       }
-      toast.success("הדוח הופק");
+      // False means the save dialog was cancelled, not that anything failed.
+      if (exported) toast.success("הדוח הופק");
     } catch (e) { toast.error("ההפקה נכשלה"); console.error(e); }
     finally { setBusy(null); }
   };

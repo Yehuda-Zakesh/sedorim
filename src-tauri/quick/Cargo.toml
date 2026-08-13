@@ -1,0 +1,19 @@
+[package]
+name = "seder-plus-quick"
+version = "1.0.3"
+description = "Seder Plus Quick — fast arrival/departure entry"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+# The bin name is the EXE name: target/release/SederPlusQuick.exe
+[[bin]]
+name = "SederPlusQuick"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = "2"
+seder-plus-core = { path = "../core" }

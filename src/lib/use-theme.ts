@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+
+import { sharedValue } from "./shared-state";
 
 type Theme = "light" | "dark" | "system";
-const KEY = "tracker.theme";
 
 function apply(theme: Theme) {
   if (typeof document === "undefined") return;
@@ -11,13 +12,24 @@ function apply(theme: Theme) {
   document.documentElement.classList.toggle("dark", isDark);
 }
 
-export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "system";
-    return (localStorage.getItem(KEY) as Theme) || "system";
-  });
+// Shared, like the rest of the appearance settings: the two EXEs have
+// separate WebView profiles, so a per-window copy would leave the quick
+// window in light mode while the full app is dark. See shared-state.ts.
+const store = sharedValue<Theme>({
+  key: "theme",
+  legacyKey: "tracker.theme",
+  fallback: "system",
+  parse: (raw) => (raw === "light" || raw === "dark" || raw === "system" ? raw : "system"),
+  // Also fires when the other EXE changes it, or on hydration.
+  onChange: apply,
+});
 
-  useEffect(() => { apply(theme); }, [theme]);
+// Applied at module load, before React mounts, so the first paint is already
+// in the right mode instead of flashing.
+apply(store.get());
+
+export function useTheme() {
+  const theme = store.use();
 
   useEffect(() => {
     if (theme !== "system") return;
@@ -27,10 +39,5 @@ export function useTheme() {
     return () => mq.removeEventListener("change", fn);
   }, [theme]);
 
-  const setTheme = (t: Theme) => {
-    localStorage.setItem(KEY, t);
-    setThemeState(t);
-  };
-
-  return { theme, setTheme };
+  return { theme, setTheme: (t: Theme) => store.set(t) };
 }

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "default",
+  "description": "The app's own commands (load_store, save_store_keys, save_file_as, open_main_window, open_external_url) are always callable. Only the core APIs need declaring here — the dialog and opener plugins are driven from Rust, never from the frontend.",
+  "windows": ["main", "quick"],
+  "permissions": ["core:default"]
+}

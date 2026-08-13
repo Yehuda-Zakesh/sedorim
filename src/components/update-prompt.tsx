@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Download, ExternalLink, Sparkles } from "lucide-react";
 import type { UpdateInfo } from "@/lib/updater";
 import { skipVersion } from "@/lib/updater";
+import { openExternal } from "@/lib/open-external";
 
 export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () => void }) {
   return (
@@ -29,20 +30,19 @@ export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () 
             האם ברצונך להוריד את הגרסה החדשה כעת?
           </p>
         </div>
+        {/* These open in the user's real browser, not in the app window —
+            a WebView ignores target="_blank", so an <a> here would do
+            nothing at all. See open_external_url in src-tauri/core. */}
         <DialogFooter className="flex-row-reverse gap-2 sm:justify-start">
           {info.downloadUrl && (
-            <Button asChild>
-              <a href={info.downloadUrl} target="_blank" rel="noreferrer" onClick={onClose}>
-                <Download className="size-4" />
-                הורדה
-              </a>
+            <Button onClick={() => { openExternal(info.downloadUrl!); onClose(); }}>
+              <Download className="size-4" />
+              הורדה
             </Button>
           )}
-          <Button variant="outline" asChild>
-            <a href={info.release.html_url} target="_blank" rel="noreferrer">
-              <ExternalLink className="size-4" />
-              פרטים
-            </a>
+          <Button variant="outline" onClick={() => openExternal(info.release.html_url)}>
+            <ExternalLink className="size-4" />
+            פרטים
           </Button>
           <Button variant="ghost" onClick={() => { skipVersion(info.latest); onClose(); }}>
             דלג על גרסה זו

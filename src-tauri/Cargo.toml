@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["core", "full", "quick"]
+
+# Two EXEs, one shared implementation:
+#   full/  -> SederPlus.exe       (the whole app)
+#   quick/ -> SederPlusQuick.exe  (the quick-entry window)
+#   core/  -> everything both of them actually do
+#
+# They are separate crates only because a Windows EXE icon is embedded at
+# compile time per crate — one crate cannot produce two differently-iconed
+# binaries. Each leaf crate is ~10 lines; all the real code lives in core/.
+
+[profile.release]
+opt-level = "z"     # optimize for size — this is a UI shell, not a hot loop
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -3,7 +3,7 @@ import { logAudit } from "./audit-store";
 import { getSettings, getSederTimesFor } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
 import { isLearningDay } from "./hebrew-calendar";
-import { loadStore, saveStoreKey, saveStoreKeys } from "./store.functions";
+import { loadStore, saveStoreKey, saveStoreKeys, storeStamp } from "./store-bridge";
 export type SederNum = 1 | 2;
 export type LearningFramework = "kollel-erev" | "torato-beyado" | "bein-hazmanim";
 
@@ -50,9 +50,9 @@ const LIVE_LRN_KEY = "kollel.learning.v1";
 const LIVE_TIMER_KEY = "kollel.timer.v1";
 
 // One-time migration for users upgrading from the localStorage-based build:
-// copies whatever is already sitting in localStorage into the new shared
-// server-side file, exactly once. Old keys are left in place afterwards
-// (untouched, just no longer read) as a safety net — nothing is deleted.
+// copies whatever is already sitting in localStorage into the shared data
+// file, exactly once. Old keys are left in place afterwards (untouched, just
+// no longer read) as a safety net — nothing is deleted.
 async function migrateLegacyLocalStorageIfNeeded() {
   if (typeof window === "undefined") return;
   if (localStorage.getItem(MIGRATED_FLAG)) return;
@@ -67,15 +67,15 @@ async function migrateLegacyLocalStorageIfNeeded() {
       const timerRaw = localStorage.getItem(LIVE_TIMER_KEY);
       if (sederRaw) {
         const parsed = JSON.parse(sederRaw);
-        if (Array.isArray(parsed) && parsed.length) await saveStoreKey({ data: { key: "seder", value: parsed } });
+        if (Array.isArray(parsed) && parsed.length) await saveStoreKey("seder", parsed);
       }
       if (lrnRaw) {
         const parsed = JSON.parse(lrnRaw);
-        if (Array.isArray(parsed) && parsed.length) await saveStoreKey({ data: { key: "learning", value: parsed } });
+        if (Array.isArray(parsed) && parsed.length) await saveStoreKey("learning", parsed);
       }
       if (timerRaw) {
         const parsed = JSON.parse(timerRaw);
-        if (parsed) await saveStoreKey({ data: { key: "timer", value: parsed } });
+        if (parsed) await saveStoreKey("timer", parsed);
       }
     }
     localStorage.setItem(MIGRATED_FLAG, String(Date.now()));
@@ -105,13 +105,13 @@ function archiveLegacyOnce() {
 }
 archiveLegacyOnce();
 
-// ============ Server-backed store ============
+// ============ File-backed store ============
 // The in-memory arrays below are the synchronous source of truth for all UI
-// code (unchanged API). They're hydrated once from the shared server-side
-// JSON file on startup, kept fresh via short polling (to pick up changes
-// made in the *other* window/EXE), and written back — fire-and-forget — on
-// every mutation. This avoids relying on Chromium localStorage, which two
-// separate EXE processes cannot safely share (see electron/main.cjs).
+// code (unchanged API). They're hydrated once from the shared JSON data file
+// on startup, kept fresh via short polling (to pick up changes made in the
+// *other* window/EXE), and written back — fire-and-forget — on every
+// mutation. This avoids relying on WebView localStorage, which two separate
+// EXE processes cannot safely share (see src/lib/store-bridge.ts).
 let sederEntries: SederEntry[] = [];
 let learningEntries: LearningEntry[] = [];
 let timerSession: TimerSession | null = null;
@@ -134,8 +134,8 @@ async function hydrate() {
     const store = await loadStore();
     applyRemoteStore(store);
   } catch {
-    // Server not reachable yet (very early startup) — keep empty defaults;
-    // the next poll tick will retry.
+    // Data file unreadable right now — keep empty defaults; the next poll
+    // tick will retry.
   } finally {
     hydrated = true;
     emit();
@@ -143,7 +143,7 @@ async function hydrate() {
 }
 
 function persistKey(key: "seder" | "learning" | "timer", value: unknown) {
-  saveStoreKey({ data: { key, value } })
+  saveStoreKey(key, value)
     .then((res) => { lastKnownUpdatedAt = res.updatedAt; })
     .catch(() => { /* best-effort; next poll will reconcile */ });
 }
@@ -154,23 +154,32 @@ function persistKey(key: "seder" | "learning" | "timer", value: unknown) {
 // 4s poll below, in this same window or the other EXE — can observe a
 // partial state with only one of the two updated.
 function persistKeys(partial: { seder?: SederEntry[]; learning?: LearningEntry[] }) {
-  saveStoreKeys({ data: partial })
+  saveStoreKeys(partial)
     .then((res) => { lastKnownUpdatedAt = res.updatedAt; })
     .catch(() => { /* best-effort; next poll will reconcile */ });
 }
 
-// Cross-window sync: poll the shared server store so a write made in the
-// *other* EXE/window shows up here without a manual refresh.
+// Cross-window sync: poll the shared data file so a write made in the
+// *other* EXE/window shows up here without a manual refresh. Gated on the
+// file's mtime (a stat, nothing read or parsed) because the same file also
+// holds the audit log and the in-app snapshots — re-parsing all of that every
+// few seconds in every window would not be free. The shared-state module runs
+// its own poll over the same file for settings/theme/audit/snapshots; both are
+// mtime-gated, so an idle app does two stat calls every 4s and nothing more.
 if (typeof window !== "undefined") {
   hydrate();
+  let lastSeenStamp = "";
   setInterval(async () => {
     try {
+      const stamp = await storeStamp();
+      if (stamp === lastSeenStamp) return;
+      lastSeenStamp = stamp;
       const store = await loadStore();
       if ((store.updatedAt ?? 0) > lastKnownUpdatedAt) {
         applyRemoteStore(store);
         emit();
       }
-    } catch { /* offline hiccup — try again next tick */ }
+    } catch { /* transient read failure — try again next tick */ }
   }, 4000);
 }
 

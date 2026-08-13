@@ -5,6 +5,13 @@ const REPO_KEY = "tracker.updater.repo.v1";
 const SKIP_KEY = "tracker.updater.skipVersion.v1";
 const LAST_CHECK_KEY = "tracker.updater.lastCheck.v1";
 
+// Left empty on purpose: with no repo configured, checkForUpdate() returns
+// null and the app makes no network requests at all. There is currently no
+// Settings UI calling setUpdateRepo(), so defaulting this to
+// "Yehuda-Zakesh/sedorim" would turn on a daily call to api.github.com that
+// the user has no way to switch off.
+const DEFAULT_REPO = "";
+
 export type GithubRelease = {
   tag_name: string;
   name: string | null;
@@ -25,7 +32,10 @@ export type UpdateInfo = {
 
 export function getUpdateRepo(): string {
   if (typeof window === "undefined") return "";
-  return localStorage.getItem(REPO_KEY) || "";
+  // A stored empty string is an explicit "off" and must not fall back to the
+  // default, so only an entirely unset key uses DEFAULT_REPO.
+  const stored = localStorage.getItem(REPO_KEY);
+  return stored === null ? DEFAULT_REPO : stored;
 }
 export function setUpdateRepo(repo: string) {
   if (typeof window === "undefined") return;

@@ -5,7 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { AppSidebar, useSidebarCollapsed } from "./app-sidebar";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
-import { applyAppearance, useSettings, isOnboarded } from "@/lib/settings-store";
+import { applyAppearance, useSettings, useNeedsOnboarding } from "@/lib/settings-store";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { OnboardingWizard } from "./onboarding-wizard";
 import { useAutoUpdateCheck } from "@/lib/updater";
@@ -28,10 +28,11 @@ export function AppShell({ title, subtitle, actions, children }: {
   useSettings(); // re-render on settings change
   const { collapsed } = useSidebarCollapsed();
   const [helpOpen, setHelpOpen] = useState(false);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  // Reads through to the shared data file, so finishing the wizard in one EXE
+  // means the other one never shows it again.
+  const needsOnboarding = useNeedsOnboarding();
 
   useEffect(() => { applyAppearance(); }, []);
-  useEffect(() => { setNeedsOnboarding(!isOnboarded()); }, []);
   useGlobalShortcuts(() => setHelpOpen((v) => !v));
   const { update, dismiss } = useAutoUpdateCheck();
 
@@ -73,7 +74,9 @@ export function AppShell({ title, subtitle, actions, children }: {
         </footer>
       </div>
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
-      {needsOnboarding && <OnboardingWizard onComplete={() => setNeedsOnboarding(false)} />}
+      {/* No local state to clear: the wizard's own markOnboarded() flips the
+          shared flag, which is what re-renders this and hides it. */}
+      {needsOnboarding && <OnboardingWizard onComplete={() => {}} />}
       {update && <UpdatePrompt info={update} onClose={dismiss} />}
     </div>
   );
