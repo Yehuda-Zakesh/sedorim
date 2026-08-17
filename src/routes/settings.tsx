@@ -1,24 +1,36 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
-  ChevronDown, User, Bell, Palette, Globe, Shield, Database, Search,
+  ChevronDown, ChevronLeft, User, Bell, Palette, Globe, Shield, Database, Search,
   RotateCcw, Type, Contrast, Target, Clock, ShieldCheck, DatabaseBackup,
+  RefreshCw, BellRing, Loader2, Download,
 } from "lucide-react";
 import {
   useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, type BgTheme, updateSettings,
   getSederTimesFor, setSederTimesFromToday, removeSederScheduleEntry, addSederOverride, removeSederOverride,
   type SederTimes,
 } from "@/lib/settings-store";
+import { COLOR_THEMES, BG_THEMES } from "@/lib/theme-colors";
+import { deliverNotification } from "@/lib/notifications";
+import {
+  getUpdateRepo, setUpdateRepo, checkForUpdate, getLastCheck, clearSkip, type UpdateInfo,
+} from "@/lib/updater";
+import { openExternal } from "@/lib/open-external";
+import { Field, NumberField, SelectField, StackedField, TimeField, Toggle } from "@/components/ui/form";
+import { IconBadge } from "@/components/ui/stat";
+import { toastUndo } from "@/lib/undo";
 import { toast } from "sonner";
-import { AuditView } from "./audit";
-import { BackupView } from "./backup";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "הגדרות — המעקב שלי" }] }),
   component: SettingsPage,
 });
 
+// Preferences only. Backup/restore and the audit log used to be inlined here as
+// two more accordion sections *and* exist as their own screens — which meant
+// "delete the database" was reachable from inside a settings panel. They are
+// now linked to instead; see LINKED_SCREENS below.
 const SECTIONS = [
   { id: "profile", label: "פרופיל אישי", icon: User },
   { id: "seder", label: "שעות סדרים", icon: Clock },
@@ -29,8 +41,12 @@ const SECTIONS = [
   { id: "language", label: "שפה ואזור", icon: Globe },
   { id: "privacy", label: "פרטיות", icon: Shield },
   { id: "data", label: "נתונים וגיבוי", icon: Database },
-  { id: "backup", label: "גיבוי ושחזור", icon: DatabaseBackup },
-  { id: "audit", label: "יומן ביקורת", icon: ShieldCheck },
+  { id: "updates", label: "עדכוני גרסה", icon: RefreshCw },
+] as const;
+
+const LINKED_SCREENS = [
+  { to: "/backup", label: "גיבוי ושחזור", desc: "ייצוא, ייבוא, תמונות מצב ומחיקת נתונים", icon: DatabaseBackup },
+  { to: "/audit", label: "יומן ביקורת", desc: "כל הפעולות שבוצעו בתוכנה", icon: ShieldCheck },
 ] as const;
 
 function SettingsPage() {
@@ -53,10 +69,9 @@ function SettingsPage() {
           return (
             <div key={s.id} className="card-surface overflow-hidden">
               <button onClick={() => setOpen(isOpen ? null : s.id)}
+                aria-expanded={isOpen}
                 className="w-full flex items-center gap-3 px-5 py-4 text-right hover:bg-accent/40 transition">
-                <div className="size-9 rounded-md bg-primary/10 text-primary grid place-items-center">
-                  <s.icon className="size-4" />
-                </div>
+                <IconBadge icon={s.icon} size="md" />
                 <span className="flex-1 text-sm font-semibold">{s.label}</span>
                 <ChevronDown className={`size-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
               </button>
@@ -93,14 +108,16 @@ function SettingsPage() {
                   )}
                   {s.id === "notifications" && (
                     <>
-                      <Toggle label="תזכורת יומית" on={settings.notifications.dailyReminder}
+                      <Toggle label="תזכורת יומית — כשלא נרשם סדר עד תחילת סדר א׳" on={settings.notifications.dailyReminder}
                         onChange={(v) => update({ notifications: { ...settings.notifications, dailyReminder: v } })} />
-                      <Toggle label="התראה כשמתקרב למכסת איחורים" on={settings.notifications.latenessAlert}
+                      <Toggle label="התראה בחריגה ממכסת האיחורים החודשית" on={settings.notifications.latenessAlert}
                         onChange={(v) => update({ notifications: { ...settings.notifications, latenessAlert: v } })} />
                       <Toggle label="סיכום שבועי" on={settings.notifications.weeklySummary}
                         onChange={(v) => update({ notifications: { ...settings.notifications, weeklySummary: v } })} />
+                      <NotificationTester />
                     </>
                   )}
+                  {s.id === "updates" && <UpdateSettings />}
                   {s.id === "appearance" && (
                     <>
                       <ColorThemePicker
@@ -160,13 +177,25 @@ function SettingsPage() {
                         onChange={(v) => update({ data: { ...settings.data, autoBackupBeforeOps: v } })} />
                     </>
                   )}
-                  {s.id === "backup" && <BackupView />}
-                  {s.id === "audit" && <AuditView />}
                 </div>
               )}
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {LINKED_SCREENS.map((l) => (
+          <Link key={l.to} to={l.to}
+            className="card-surface p-4 flex items-center gap-3 hover:border-primary transition">
+            <IconBadge icon={l.icon} size="md" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold">{l.label}</div>
+              <div className="text-xs text-muted-foreground truncate">{l.desc}</div>
+            </div>
+            <ChevronLeft className="size-4 text-muted-foreground shrink-0" />
+          </Link>
+        ))}
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -183,32 +212,93 @@ function SettingsPage() {
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+// Notifications are easy to have silently switched off at the OS level, and a
+// reminder you never see is indistinguishable from one that was never sent —
+// so there is a way to prove the channel works.
+function NotificationTester() {
+  const [busy, setBusy] = useState(false);
   return (
-    <div className="grid grid-cols-3 gap-3 items-center">
-      <label className="text-xs text-muted-foreground">{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} maxLength={80}
-        className="col-span-2 rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+    <div className="rounded-lg border border-border p-4">
+      <div className="text-sm font-semibold">בדיקת התראות</div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        ההתראות מוצגות כהודעות מערכת של Windows, ורק כשהתוכנה פתוחה — אין שירות רקע.
+        אם לא מופיעה הודעה, בדוק ב"הגדרות Windows ← מערכת ← התראות" שההתראות עבור סדר פלוס מופעלות.
+      </p>
+      <button
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const ok = await deliverNotification("סדר פלוס", "בדיקת התראות — ההתראות פועלות כשורה.");
+            if (ok) toast.success("נשלחה התראת בדיקה");
+            else toast.error("לא ניתן להציג התראה — בדוק את הגדרות ההתראות של Windows");
+          } finally { setBusy(false); }
+        }}
+        className="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50">
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <BellRing className="size-3.5" />}
+        שלח התראת בדיקה
+      </button>
     </div>
   );
 }
-function TimeField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+
+// The updater has been in the codebase all along, but with no repository
+// configured and no UI to configure one it could never actually run. This is
+// that UI — still opt-in, so leaving the field empty means the app makes no
+// network requests at all.
+function UpdateSettings() {
+  const [repo, setRepo] = useState(getUpdateRepo());
+  const [busy, setBusy] = useState(false);
+  const [found, setFound] = useState<UpdateInfo | null>(null);
+  const lastCheck = getLastCheck();
+
+  const check = async () => {
+    setBusy(true);
+    setFound(null);
+    try {
+      const info = await checkForUpdate(repo);
+      if (!info) { toast.error("הזן מאגר בתבנית owner/repo"); return; }
+      setFound(info);
+      if (info.isNewer) { clearSkip(); toast.success(`נמצאה גרסה חדשה: ${info.latest}`); }
+      else toast.success("הגרסה שלך עדכנית");
+    } catch {
+      toast.error("הבדיקה נכשלה — אין חיבור לאינטרנט או שהמאגר לא נמצא");
+    } finally { setBusy(false); }
+  };
+
   return (
-    <div>
-      <label className="text-xs text-muted-foreground">{label}</label>
-      <input type="time" value={value} onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm tabular-nums" />
-    </div>
-  );
-}
-function NumberField({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
-  return (
-    <div className="grid grid-cols-3 gap-3 items-center">
-      <label className="text-xs text-muted-foreground">{label}</label>
-      <input type="number" min={min} max={max} value={value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, +e.target.value || 0)))}
-        className="col-span-2 rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-    </div>
+    <>
+      <Field label="מאגר GitHub לעדכונים" value={repo} onChange={setRepo}
+        placeholder="owner/repo — השאר ריק כדי לכבות" />
+      <p className="text-[11px] text-muted-foreground">
+        כשמוגדר מאגר, התוכנה בודקת פעמיים ביום אם פורסמה גרסה חדשה ומציעה להוריד אותה.
+        כשהשדה ריק — לא מתבצעת שום פנייה לאינטרנט.
+        {lastCheck && ` בדיקה אחרונה: ${new Date(lastCheck).toLocaleString("he-IL")}.`}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => { setUpdateRepo(repo); toast.success(repo.trim() ? "המאגר נשמר" : "בדיקת עדכונים כובתה"); }}
+          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+          שמור
+        </button>
+        <button onClick={check} disabled={busy || !repo.trim()}
+          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50">
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          בדוק עכשיו
+        </button>
+      </div>
+      {found?.isNewer && found.downloadUrl && (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex items-center gap-3">
+          <div className="flex-1 text-xs">
+            <b>גרסה {found.latest}</b> זמינה (מותקנת: {found.current}).
+          </div>
+          <button onClick={() => openExternal(found.downloadUrl!)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+            <Download className="size-3.5" /> הורדה
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -256,11 +346,10 @@ function SederHoursManager() {
               שינוי יחול מהתאריך שנבחר ואילך בלבד — רישומים קודמים ממשיכים להיחשב לפי השעות שהיו אז.
             </div>
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground">בתוקף מתאריך</label>
+          <StackedField label="בתוקף מתאריך">
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-              className="mt-1 block rounded-md border border-input bg-card px-3 py-1.5 text-sm" />
-          </div>
+              className="field-input block" />
+          </StackedField>
         </div>
         <TimesGrid times={draft} onChange={setDraft} />
         <div className="flex items-center gap-2">
@@ -285,7 +374,14 @@ function SederHoursManager() {
                   {e.effectiveFrom === "0001-01-01" ? "עד השינוי הראשון" : `מ־${e.effectiveFrom}`}
                 </span>
                 <span className="tabular-nums">{e.times.s1Start}–{e.times.s1End} · {e.times.s2Start}–{e.times.s2End}</span>
-                <button onClick={() => { removeSederScheduleEntry(e.id); toast("נמחק"); }}
+                <button
+                  onClick={() => {
+                    // Deleting a schedule entry silently re-scores every past
+                    // record against different hours, so it gets an undo too.
+                    const before = settings.sederSchedule || [];
+                    removeSederScheduleEntry(e.id);
+                    toastUndo("שינוי השעות נמחק", () => updateSettings({ sederSchedule: before }));
+                  }}
                   className="text-muted-foreground hover:text-destructive">מחק</button>
               </li>
             ))}
@@ -308,21 +404,18 @@ function SederHoursManager() {
         {ovOpen && (
           <div className="space-y-3 border-t border-border pt-3">
             <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground">מתאריך</label>
+              <StackedField label="מתאריך">
                 <input type="date" value={ovFrom} onChange={(e) => setOvFrom(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">עד תאריך</label>
+                  className="field-input w-full" />
+              </StackedField>
+              <StackedField label="עד תאריך">
                 <input type="date" value={ovTo} onChange={(e) => setOvTo(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">תיאור (אופציונלי)</label>
+                  className="field-input w-full" />
+              </StackedField>
+              <StackedField label="תיאור (אופציונלי)">
                 <input value={ovLabel} maxLength={40} onChange={(e) => setOvLabel(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-              </div>
+                  className="field-input w-full" />
+              </StackedField>
             </div>
             <TimesGrid times={ovTimes} onChange={setOvTimes} />
             <button
@@ -344,7 +437,12 @@ function SederHoursManager() {
               <li key={o.id} className="flex items-center justify-between gap-3 text-xs">
                 <span className="text-muted-foreground tabular-nums">{o.from} → {o.to}{o.label ? ` · ${o.label}` : ""}</span>
                 <span className="tabular-nums">{o.times.s1Start}–{o.times.s1End} · {o.times.s2Start}–{o.times.s2End}</span>
-                <button onClick={() => { removeSederOverride(o.id); toast("נמחק"); }}
+                <button
+                  onClick={() => {
+                    const before = settings.sederOverrides || [];
+                    removeSederOverride(o.id);
+                    toastUndo("השינוי הזמני נמחק", () => updateSettings({ sederOverrides: before }));
+                  }}
                   className="text-muted-foreground hover:text-destructive">מחק</button>
               </li>
             ))}
@@ -354,43 +452,6 @@ function SederHoursManager() {
     </div>
   );
 }
-
-function SelectField({ label, value, options, onChange }: { label: string; value: string; options: { v: string; l: string }[]; onChange: (v: string) => void }) {
-  return (
-    <div className="grid grid-cols-3 gap-3 items-center">
-      <label className="text-xs text-muted-foreground">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="col-span-2 rounded-md border border-input bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-        {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-      </select>
-    </div>
-  );
-}
-function Toggle({ label, on, onChange }: { label: React.ReactNode; on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-      <span className="text-sm">{label}</span>
-      <button onClick={() => onChange(!on)}
-        className={`relative h-6 w-11 rounded-full transition ${on ? "bg-primary" : "bg-muted"}`}>
-        <span className={`absolute top-0.5 size-5 rounded-full bg-card shadow transition-all ${on ? "right-0.5" : "right-[22px]"}`} />
-      </button>
-    </div>
-  );
-}
-
-const COLOR_THEMES: { id: ColorTheme; label: string; hex: string }[] = [
-  { id: "blue",    label: "כחול",    hex: "#1565C0" },
-  { id: "indigo",  label: "אינדיגו", hex: "#3F51B5" },
-  { id: "violet",  label: "סגול",    hex: "#7C3AED" },
-  { id: "pink",    label: "ורוד",    hex: "#DB2777" },
-  { id: "rose",    label: "רוז",     hex: "#E11D48" },
-  { id: "crimson", label: "אדום",    hex: "#C62828" },
-  { id: "amber",   label: "ענבר",    hex: "#D97706" },
-  { id: "lime",    label: "ליים",    hex: "#65A30D" },
-  { id: "emerald", label: "ירוק",    hex: "#059669" },
-  { id: "teal",    label: "טורקיז",  hex: "#0D9488" },
-  { id: "slate",   label: "אפור",    hex: "#475569" },
-];
 
 function ColorThemePicker({ value, onChange }: { value: ColorTheme; onChange: (v: ColorTheme) => void }) {
   return (
@@ -417,19 +478,6 @@ function ColorThemePicker({ value, onChange }: { value: ColorTheme; onChange: (v
     </div>
   );
 }
-
-const BG_THEMES: { id: BgTheme; label: string; hex: string }[] = [
-  { id: "white",    label: "לבן (ברירת מחדל)", hex: "#F5F5F5" },
-  { id: "paper",    label: "נייר",  hex: "#FAF8F1" },
-  { id: "cream",    label: "שמנת", hex: "#F8F1DE" },
-  { id: "sand",     label: "חול",  hex: "#F1E9D2" },
-  { id: "peach",    label: "אפרסק", hex: "#FAE3D0" },
-  { id: "blush",    label: "ורדרד", hex: "#F8E1E0" },
-  { id: "lavender", label: "לבנדר", hex: "#E5DEF5" },
-  { id: "sky",      label: "תכלת",  hex: "#D9EAF6" },
-  { id: "mint",     label: "מנטה",  hex: "#D9F0E1" },
-  { id: "gray",     label: "אפור",  hex: "#E5E5E5" },
-];
 
 function BackgroundPicker({ value, onChange }: { value: BgTheme; onChange: (v: BgTheme) => void }) {
   return (

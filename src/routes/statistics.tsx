@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { TrendingUp, TrendingDown, Target, Flame, Award, BarChart3, Sparkles, Gauge, CalendarClock } from "lucide-react";
+import { TrendingUp, Target, Flame, Award, Gauge, CalendarClock } from "lucide-react";
 import { useSeder, useLearning, monthlySummary, attendanceScore, calcSeder, currentDayStreak } from "@/lib/kollel-store";
 import { forecastMonthlyNetMissing, consistencyScore, fmtMin } from "@/lib/insights";
 import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
-import { InsightsView } from "./insights";
+import { KpiCard } from "@/components/ui/stat";
 
 export const Route = createFileRoute("/statistics")({
   head: () => ({ meta: [{ title: "סטטיסטיקות — המעקב שלי" }] }),
@@ -13,7 +12,6 @@ export const Route = createFileRoute("/statistics")({
 });
 
 function StatisticsPage() {
-  const [tab, setTab] = useState<"stats" | "insights">("stats");
   const { entries } = useSeder();
   const { items: lessons } = useLearning();
   const now = new Date();
@@ -69,37 +67,32 @@ function StatisticsPage() {
 
   return (
     <AppShell title="סטטיסטיקות" subtitle="ניתוח אישי של מגמות נוכחות">
-      <div className="mb-4 inline-flex rounded-lg border border-border bg-card p-1">
-        <button onClick={() => setTab("stats")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "stats" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-          <BarChart3 className="size-3.5" /> סטטיסטיקות
-        </button>
-        <button onClick={() => setTab("insights")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "insights" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-          <Sparkles className="size-3.5" /> תובנות חכמות
-        </button>
-      </div>
-
-      {tab === "insights" ? <InsightsView /> : (
-      <>
       <section className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <Kpi label="ציון החודש" value={`${curScore}`} icon={Target} trend={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`} up={curScore >= yoyScore} />
-        <Kpi label="חודש מצטיין" value={bestMonth?.hebLabel || "—"} icon={Award} trend={`${bestMonth?.score || 0} נק׳`} up />
-        <Kpi label="רצף ימים" value={streak.toString()} icon={Flame} trend="ימים" up={streak > 0} />
-        <Kpi label="שעות לימוד" value={totalLearnHours} icon={TrendingUp} trend="סך הכל" up />
-        <Kpi
+        <KpiCard label="ציון החודש" value={`${curScore}`} icon={Target}
+          trend={{ text: `${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`, up: curScore >= yoyScore }} />
+        <KpiCard label="חודש מצטיין" value={bestMonth?.hebLabel || "—"} icon={Award}
+          trend={{ text: `${bestMonth?.score || 0} נק׳`, up: true }} />
+        <KpiCard label="רצף ימים" value={streak.toString()} icon={Flame}
+          trend={{ text: "ימים", up: streak > 0 }} />
+        <KpiCard label="שעות לימוד" value={totalLearnHours} icon={TrendingUp}
+          trend={{ text: "סך הכל", up: true }} />
+        <KpiCard
           label="צפי חוסר בסוף החודש"
           value={forecastNet === null ? "—" : fmtMin(forecastNet)}
           icon={CalendarClock}
-          trend={forecastNet === null ? "אין מספיק נתונים החודש" : "לפי הקצב הנוכחי, בימי לימוד"}
-          up={forecastNet !== null && forecastNet <= 0}
+          trend={{
+            text: forecastNet === null ? "אין מספיק נתונים החודש" : "לפי הקצב הנוכחי, בימי לימוד",
+            up: forecastNet !== null && forecastNet <= 0,
+          }}
         />
-        <Kpi
+        <KpiCard
           label="ציון עקביות"
           value={consistency === 0 ? "—" : `${consistency}`}
           icon={Gauge}
-          trend={consistency === 0 ? "אין מספיק נתונים" : "יציבות מחודש לחודש"}
-          up={consistency >= 60}
+          trend={{
+            text: consistency === 0 ? "אין מספיק נתונים" : "יציבות מחודש לחודש",
+            up: consistency >= 60,
+          }}
         />
       </section>
 
@@ -158,27 +151,6 @@ function StatisticsPage() {
           ))}
         </div>
       </div>
-      </>
-      )}
     </AppShell>
-  );
-}
-
-function Kpi({ label, value, icon: Icon, trend, up }: { label: string; value: string; icon: typeof Target; trend: string; up: boolean }) {
-  return (
-    <div className="card-surface p-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-2 text-3xl font-bold tabular-nums break-words leading-tight" style={{ fontSize: value.length > 8 ? "1.25rem" : undefined }}>{value}</div>
-          <div className={`mt-1 text-[11px] inline-flex items-center gap-1 ${up ? "text-success" : "text-destructive"}`}>
-            {up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />} {trend}
-          </div>
-        </div>
-        <div className="size-10 rounded-lg bg-primary/10 text-primary grid place-items-center">
-          <Icon className="size-5" />
-        </div>
-      </div>
-    </div>
   );
 }

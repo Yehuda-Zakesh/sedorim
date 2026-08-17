@@ -1,13 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Plus, Play, Square, Trash2, AlertTriangle, BookOpen, Timer, MicOff } from "lucide-react";
+import { Plus, Play, Square, AlertTriangle, BookOpen, Timer, MicOff, ChevronLeft } from "lucide-react";
 import {
   useLearning, todayISO, newId, FRAMEWORK_LABELS, hhmmToMin, effectiveLearningMin,
   useTimer, startTimer, stopTimer, cancelTimer,
-  type LearningFramework, type LearningEntry,
+  type LearningFramework,
 } from "@/lib/kollel-store";
 import { isBeinHazmanim } from "@/lib/hebrew-calendar";
+import { IconBadge } from "@/components/ui/stat";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/learning")({
@@ -149,7 +150,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
             <div className="text-xs text-muted-foreground mb-2">הוספה ידנית</div>
             <div className="flex gap-2">
               <input type="number" min={1} value={minutes} onChange={(e) => setMinutes(Math.max(1, +e.target.value || 1))}
-                className="flex-1 rounded-md border border-input bg-card px-2 py-1.5 text-sm" />
+                className="field-input flex-1" />
               <button onClick={addManual}
                 className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90">
                 <Plus className="size-3.5 inline" /> הוסף
@@ -160,10 +161,10 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
             <div className="text-xs text-muted-foreground mb-2">לפי טווח שעות</div>
             <div className="flex flex-wrap items-center gap-1">
               <input type="time" value={fromT} onChange={(e) => setFromT(e.target.value)}
-                className="min-w-0 flex-1 basis-[6rem] rounded-md border border-input bg-card px-2 py-1.5 text-sm" />
+                className="field-input min-w-0 flex-1 basis-[6rem] tabular-nums" />
               <span className="text-xs shrink-0">→</span>
               <input type="time" value={toT} onChange={(e) => setToT(e.target.value)}
-                className="min-w-0 flex-1 basis-[6rem] rounded-md border border-input bg-card px-2 py-1.5 text-sm" />
+                className="field-input min-w-0 flex-1 basis-[6rem] tabular-nums" />
               <button onClick={addRange}
                 className="shrink-0 rounded-md bg-primary px-2 py-1.5 text-xs text-primary-foreground hover:bg-primary/90">
                 <Plus className="size-3.5" />
@@ -184,7 +185,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
                 <div className="flex items-center gap-2 pr-6">
                   <input type="number" min={1} value={limitMin}
                     onChange={(e) => setLimitMin(Math.max(1, +e.target.value || 1))}
-                    className="w-24 rounded-md border border-input bg-card px-2 py-1 text-sm" />
+                    className="field-input w-24" />
                   <span className="text-xs text-muted-foreground">דקות · הטיימר ייעצר וישמר אוטומטית</span>
                 </div>
               )}
@@ -238,7 +239,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
 
 function LearningPage() {
   const [active, setActive] = useState<LearningFramework>("kollel-erev");
-  const { items, remove } = useLearning();
+  const { items } = useLearning();
   const beinHaz = isBeinHazmanim();
 
   return (
@@ -255,28 +256,20 @@ function LearningPage() {
 
       <FrameworkPanel fw={active} enabled={active !== "bein-hazmanim" || beinHaz} />
 
-      <div className="card-surface p-5 mt-4">
-        <h3 className="text-sm font-semibold mb-3">כל הרישומים</h3>
-        {items.length ? (
-          <ul className="divide-y divide-border">
-            {items.slice(0, 30).map((i: LearningEntry) => (
-              <li key={i.id} className="flex items-center gap-3 py-2">
-                <div className="size-8 rounded-md bg-primary/10 text-primary grid place-items-center">
-                  <BookOpen className="size-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{FRAMEWORK_LABELS[i.framework]}</div>
-                  <div className="text-[11px] text-muted-foreground tabular-nums">{i.date} · {i.minutes} דק׳ · {i.source === "timer" ? "טיימר" : i.source === "range" ? "טווח" : "ידני"}</div>
-                </div>
-                <button onClick={() => { remove(i.id); toast("נמחק"); }}
-                  className="size-8 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
-                  <Trash2 className="size-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : <div className="text-center text-sm text-muted-foreground py-6">אין רישומים</div>}
-      </div>
+      {/* The full record list — with search, month/framework filters and delete
+          — lives in History. This screen is for *logging* time, so it links
+          there rather than carrying a second, weaker copy of the same table. */}
+      <Link to="/history"
+        className="card-surface mt-4 p-4 flex items-center gap-3 hover:border-primary transition">
+        <IconBadge icon={BookOpen} size="md" />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold">כל רישומי הלימוד</div>
+          <div className="text-xs text-muted-foreground">
+            {items.length} רישומים · חיפוש, סינון לפי חודש ומסגרת, ומחיקה — במסך ההיסטוריה
+          </div>
+        </div>
+        <ChevronLeft className="size-4 text-muted-foreground shrink-0" />
+      </Link>
     </AppShell>
   );
 }

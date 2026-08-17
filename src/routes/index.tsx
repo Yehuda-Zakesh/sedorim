@@ -10,6 +10,7 @@ import {
 } from "@/lib/kollel-store";
 import { formatHebrewDate, isBeinHazmanim } from "@/lib/hebrew-calendar";
 import { useSettings } from "@/lib/settings-store";
+import { KpiCard, StatTile, IconBadge } from "@/components/ui/stat";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,14 +21,6 @@ export const Route = createFileRoute("/")({
   }),
   component: Dashboard,
 });
-
-const toneStyles: Record<string, string> = {
-  primary: "bg-primary/10 text-primary",
-  success: "bg-success/10 text-success",
-  warning: "bg-warning/10 text-warning",
-  info: "bg-info/10 text-info",
-  destructive: "bg-destructive/10 text-destructive",
-};
 
 function fmtMin(m: number): string {
   if (!m) return "0";
@@ -72,11 +65,15 @@ function Dashboard() {
   });
 
   const kpis = [
-    { label: "ציון נוכחות החודש", value: `${score}`, delta: `יעד ${settings.goals.monthlyTarget}`, icon: Target, tone: "primary" as const },
-    { label: "דקות חסרות (נטו)", value: fmtMin(summary.netMissing), delta: `${summary.entries} סדרים נרשמו`, icon: Clock, tone: summary.netMissing > settings.seder.alertMissingMinPerMonth ? "destructive" as const : "info" as const },
-    { label: "סדרי אוהבי ה׳", value: summary.oheveiCount.toString(), delta: "החודש", icon: Award, tone: "success" as const },
-    { label: "רצף ימים", value: streak.toString(), delta: streak > 0 ? "ימים ללא חיסור" : "התחל היום", icon: Flame, tone: "warning" as const },
+    { label: "ציון נוכחות החודש", value: `${score}`, hint: `יעד ${settings.goals.monthlyTarget}`, icon: Target, tone: "primary" as const },
+    { label: "דקות חסרות (נטו)", value: fmtMin(summary.netMissing), hint: `${summary.entries} סדרים נרשמו`, icon: Clock, tone: summary.netMissing > settings.seder.alertMissingMinPerMonth ? "destructive" as const : "info" as const },
+    { label: "סדרי אוהבי ה׳", value: summary.oheveiCount.toString(), hint: "החודש", icon: Award, tone: "success" as const },
+    { label: "רצף ימים", value: streak.toString(), hint: streak > 0 ? "ימים ללא חיסור" : "התחל היום", icon: Flame, tone: "warning" as const },
   ];
+
+  // These three switches sit in Settings → "לוח בקרה" and, until now, changed
+  // nothing at all on this screen.
+  const { showInsights, showReminders, showQuickActions } = settings.dashboard;
 
   return (
     <AppShell title="לוח בקרה" subtitle={hebrewDate} actions={
@@ -88,26 +85,13 @@ function Dashboard() {
     }>
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {kpis.map((k) => (
-          <div key={k.label} className="card-surface p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-xs font-medium text-muted-foreground">{k.label}</div>
-                <div className="mt-2 text-3xl font-bold tracking-tight tabular-nums">{k.value}</div>
-                <div className="mt-1 text-[11px] text-muted-foreground">{k.delta}</div>
-              </div>
-              <div className={`size-10 rounded-lg grid place-items-center ${toneStyles[k.tone]}`}>
-                <k.icon className="size-5" />
-              </div>
-            </div>
-          </div>
+          <KpiCard key={k.label} label={k.label} value={k.value} hint={k.hint} icon={k.icon} tone={k.tone} />
         ))}
       </section>
 
       {beinHazmanim && (
         <div className="mt-5 card-surface p-4 flex items-center gap-3 border-r-4 border-r-info">
-          <div className="size-9 rounded-md bg-info/10 text-info grid place-items-center">
-            <BookOpen className="size-4" />
-          </div>
+          <IconBadge icon={BookOpen} tone="info" size="md" />
           <div className="flex-1">
             <div className="text-sm font-semibold">בין הזמנים</div>
             <p className="text-xs text-muted-foreground mt-0.5">מסגרת "ישיבת בין הזמנים" זמינה במסך לימוד נוסף.</p>
@@ -118,11 +102,9 @@ function Dashboard() {
         </div>
       )}
 
-      {!hasToday && (
+      {!hasToday && showReminders && (
         <div className="mt-5 card-surface p-4 flex items-center gap-3 border-r-4 border-r-warning">
-          <div className="size-9 rounded-md bg-warning/10 text-warning grid place-items-center">
-            <Bell className="size-4" />
-          </div>
+          <IconBadge icon={Bell} tone="warning" size="md" />
           <div className="flex-1">
             <div className="text-sm font-semibold">לא רשמת סדר היום</div>
             <p className="text-xs text-muted-foreground mt-0.5">סמן הגעה/יציאה כדי לעקוב אחר הנוכחות.</p>
@@ -133,24 +115,14 @@ function Dashboard() {
         </div>
       )}
 
-      <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card-surface p-5 lg:col-span-2">
+      <div className={`mt-5 grid grid-cols-1 gap-4 ${showReminders ? "lg:grid-cols-3" : ""}`}>
+        <div className={`card-surface p-5 ${showReminders ? "lg:col-span-2" : ""}`}>
           <h2 className="text-sm font-semibold mb-3">פירוט החודש</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: "איחורים", value: summary.lateCount, tone: "var(--status-late)" },
-              { label: "היעדרויות", value: summary.absenceCount, tone: "var(--status-absent)" },
-              { label: "יציאה מוקדמת", value: summary.earlyDepCount, tone: "var(--status-late)" },
-              { label: "בונוס (דק׳)", value: summary.bonus, tone: "var(--status-present)" },
-            ].map((s) => (
-              <div key={s.label} className="rounded-lg border border-border p-3">
-                <div className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full" style={{ backgroundColor: s.tone }} />
-                  <span className="text-xs text-muted-foreground">{s.label}</span>
-                </div>
-                <div className="mt-2 text-2xl font-bold tabular-nums">{s.value}</div>
-              </div>
-            ))}
+            <StatTile label="איחורים" value={summary.lateCount} dot="var(--status-late)" />
+            <StatTile label="היעדרויות" value={summary.absenceCount} dot="var(--status-absent)" />
+            <StatTile label="יציאה מוקדמת" value={summary.earlyDepCount} dot="var(--status-late)" />
+            <StatTile label="בונוס (דק׳)" value={summary.bonus} dot="var(--status-present)" />
           </div>
 
           <div className="mt-5">
@@ -166,44 +138,43 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="card-surface p-5">
-          <h2 className="text-sm font-semibold mb-3">תזכורות</h2>
-          <ul className="space-y-3">
-            {!hasToday && (
-              <li className="flex gap-3">
-                <div className={`size-8 rounded-md grid place-items-center shrink-0 ${toneStyles.warning}`}>
-                  <AlertTriangle className="size-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">חסר רישום להיום</div>
-                  <div className="text-xs text-muted-foreground">סמן הגעה לסדר הנוכחי</div>
-                </div>
-              </li>
-            )}
-            {summary.lateCount >= settings.goals.maxLatePerMonth && (
-              <li className="flex gap-3">
-                <div className={`size-8 rounded-md grid place-items-center shrink-0 ${toneStyles.destructive}`}>
-                  <Clock className="size-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">חרגת ממכסת האיחורים</div>
-                  <div className="text-xs text-muted-foreground">{summary.lateCount} מתוך {settings.goals.maxLatePerMonth}</div>
-                </div>
-              </li>
-            )}
-            {streak >= 5 && (
-              <li className="flex gap-3">
-                <div className={`size-8 rounded-md grid place-items-center shrink-0 ${toneStyles.success}`}>
-                  <Flame className="size-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">רצף של {streak} ימים</div>
-                  <div className="text-xs text-muted-foreground">המשך כך</div>
-                </div>
-              </li>
-            )}
-          </ul>
-        </div>
+        {showReminders && (
+          <div className="card-surface p-5">
+            <h2 className="text-sm font-semibold mb-3">תזכורות</h2>
+            <ul className="space-y-3">
+              {!hasToday && (
+                <li className="flex gap-3">
+                  <IconBadge icon={AlertTriangle} tone="warning" size="sm" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">חסר רישום להיום</div>
+                    <div className="text-xs text-muted-foreground">סמן הגעה לסדר הנוכחי</div>
+                  </div>
+                </li>
+              )}
+              {summary.lateCount >= settings.goals.maxLatePerMonth && (
+                <li className="flex gap-3">
+                  <IconBadge icon={Clock} tone="destructive" size="sm" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">חרגת ממכסת האיחורים</div>
+                    <div className="text-xs text-muted-foreground">{summary.lateCount} מתוך {settings.goals.maxLatePerMonth}</div>
+                  </div>
+                </li>
+              )}
+              {streak >= 5 && (
+                <li className="flex gap-3">
+                  <IconBadge icon={Flame} tone="success" size="sm" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">רצף של {streak} ימים</div>
+                    <div className="text-xs text-muted-foreground">המשך כך</div>
+                  </div>
+                </li>
+              )}
+              {hasToday && summary.lateCount < settings.goals.maxLatePerMonth && streak < 5 && (
+                <li className="text-xs text-muted-foreground">אין תזכורות פתוחות.</li>
+              )}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="mt-5 card-surface p-5">
@@ -217,60 +188,63 @@ function Dashboard() {
           </Link>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-lg border border-border p-3">
-            <div className="text-xs text-muted-foreground">סה״כ דקות</div>
-            <div className="mt-1 text-2xl font-bold tabular-nums">{learningTotalMin}</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">{(learningTotalMin / 60).toFixed(1)} שע׳</div>
-          </div>
+          <StatTile label="סה״כ דקות" value={learningTotalMin} hint={`${(learningTotalMin / 60).toFixed(1)} שע׳`} />
           {learningByFw.map(({ fw, minutes }) => (
-            <div key={fw} className="rounded-lg border border-border p-3">
-              <div className="text-xs text-muted-foreground truncate">{FRAMEWORK_LABELS[fw]}</div>
-              <div className="mt-1 text-2xl font-bold tabular-nums">{minutes}</div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">דקות</div>
-            </div>
+            <StatTile key={fw} label={FRAMEWORK_LABELS[fw]} value={minutes} hint="דקות" />
           ))}
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card-surface p-5 lg:col-span-2 bg-gradient-to-l from-primary/5 to-transparent">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="size-4 text-primary" />
-            <h2 className="text-sm font-semibold">סיכום מהיר</h2>
-          </div>
-          <ul className="space-y-2 text-sm">
-            <li className="flex items-start gap-2">
-              <TrendingUp className="size-4 text-success mt-0.5 shrink-0" />
-              <span>ציון הנוכחות החודש: <b className="tabular-nums">{score}</b> מתוך 100.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <Award className="size-4 text-warning mt-0.5 shrink-0" />
-              <span>סדרים מלאים (אוהבי ה׳) החודש: <b className="tabular-nums">{summary.oheveiCount}</b>.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <BookOpen className="size-4 text-info mt-0.5 shrink-0" />
-              <span>לימוד נוסף החודש: <b className="tabular-nums">{learningTotalMin}</b> דקות.</span>
-            </li>
-          </ul>
-        </div>
+      {(showInsights || showQuickActions) && (
+        <div className={`mt-5 grid grid-cols-1 gap-4 ${showInsights && showQuickActions ? "lg:grid-cols-3" : ""}`}>
+          {showInsights && (
+            <div className={`card-surface p-5 bg-gradient-to-l from-primary/5 to-transparent ${showQuickActions ? "lg:col-span-2" : ""}`}>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-primary" />
+                  <h2 className="text-sm font-semibold">סיכום מהיר</h2>
+                </div>
+                <Link to="/insights" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                  לתובנות <ChevronLeft className="size-3" />
+                </Link>
+              </div>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-start gap-2">
+                  <TrendingUp className="size-4 text-success mt-0.5 shrink-0" />
+                  <span>ציון הנוכחות החודש: <b className="tabular-nums">{score}</b> מתוך 100.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Award className="size-4 text-warning mt-0.5 shrink-0" />
+                  <span>סדרים מלאים (אוהבי ה׳) החודש: <b className="tabular-nums">{summary.oheveiCount}</b>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <BookOpen className="size-4 text-info mt-0.5 shrink-0" />
+                  <span>לימוד נוסף החודש: <b className="tabular-nums">{learningTotalMin}</b> דקות.</span>
+                </li>
+              </ul>
+            </div>
+          )}
 
-        <div className="card-surface p-5">
-          <h2 className="text-sm font-semibold mb-3">פעולות מהירות</h2>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: "רישום סדר", icon: CalendarCheck, to: "/attendance" as const },
-              { label: "לימוד נוסף", icon: BookOpen, to: "/learning" as const },
-              { label: "ייצוא דוח", icon: FileDown, to: "/reports" as const },
-              { label: "גיבוי", icon: DatabaseBackup, to: "/settings" as const },
-            ].map((a) => (
-              <Link key={a.label} to={a.to} className="rounded-lg border border-border bg-card hover:bg-accent transition p-3 text-right">
-                <a.icon className="size-4 text-primary mb-2" />
-                <div className="text-xs font-medium">{a.label}</div>
-              </Link>
-            ))}
-          </div>
+          {showQuickActions && (
+            <div className="card-surface p-5">
+              <h2 className="text-sm font-semibold mb-3">פעולות מהירות</h2>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "רישום סדר", icon: CalendarCheck, to: "/attendance" as const },
+                  { label: "לימוד נוסף", icon: BookOpen, to: "/learning" as const },
+                  { label: "ייצוא דוח", icon: FileDown, to: "/reports" as const },
+                  { label: "גיבוי ושחזור", icon: DatabaseBackup, to: "/backup" as const },
+                ].map((a) => (
+                  <Link key={a.label} to={a.to} className="rounded-lg border border-border bg-card hover:bg-accent transition p-3 text-right">
+                    <a.icon className="size-4 text-primary mb-2" />
+                    <div className="text-xs font-medium">{a.label}</div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </AppShell>
   );
 }

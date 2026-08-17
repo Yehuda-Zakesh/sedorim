@@ -18,13 +18,17 @@ type Filter = {
 };
 
 const EMPTY: Filter = { q: "", type: "all", from: "", to: "", tag: "" };
-const SAVED_KEY = "tracker.savedFilters.v2";
+const SAVED_KEY = "sederplus.savedFilters.v1";
+const SAVED_LEGACY_KEY = "tracker.savedFilters.v2";
 
 type SavedFilter = { id: string; name: string; filter: Filter };
 
 function loadSaved(): SavedFilter[] {
   if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "[]"); } catch { return []; }
+  // Pre-rename installs still carry the old key; read it once as a fallback so
+  // saved filters survive the upgrade.
+  const raw = localStorage.getItem(SAVED_KEY) ?? localStorage.getItem(SAVED_LEGACY_KEY);
+  try { return JSON.parse(raw || "[]"); } catch { return []; }
 }
 function persistSaved(list: SavedFilter[]) {
   try { localStorage.setItem(SAVED_KEY, JSON.stringify(list)); } catch { /* noop */ }
@@ -60,10 +64,13 @@ function SearchPage() {
         });
       }
     }
-    if (f.type === "all" || f.type === "learning") {
+    // Tags only exist on seder records, so a tag filter cannot match a lesson.
+    // This used to silently drop every learning result whenever a tag was
+    // picked; now the tag control is disabled for learning and the note below
+    // explains the narrowing when both are in play.
+    if ((f.type === "all" || f.type === "learning") && !f.tag) {
       for (const l of lessons) {
         if (!inRange(l.date)) continue;
-        if (f.tag) continue;
         const txt = `${FRAMEWORK_LABELS[l.framework]} ${l.date} ${l.note || ""}`;
         if (f.q && !txt.includes(f.q)) continue;
         out.push({
@@ -92,25 +99,35 @@ function SearchPage() {
 
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as Filter["type"] })}
-            className="rounded-md border border-input bg-card px-2 py-1.5">
+            className="field-input-sm">
             <option value="all">כל הסוגים</option>
             <option value="seder">סדרים</option>
             <option value="learning">לימוד נוסף</option>
           </select>
           <input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })}
-            className="rounded-md border border-input bg-card px-2 py-1.5" />
+            className="field-input-sm" />
           <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })}
-            className="rounded-md border border-input bg-card px-2 py-1.5" />
-          <select value={f.tag} onChange={(e) => setF({ ...f, tag: e.target.value })}
-            className="rounded-md border border-input bg-card px-2 py-1.5">
+            className="field-input-sm" />
+          <select
+            value={f.tag}
+            disabled={f.type === "learning" || tags.length === 0}
+            title={f.type === "learning" ? "לרישומי לימוד אין תגיות" : undefined}
+            onChange={(e) => setF({ ...f, tag: e.target.value })}
+            className="field-input-sm disabled:opacity-50">
             <option value="">כל התגיות</option>
             {tags.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
 
+        {f.tag && f.type === "all" && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            סינון לפי תגית חל על רישומי סדרים בלבד — רישומי לימוד אינם נושאים תגיות ולכן אינם מוצגים.
+          </p>
+        )}
+
         <div className="mt-3 flex items-center gap-2">
           <input value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="שם לסינון מועדף..."
-            className="flex-1 rounded-md border border-input bg-card px-2 py-1.5 text-xs" />
+            className="field-input-sm flex-1" />
           <button onClick={saveCurrent} disabled={!saveName.trim()}
             className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50">
             <Save className="size-3.5" /> שמור

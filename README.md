@@ -27,10 +27,30 @@ src-tauri/
 ```
 
 The frontend is compiled to static files and embedded straight into each EXE.
-It reaches the outside world through exactly five Rust commands (see
-`src-tauri/core/src/lib.rs`): read the store, write the store, save a
-generated file, open the full app from the quick window, open a link in the
-browser.
+It reaches the outside world through exactly seven Rust commands (see
+`src-tauri/core/src/lib.rs`): read the store, check whether the store changed,
+write the store, save a generated file, open the full app from the quick
+window, open a link in the browser, and raise a Windows notification.
+
+## Reminders
+
+The three switches under Settings → "התראות" raise real Windows toasts:
+a nudge when nothing has been logged by the time seder א׳ starts, a warning
+once the month's lateness quota is used up, and a weekly digest. The rules
+live in `src/lib/notifications.ts`.
+
+There is no background service, so a reminder can only appear while a window
+is open — the rules are written to ask "is this still worth saying now?"
+rather than to fire at a fixed time. Each one fires at most once per
+day/week/month, and that bookkeeping lives in the shared data file so two open
+EXEs never toast the same reminder twice.
+
+## Update checks
+
+Settings → "עדכוני גרסה" takes a GitHub repo as `owner/repo`. With one set,
+the app asks `api.github.com` twice a day whether a newer release exists and
+offers to open the download in the browser. Left empty — the default — the app
+makes no network requests at all.
 
 ### Where the data lives
 

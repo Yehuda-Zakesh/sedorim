@@ -4,6 +4,8 @@ import { AppShell } from "@/components/app-shell";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useSeder, calcSeder, monthlySummary, entriesByDate, type SederEntry } from "@/lib/kollel-store";
 import { hebrewFromGregorian, hebrewDayLetters, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
+import { MonthSummaryCard } from "@/components/month-summary";
+import { toastUndo } from "@/lib/undo";
 
 export const Route = createFileRoute("/calendar")({
   head: () => ({ meta: [{ title: "לוח שנה — המעקב שלי" }] }),
@@ -37,13 +39,13 @@ function CalendarPage() {
   );
 }
 
-export function CalendarView() {
+function CalendarView() {
   const today = new Date();
   const [month, setMonth] = useState(today.getMonth());
   const [year, setYear] = useState(today.getFullYear());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  const { entries, remove } = useSeder();
+  const { entries, remove, upsert } = useSeder();
   const byDate = useMemo(() => entriesByDate(entries), [entries]);
 
   const first = new Date(year, month, 1).getDay();
@@ -161,7 +163,12 @@ export function CalendarView() {
                       <li key={e.id} className="rounded-md border border-border p-3">
                         <div className="flex items-center justify-between">
                           <div className="text-sm font-medium">סדר {e.seder === 1 ? "א׳" : "ב׳"}</div>
-                          <button onClick={() => remove(e.id)} className="text-[10px] text-destructive hover:underline">מחק</button>
+                          <button
+                            onClick={() => {
+                              remove(e.id);
+                              toastUndo(`הרישום מ-${e.date} נמחק`, () => upsert(e));
+                            }}
+                            className="text-[10px] text-destructive hover:underline">מחק</button>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
                           {e.absent ? "היעדרות" : `${e.arrival || "—"} → ${e.departure || "—"}`}
@@ -179,29 +186,12 @@ export function CalendarView() {
             <div className="card-surface p-5 text-xs text-muted-foreground">לחץ על יום בלוח לפרטים.</div>
           )}
 
-          <div className="card-surface p-5">
-            <h3 className="text-sm font-semibold mb-3">סיכום חודשי</h3>
-            <ul className="space-y-2 text-sm">
-              <Row label="רישומים" value={summary.entries} />
-              <Row label="חסר נטו (דק׳)" value={summary.netMissing} />
-              <Row label="מוצדק" value={summary.excused} />
-              <Row label="בונוס" value={summary.bonus} />
-              <Row label="איחורים" value={summary.lateCount} />
-              <Row label="היעדרויות" value={summary.absenceCount} />
-              <Row label="אוהבי ה׳" value={summary.oheveiCount} />
-            </ul>
-          </div>
         </div>
       </div>
-    </>
-  );
-}
 
-function Row({ label, value }: { label: string; value: number }) {
-  return (
-    <li className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold tabular-nums">{value}</span>
-    </li>
+      <div className="mt-4">
+        <MonthSummaryCard title={`סיכום ${months[month]} ${year}`} summary={summary} />
+      </div>
+    </>
   );
 }

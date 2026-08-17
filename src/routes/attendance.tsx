@@ -8,6 +8,8 @@ import {
 } from "@/lib/kollel-store";
 import { useSettings, getSederTimesFor } from "@/lib/settings-store";
 import { formatHebrewDate, fastDayName, hasNoSederB } from "@/lib/hebrew-calendar";
+import { StackedField } from "@/components/ui/form";
+import { toastUndo } from "@/lib/undo";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/attendance")({
@@ -93,7 +95,12 @@ function SederCard({
         <h2 className="text-base font-semibold">סדר {num === 1 ? "א׳" : "ב׳"} <span className="text-xs text-muted-foreground font-normal">({startStr}–{endStr})</span></h2>
         <div className="flex items-center gap-2">
           {existing && (
-            <button onClick={() => { remove(existing.id); toast("הרישום נמחק"); onSaved(); }}
+            <button
+              onClick={() => {
+                remove(existing.id);
+                toastUndo("הרישום נמחק", () => upsert(existing));
+                onSaved();
+              }}
               className="text-xs text-muted-foreground hover:text-destructive">מחק</button>
           )}
           <button onClick={save}
@@ -114,18 +121,16 @@ function SederCard({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-muted-foreground">שעת הגעה</label>
+        <StackedField label="שעת הגעה">
           <input type="time" disabled={form.absent} value={form.arrival}
             onChange={(e) => setForm({ ...form, arrival: e.target.value })}
-            className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm disabled:opacity-50" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground">שעת יציאה</label>
+            className="field-input w-full tabular-nums" />
+        </StackedField>
+        <StackedField label="שעת יציאה">
           <input type="time" disabled={form.absent} value={form.departure}
             onChange={(e) => setForm({ ...form, departure: e.target.value })}
-            className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm disabled:opacity-50" />
-        </div>
+            className="field-input w-full tabular-nums" />
+        </StackedField>
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2">
@@ -146,34 +151,30 @@ function SederCard({
 
       {!form.excusedAll && (
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground">דקות מוצדקות (חלקי)</label>
+          <StackedField label="דקות מוצדקות (חלקי)">
             <input type="number" min={0} value={form.excusedMinutes}
               onChange={(e) => setForm({ ...form, excusedMinutes: Math.max(0, +e.target.value || 0) })}
-              className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">סיבה (אופציונלי)</label>
+              className="field-input w-full" />
+          </StackedField>
+          <StackedField label="סיבה (אופציונלי)">
             <input value={form.excusedReason} maxLength={100}
               onChange={(e) => setForm({ ...form, excusedReason: e.target.value })}
-              className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-          </div>
+              className="field-input w-full" />
+          </StackedField>
         </div>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-muted-foreground">התאמה ידנית (דק׳, חתום)</label>
+        <StackedField label="התאמה ידנית (דק׳, חתום)">
           <input type="number" value={form.manualAdjustMin}
             onChange={(e) => setForm({ ...form, manualAdjustMin: Math.max(-1440, Math.min(1440, +e.target.value || 0)) })}
-            className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground">הערה</label>
+            className="field-input w-full" />
+        </StackedField>
+        <StackedField label="הערה">
           <input value={form.note} maxLength={200}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
-            className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-        </div>
+            className="field-input w-full" />
+        </StackedField>
       </div>
 
       <div className="mt-4 grid grid-cols-4 gap-2 text-center">
@@ -215,7 +216,7 @@ function AttendancePage() {
       <div className="card-surface p-4 mb-4 flex items-center gap-3">
         <CalendarDays className="size-4 text-muted-foreground" />
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="rounded-md border border-input bg-card px-3 py-1.5 text-sm" />
+          className="field-input" />
         <span className="text-xs text-muted-foreground">{heDate}</span>
         {fastName && (
           <span className="mr-auto inline-flex items-center gap-1 rounded-full bg-warning/10 border border-warning/30 px-2.5 py-1 text-[11px] text-warning font-medium">

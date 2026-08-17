@@ -1,15 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Fragment, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Search, Trash2, History as HistoryIcon, CalendarDays, BookOpen, FileDown, Loader2, Lock, LockOpen } from "lucide-react";
+import { Search, Trash2, History as HistoryIcon, BookOpen, FileDown, Loader2, Lock, LockOpen } from "lucide-react";
 import {
   useSeder, useLearning, calcSeder, monthlySummary, monthClosing, groupEntriesByMonth,
-  FRAMEWORK_LABELS, type MonthClosing,
+  FRAMEWORK_LABELS, type MonthClosing, type LearningEntry,
 } from "@/lib/kollel-store";
 import { exportMonthClosingsPdf } from "@/lib/exporters";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
+import { MonthSummaryCard } from "@/components/month-summary";
+import { toastUndo } from "@/lib/undo";
 import { toast } from "sonner";
-import { CalendarView } from "./calendar";
 
 export const Route = createFileRoute("/history")({
   head: () => ({ meta: [{ title: "היסטוריה — המעקב שלי" }] }),
@@ -20,9 +21,9 @@ type TypeFilter = "all" | "late" | "absent" | "early" | "ohevei" | "bonus";
 type ExcusedFilter = "all" | "excused" | "non-excused";
 
 function HistoryPage() {
-  const { entries, remove } = useSeder();
+  const { entries, remove, upsert } = useSeder();
   const learning = useLearning();
-  const [tab, setTab] = useState<"list" | "learning" | "calendar">("list");
+  const [tab, setTab] = useState<"list" | "learning">("list");
   const [q, setQ] = useState("");
   const [sederFilter, setSederFilter] = useState<"all" | "1" | "2">("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -74,14 +75,16 @@ function HistoryPage() {
           className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
           <BookOpen className="size-3.5" /> לימוד נוסף
         </button>
-        <button onClick={() => setTab("calendar")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "calendar" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-          <CalendarDays className="size-3.5" /> לוח שנה
-        </button>
       </div>
 
-      {tab === "calendar" ? <CalendarView /> : tab === "learning" ? (
-        <LearningHistory items={learning.items} onRemove={(id) => { learning.remove(id); toast("נמחק"); }} />
+      {tab === "learning" ? (
+        <LearningHistory
+          items={learning.items}
+          onRemove={(item) => {
+            learning.remove(item.id);
+            toastUndo("רישום הלימוד נמחק", () => learning.add(item));
+          }}
+        />
       ) : (
       <>
       <div className="card-surface p-4 mb-4 space-y-3">
@@ -93,13 +96,13 @@ function HistoryPage() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           <select value={sederFilter} onChange={(e) => setSederFilter(e.target.value as "all" | "1" | "2")}
-            className="rounded-md border border-input bg-card px-2 py-1.5">
+            className="field-input-sm">
             <option value="all">כל הסדרים</option>
             <option value="1">סדר א׳</option>
             <option value="2">סדר ב׳</option>
           </select>
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-            className="rounded-md border border-input bg-card px-2 py-1.5">
+            className="field-input-sm">
             <option value="all">כל הסוגים</option>
             <option value="late">איחור</option>
             <option value="absent">היעדרות</option>
@@ -108,13 +111,13 @@ function HistoryPage() {
             <option value="bonus">בונוס</option>
           </select>
           <select value={excusedFilter} onChange={(e) => setExcusedFilter(e.target.value as ExcusedFilter)}
-            className="rounded-md border border-input bg-card px-2 py-1.5">
+            className="field-input-sm">
             <option value="all">הכל</option>
             <option value="excused">מוצדק</option>
             <option value="non-excused">לא מוצדק</option>
           </select>
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-            className="rounded-md border border-input bg-card px-2 py-1.5" />
+            className="field-input-sm" />
         </div>
       </div>
 
@@ -181,7 +184,12 @@ function HistoryPage() {
                       <td className="px-3 py-3 tabular-nums">{c.excusedMin}</td>
                       <td className="px-3 py-3 text-xs text-muted-foreground">{tags.join(", ") || "מלא"}</td>
                       <td className="px-3 py-3">
-                        <button onClick={() => { remove(e.id); toast("נמחק"); }}
+                        <button
+                          title="מחק רישום"
+                          onClick={() => {
+                            remove(e.id);
+                            toastUndo(`הרישום מ-${e.date} נמחק`, () => upsert(e));
+                          }}
                           className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
                           <Trash2 className="size-3.5" />
                         </button>
@@ -203,18 +211,8 @@ function HistoryPage() {
         {!filtered.length && <div className="p-10 text-center text-sm text-muted-foreground">לא נמצאו רישומים</div>}
       </div>
 
-      <div className="card-surface p-5 mt-4">
-        <h3 className="text-sm font-semibold mb-3">סיכום החודש הנוכחי</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <SumRow label="חסר סה״כ" value={summary.totalMissing} />
-          <SumRow label="מוצדק" value={summary.excused} />
-          <SumRow label="לא מוצדק" value={summary.nonExcused} />
-          <SumRow label="חסר נטו" value={summary.netMissing} />
-          <SumRow label="בונוס" value={summary.bonus} />
-          <SumRow label="איחורים" value={summary.lateCount} />
-          <SumRow label="היעדרויות" value={summary.absenceCount} />
-          <SumRow label="אוהבי ה׳" value={summary.oheveiCount} />
-        </div>
+      <div className="mt-4">
+        <MonthSummaryCard title="סיכום החודש הנוכחי" summary={summary} />
       </div>
       </>
       )}
@@ -269,16 +267,7 @@ function ClosingStat({ label, value, title }: { label: string; value: number; ti
   );
 }
 
-function SumRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border border-border p-3">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="text-xl font-bold tabular-nums">{value}</div>
-    </div>
-  );
-}
-
-function LearningHistory({ items, onRemove }: { items: ReturnType<typeof useLearning>["items"]; onRemove: (id: string) => void }) {
+function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove: (item: LearningEntry) => void }) {
   const [q, setQ] = useState("");
   const [framework, setFramework] = useState<string>("all");
   const [month, setMonth] = useState("");
@@ -303,14 +292,14 @@ function LearningHistory({ items, onRemove }: { items: ReturnType<typeof useLear
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
           <select value={framework} onChange={(e) => setFramework(e.target.value)}
-            className="rounded-md border border-input bg-card px-2 py-1.5">
+            className="field-input-sm">
             <option value="all">כל המסגרות</option>
             <option value="kollel-erev">כולל ערב</option>
             <option value="torato-beyado">תורתו בידו</option>
             <option value="bein-hazmanim">ישיבת בין הזמנים</option>
           </select>
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-            className="rounded-md border border-input bg-card px-2 py-1.5" />
+            className="field-input-sm" />
           <div className="rounded-md border border-border px-2 py-1.5 text-center">
             סה״כ: <span className="font-semibold tabular-nums">{totalMin}</span> דק׳ · {filtered.length} רישומים
           </div>
@@ -338,7 +327,7 @@ function LearningHistory({ items, onRemove }: { items: ReturnType<typeof useLear
                 <td className="px-3 py-3 text-xs text-muted-foreground">{i.source === "timer" ? "טיימר" : i.source === "range" ? "טווח שעות" : "ידני"}</td>
                 <td className="px-3 py-3 text-xs text-muted-foreground">{i.note || "—"}</td>
                 <td className="px-3 py-3">
-                  <button onClick={() => onRemove(i.id)}
+                  <button onClick={() => onRemove(i)} title="מחק רישום"
                     className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
                     <Trash2 className="size-3.5" />
                   </button>

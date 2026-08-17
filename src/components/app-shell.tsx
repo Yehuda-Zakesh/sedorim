@@ -7,6 +7,7 @@ import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
 import { applyAppearance, useSettings, useNeedsOnboarding } from "@/lib/settings-store";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
+import { useReminderNotifications } from "@/lib/notifications";
 import { OnboardingWizard } from "./onboarding-wizard";
 import { useAutoUpdateCheck } from "@/lib/updater";
 import { UpdatePrompt } from "./update-prompt";
@@ -34,6 +35,9 @@ export function AppShell({ title, subtitle, actions, children }: {
 
   useEffect(() => { applyAppearance(); }, []);
   useGlobalShortcuts(() => setHelpOpen((v) => !v));
+  // Only the full app raises reminders. The quick window renders its own
+  // shell, so having it here means one set of toasts even with both EXEs open.
+  useReminderNotifications();
   const { update, dismiss } = useAutoUpdateCheck();
 
   const cycle = () => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");

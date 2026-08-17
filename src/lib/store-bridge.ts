@@ -27,7 +27,10 @@ export type StoreKey =
   | "onboarded"
   | "audit"
   | "snapshots"
-  | "lastAutoBackupAt";
+  | "lastAutoBackupAt"
+  // Which reminders have already been raised, so two open EXEs don't both
+  // toast the same one — see notifications.ts.
+  | "notificationsSent";
 
 export type StoreShape = Partial<Record<StoreKey, unknown>> & {
   updatedAt?: number;

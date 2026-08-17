@@ -51,7 +51,7 @@ function AuditPage() {
   );
 }
 
-export function AuditView() {
+function AuditView() {
   const entries = useAudit();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | AuditAction>("all");

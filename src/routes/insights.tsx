@@ -4,17 +4,18 @@ import { Sparkles, TrendingUp, TrendingDown, Lightbulb, Target } from "lucide-re
 import { useSeder, useLearning, attendanceScore, currentDayStreak } from "@/lib/kollel-store";
 import { useSettings } from "@/lib/settings-store";
 import { generateInsights, forecastMonthlyNetMissing, consistencyScore, type Insight } from "@/lib/insights";
+import { KpiCard, IconBadge } from "@/components/ui/stat";
 
 export const Route = createFileRoute("/insights")({
   head: () => ({ meta: [{ title: "תובנות חכמות — המעקב שלי" }] }),
   component: InsightsPage,
 });
 
-const TONE: Record<Insight["tone"], { bg: string; text: string; icon: typeof TrendingUp }> = {
-  success:     { bg: "bg-success/10",     text: "text-success",     icon: TrendingUp },
-  warning:     { bg: "bg-warning/10",     text: "text-warning",     icon: TrendingDown },
-  info:        { bg: "bg-info/10",        text: "text-info",        icon: Lightbulb },
-  destructive: { bg: "bg-destructive/10", text: "text-destructive", icon: TrendingDown },
+const TONE: Record<Insight["tone"], { tone: "success" | "warning" | "info" | "destructive"; icon: typeof TrendingUp }> = {
+  success:     { tone: "success",     icon: TrendingUp },
+  warning:     { tone: "warning",     icon: TrendingDown },
+  info:        { tone: "info",        icon: Lightbulb },
+  destructive: { tone: "destructive", icon: TrendingDown },
 };
 
 const CATEGORY_LABEL: Record<Insight["category"], string> = {
@@ -29,7 +30,7 @@ function InsightsPage() {
   );
 }
 
-export function InsightsView() {
+function InsightsView() {
   const { entries } = useSeder();
   const { items: lessons } = useLearning();
   const { settings } = useSettings();
@@ -53,7 +54,7 @@ export function InsightsView() {
         <KpiCard label="ציון החודש" value={`${overall}`} icon={Target} />
         <KpiCard label="רצף ימים" value={streak.toString()} icon={Sparkles} />
         <KpiCard label="תחזית חסר חודשי" value={forecast !== null ? `${forecast}` : "—"} icon={TrendingUp} />
-        <KpiCard label="ציון עקביות" value={`${consistency}`} icon={Lightbulb} />
+        <KpiCard label="ציון עקביות" value={consistency === 0 ? "—" : `${consistency}`} icon={Lightbulb} />
       </section>
 
       {insights.length === 0 ? (
@@ -76,9 +77,7 @@ export function InsightsView() {
                     return (
                       <li key={i.id} className="rounded-lg border border-border p-3">
                         <div className="flex items-start gap-2">
-                          <div className={`size-8 rounded-md grid place-items-center shrink-0 ${t.bg} ${t.text}`}>
-                            <t.icon className="size-4" />
-                          </div>
+                          <IconBadge icon={t.icon} tone={t.tone} size="sm" />
                           <div className="min-w-0">
                             <div className="text-sm font-medium">{i.title}</div>
                             <div className="text-xs text-muted-foreground mt-0.5">{i.detail}</div>
@@ -94,21 +93,5 @@ export function InsightsView() {
         </div>
       )}
     </>
-  );
-}
-
-function KpiCard({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Target }) {
-  return (
-    <div className="card-surface p-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-2 text-3xl font-bold tabular-nums">{value}</div>
-        </div>
-        <div className="size-10 rounded-lg bg-primary/10 text-primary grid place-items-center">
-          <Icon className="size-5" />
-        </div>
-      </div>
-    </div>
   );
 }

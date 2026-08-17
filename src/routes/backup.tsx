@@ -7,8 +7,9 @@ import {
 import { useSeder, useLearning, replaceAllData } from "@/lib/kollel-store";
 import { useSnapshots, createSnapshot, deleteSnapshot, verifySnapshot, getLastAutoBackupTs, clearAllSnapshots } from "@/lib/auto-backup";
 import { logAudit } from "@/lib/audit-store";
-import { useSettings, resetSettings } from "@/lib/settings-store";
+import { useSettings } from "@/lib/settings-store";
 import { saveTextFile } from "@/lib/save-file";
+import { KpiCard, IconBadge } from "@/components/ui/stat";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/backup")({
@@ -31,14 +32,13 @@ function BackupPage() {
   );
 }
 
-export function BackupView() {
+function BackupView() {
   const { entries, clearAll: clearSeder } = useSeder();
   const { items, clearAll: clearLrn } = useLearning();
   const snapshots = useSnapshots();
   const { settings } = useSettings();
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
 
   const exportData = async () => {
     const payload = { version: 3, exportedAt: new Date().toISOString(), kind: "kollel", seder: entries, learning: items };
@@ -97,22 +97,16 @@ export function BackupView() {
     setConfirmDelete(false);
   };
 
-  const doReset = () => {
-    resetSettings();
-    toast.success("ההגדרות אופסו");
-    setConfirmReset(false);
-  };
-
   const totalBytes = JSON.stringify({ entries, items }).length;
   const lastAuto = getLastAutoBackupTs();
 
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
-        <Kpi icon={CheckCircle2} tone="success" label="רישומי סדרים" value={entries.length.toString()} />
-        <Kpi icon={FileJson} tone="info" label="רישומי לימוד" value={items.length.toString()} />
-        <Kpi icon={HardDrive} tone="primary" label="נפח נתונים" value={formatSize(totalBytes)} />
-        <Kpi icon={Clock} tone="warning" label="גיבוי אחרון" value={lastAuto ? formatTs(lastAuto).split(",")[0] : "אין"} />
+        <KpiCard compact icon={CheckCircle2} tone="success" label="רישומי סדרים" value={entries.length.toString()} />
+        <KpiCard compact icon={FileJson} tone="info" label="רישומי לימוד" value={items.length.toString()} />
+        <KpiCard compact icon={HardDrive} tone="primary" label="נפח נתונים" value={formatSize(totalBytes)} />
+        <KpiCard compact icon={Clock} tone="warning" label="גיבוי אחרון" value={lastAuto ? formatTs(lastAuto).split(",")[0] : "אין"} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
@@ -148,9 +142,7 @@ export function BackupView() {
               const valid = verifySnapshot(s);
               return (
                 <li key={s.id} className="flex items-center gap-3 py-3">
-                  <div className={`size-9 rounded-md grid place-items-center ${valid ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                    {valid ? <CheckCircle2 className="size-4" /> : <ShieldAlert className="size-4" />}
-                  </div>
+                  <IconBadge icon={valid ? CheckCircle2 : ShieldAlert} tone={valid ? "success" : "destructive"} size="md" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium tabular-nums">{formatTs(s.ts)}</div>
                     <div className="text-[11px] text-muted-foreground">
@@ -174,57 +166,25 @@ export function BackupView() {
           <AlertTriangle className="size-4 text-destructive" />
           <h2 className="text-sm font-semibold">פעולות הרסניות</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="rounded-lg border border-border p-4">
-            <div className="text-sm font-semibold">איפוס הגדרות לברירת מחדל</div>
-            <div className="text-xs text-muted-foreground mt-1">שעות סדרים, יעדים והעדפות.</div>
-            {!confirmReset ? (
-              <button onClick={() => setConfirmReset(true)}
-                className="mt-3 rounded-md border border-warning text-warning px-3 py-1.5 text-xs hover:bg-warning/10">אפס הגדרות</button>
-            ) : (
-              <div className="mt-3 flex gap-2">
-                <button onClick={doReset} className="rounded-md bg-warning px-3 py-1.5 text-xs text-warning-foreground">אישור איפוס</button>
-                <button onClick={() => setConfirmReset(false)} className="rounded-md border border-border px-3 py-1.5 text-xs">בטל</button>
-              </div>
-            )}
-          </div>
-          <div className="rounded-lg border border-destructive/40 p-4">
-            <div className="text-sm font-semibold text-destructive">מחיקת בסיס נתונים</div>
-            <div className="text-xs text-muted-foreground mt-1">מוחק את כל הסדרים ורישומי הלימוד. תיווצר תמונת מצב אוטומטית לפני המחיקה.</div>
-            {!confirmDelete ? (
-              <button onClick={() => setConfirmDelete(true)}
-                className="mt-3 rounded-md border border-destructive text-destructive px-3 py-1.5 text-xs hover:bg-destructive/10">מחק נתונים</button>
-            ) : (
-              <div className="mt-3 flex gap-2">
-                <button onClick={doDelete} className="rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground">אישור מחיקה</button>
-                <button onClick={() => setConfirmDelete(false)} className="rounded-md border border-border px-3 py-1.5 text-xs">בטל</button>
-              </div>
-            )}
-          </div>
+        <div className="rounded-lg border border-destructive/40 p-4">
+          <div className="text-sm font-semibold text-destructive">מחיקת בסיס נתונים</div>
+          <div className="text-xs text-muted-foreground mt-1">מוחק את כל הסדרים ורישומי הלימוד. תיווצר תמונת מצב אוטומטית לפני המחיקה.</div>
+          {!confirmDelete ? (
+            <button onClick={() => setConfirmDelete(true)}
+              className="mt-3 rounded-md border border-destructive text-destructive px-3 py-1.5 text-xs hover:bg-destructive/10">מחק נתונים</button>
+          ) : (
+            <div className="mt-3 flex gap-2">
+              <button onClick={doDelete} className="rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground">אישור מחיקה</button>
+              <button onClick={() => setConfirmDelete(false)} className="rounded-md border border-border px-3 py-1.5 text-xs">בטל</button>
+            </div>
+          )}
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            לאיפוס ההגדרות (שעות סדרים, יעדים והעדפות) — מסך ההגדרות.
+          </p>
         </div>
         <button onClick={() => { clearAllSnapshots(); toast("תמונות המצב נמחקו"); }}
           className="mt-3 text-xs text-muted-foreground hover:text-destructive">מחיקת כל תמונות המצב</button>
       </div>
     </>
-  );
-}
-
-function Kpi({ icon: Icon, tone, label, value }: { icon: typeof Download; tone: string; label: string; value: string }) {
-  const tones: Record<string, string> = {
-    success: "bg-success/10 text-success", info: "bg-info/10 text-info",
-    primary: "bg-primary/10 text-primary", warning: "bg-warning/10 text-warning",
-  };
-  return (
-    <div className="card-surface p-5">
-      <div className="flex items-center gap-3">
-        <div className={`size-10 rounded-lg grid place-items-center ${tones[tone]}`}>
-          <Icon className="size-5" />
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="text-sm font-semibold tabular-nums">{value}</div>
-        </div>
-      </div>
-    </div>
   );
 }

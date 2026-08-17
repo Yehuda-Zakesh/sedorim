@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Check, Target, Bell, Database, User } from "lucide-react";
 import { getSettings, markOnboarded, updateSettings } from "@/lib/settings-store";
+import { StackedField, Toggle } from "@/components/ui/form";
 
 const STEPS = [
   { id: "welcome", title: "ברוכים הבאים", icon: User },
@@ -62,60 +63,54 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                 ברוכים הבאים ל"המעקב שלי" — כלי אישי לניהול נוכחות ולימוד.
                 נגדיר יחד מספר העדפות בסיסיות. תוכל לשנות הכל מאוחר יותר בהגדרות.
               </p>
-              <div>
-                <label className="text-xs text-muted-foreground">שם תצוגה</label>
+              <StackedField label="שם תצוגה">
                 <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">כיתה / קבוצה (אופציונלי)</label>
+                  className="field-input w-full" />
+              </StackedField>
+              <StackedField label="כולל / קבוצה (אופציונלי)">
                 <input value={classroom} onChange={(e) => setClassroom(e.target.value)} maxLength={40}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-              </div>
+                  className="field-input w-full" />
+              </StackedField>
             </div>
           )}
           {step === 1 && (
             <div className="space-y-4">
-              <div>
-                <label className="text-xs text-muted-foreground">יעד נוכחות חודשי (%)</label>
+              <StackedField label="יעד נוכחות חודשי (%)">
                 <input type="number" min={50} max={100} value={target}
                   onChange={(e) => setTarget(Math.max(50, Math.min(100, +e.target.value || 0)))}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">מקסימום איחורים בחודש</label>
+                  className="field-input w-full" />
+              </StackedField>
+              <StackedField label="מקסימום איחורים בחודש">
                 <input type="number" min={0} max={31} value={maxLate}
                   onChange={(e) => setMaxLate(Math.max(0, Math.min(31, +e.target.value || 0)))}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-              </div>
+                  className="field-input w-full" />
+              </StackedField>
             </div>
           )}
           {step === 2 && (
             <div className="space-y-3">
-              <Row label="תזכורת יומית לרישום נוכחות" on={reminder} set={setReminder} />
-              <Row label="התראה כשמתקרב למכסת איחורים" on={lateAlert} set={setLateAlert} />
+              <Toggle label="תזכורת יומית לרישום נוכחות" on={reminder} onChange={setReminder} />
+              <Toggle label="התראה כשמתקרב למכסת איחורים" on={lateAlert} onChange={setLateAlert} />
               <p className="text-xs text-muted-foreground">
-                התראות הן ויזואליות בלבד בתוך הממשק.
+                ההתראות מוצגות כהודעות מערכת של Windows — אך רק כשהתוכנה פתוחה, שכן אין שירות רקע.
               </p>
             </div>
           )}
           {step === 3 && (
             <div className="space-y-4">
-              <div>
-                <label className="text-xs text-muted-foreground">תדירות גיבוי אוטומטי</label>
+              <StackedField label="תדירות גיבוי אוטומטי">
                 <select value={auto} onChange={(e) => setAuto(e.target.value as "off" | "daily" | "weekly")}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm">
+                  className="field-input w-full">
                   <option value="off">כבוי</option>
                   <option value="daily">יומי</option>
                   <option value="weekly">שבועי</option>
                 </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">מספר גיבויים לשמור</label>
+              </StackedField>
+              <StackedField label="מספר גיבויים לשמור">
                 <input type="number" min={1} max={20} value={retention}
                   onChange={(e) => setRetention(Math.max(1, Math.min(20, +e.target.value || 1)))}
-                  className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-              </div>
+                  className="field-input w-full" />
+              </StackedField>
             </div>
           )}
           {step === 4 && (
@@ -149,18 +144,6 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Row({ label, on, set }: { label: string; on: boolean; set: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-      <span className="text-sm">{label}</span>
-      <button onClick={() => set(!on)}
-        className={`relative h-6 w-11 rounded-full transition ${on ? "bg-primary" : "bg-muted"}`}>
-        <span className={`absolute top-0.5 size-5 rounded-full bg-card shadow transition-all ${on ? "right-0.5" : "right-[22px]"}`} />
-      </button>
     </div>
   );
 }

@@ -8,6 +8,8 @@ import {
   calcSeder, monthlySummary, attendanceScore, FRAMEWORK_LABELS,
 } from "./kollel-store";
 import { formatHebrewDate } from "./hebrew-calendar";
+import { getSettings } from "./settings-store";
+import { colorThemeHex } from "./theme-colors";
 
 export type ReportSections = {
   kpis: boolean;
@@ -34,51 +36,107 @@ function inRange(d: string, range?: { from: string; to: string }) {
   return (!range?.from || d >= range.from) && (!range?.to || d <= range.to);
 }
 
-// Shared print shell for every PDF this module produces: fixed 794px (A4 at
-// 96dpi) so html2canvas rasterizes at a predictable page width.
+/** A4 width at 96dpi. The report is laid out at exactly this width so the
+ *  rasterized image maps 1:1 onto the page with no rescaling blur. */
+const REPORT_WIDTH_PX = 794;
+
+/** Escapes text coming from user records before it goes into report HTML. */
+function esc(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => (
+    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;"
+  ));
+}
+
+// Shared print shell for every PDF this module produces.
+//
+// Two rules govern everything in here, both learned the hard way:
+//
+//  1. Every colour is a hex literal, and `border-color` is forced with
+//     !important. The app's own base layer sets `* { border-color:
+//     var(--color-border) }`, which computes to an oklch() colour — and
+//     html2canvas 1.4.1 throws outright on any colour function it doesn't
+//     know. Since the report is rendered inside the live document, it
+//     inherits that rule unless we override it here.
+//  2. Nothing may be wider than the shell. Anything overflowing 794px is
+//     simply cropped out of the canvas, which is what made the wide
+//     month-closing table come out cut off. Hence table-layout:fixed,
+//     wrapping headers, and no white-space:nowrap anywhere.
 function reportShell(title: string, subtitle: string, body: string): string {
+  const settings = getSettings();
+  const accent = colorThemeHex(settings.appearance?.colorTheme);
+  const owner = [settings.profile?.name, settings.profile?.classroom]
+    .filter((s) => s && s.trim())
+    .join(" · ") || "המעקב שלי";
+
   return `
-<div id="__report" dir="rtl" lang="he" style="
-  width:794px; padding:40px; background:#fff; color:#1a1a1a;
-  font-family: 'Heebo', 'Segoe UI', Arial, sans-serif;">
+<div id="__report" dir="rtl" lang="he">
   <style>
-    #__report h1 { font-size:28px; margin:0 0 4px; color:#1E3A5F; }
-    #__report .sub { color:#5a6478; margin-bottom:24px; font-size:13px; }
-    #__report .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
-    #__report .kpi { border:1px solid #e1e6ee; border-radius:10px; padding:14px; background:#f7f9fc; }
-    #__report .kpi-label { font-size:11px; color:#5a6478; }
-    #__report .kpi-val { font-size:24px; font-weight:700; color:#1565C0; margin-top:6px; }
-    #__report .card { border:1px solid #e1e6ee; border-radius:12px; padding:18px; margin-bottom:16px; background:#fff; }
-    #__report .card h3 { margin:0 0 12px; font-size:15px; color:#1E3A5F; border-bottom:1px solid #eef2f7; padding-bottom:8px; }
-    #__report table { width:100%; border-collapse:collapse; font-size:12px; }
-    #__report th, #__report td { padding:7px 10px; text-align:right; border-bottom:1px solid #eef2f7; }
-    #__report th { background:#f7f9fc; font-weight:600; color:#3a4761; }
-    #__report table.compact { font-size:11px; }
-    #__report table.compact th, #__report table.compact td { padding:6px 5px; }
-    #__report tr.total td { background:#f7f9fc; font-weight:700; border-top:2px solid #c8d3e4; }
+    #__report, #__report *, #__report *::before, #__report *::after {
+      box-sizing:border-box;
+      border-color:#dfe5ee !important;
+      outline-color:#dfe5ee !important;
+      box-shadow:none !important;
+      text-shadow:none !important;
+      background-image:none !important;
+      -webkit-text-stroke-color:#1f2430 !important;
+      text-decoration-color:#1f2430 !important;
+      overflow-wrap:break-word;
+    }
+    #__report {
+      width:${REPORT_WIDTH_PX}px; padding:34px 38px; background:#ffffff; color:#1f2430;
+      font-family:'Heebo','Segoe UI',Arial,sans-serif; font-size:12.5px; line-height:1.55;
+    }
+    #__report h1 { font-size:25px; line-height:1.25; margin:0 0 4px; color:#1c2536; font-weight:700; }
+    #__report .sub { color:#5a6478; font-size:12px; }
+    #__report .brand { text-align:left; font-weight:700; color:${accent}; font-size:13px; }
+    #__report .brand small { display:block; font-weight:400; color:#5a6478; font-size:10.5px; margin-top:2px; }
+
+    #__report .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+    #__report .kpi { border:1px solid #dfe5ee; border-radius:10px; padding:12px; background:#f7f9fc; }
+    #__report .kpi-label { font-size:10.5px; color:#5a6478; line-height:1.35; }
+    #__report .kpi-val { font-size:22px; font-weight:700; color:${accent}; margin-top:4px; }
+
+    #__report .card { border:1px solid #dfe5ee; border-radius:12px; padding:16px 18px; margin-bottom:14px; background:#ffffff; }
+    #__report .card h3 { margin:0 0 10px; font-size:14.5px; color:#1c2536; border-bottom:1px solid #eef2f7; padding-bottom:8px; font-weight:700; }
+    #__report .card > p { margin:0 0 10px; }
+
+    #__report table { width:100%; table-layout:fixed; border-collapse:collapse; font-size:11.5px; word-break:break-word; }
+    #__report th, #__report td { padding:6px 8px; text-align:right; border-bottom:1px solid #eef2f7; vertical-align:top; }
+    #__report th { background:#f4f7fb; font-weight:600; color:#3a4761; font-size:11px; line-height:1.3; }
+    #__report td.num, #__report th.num { text-align:center; }
+    #__report table.compact { font-size:10px; }
+    #__report table.compact th, #__report table.compact td { padding:5px 3px; }
+    #__report table.compact th { font-size:9.5px; }
+    #__report tr.total td { background:#f4f7fb; font-weight:700; border-top:2px solid #c8d3e4; }
+    #__report tbody tr:nth-child(even) td { background:#fbfcfe; }
+    #__report tbody tr.total:nth-child(even) td { background:#f4f7fb; }
+
     #__report .bars { display:flex; flex-direction:column; gap:8px; }
-    #__report .bar-row { display:grid; grid-template-columns: 130px 1fr 50px; align-items:center; gap:10px; font-size:12px; }
-    #__report .bar { height:14px; background:#eef2f7; border-radius:7px; overflow:hidden; }
+    #__report .bar-row { display:grid; grid-template-columns:135px 1fr 56px; align-items:center; gap:10px; font-size:11.5px; }
+    #__report .bar { height:13px; background:#eef2f7; border-radius:7px; overflow:hidden; }
     #__report .bar-fill { height:100%; border-radius:7px; }
-    #__report .muted { color:#5a6478; font-size:11px; margin-top:8px; }
-    #__report .footer { margin-top:24px; padding-top:12px; border-top:1px solid #eef2f7; color:#5a6478; font-size:10px; display:flex; justify-content:space-between; }
-    #__report ul { margin:0; padding-right:18px; font-size:12px; }
-    #__report ul li { margin:4px 0; }
+    #__report .bar-val { text-align:left; font-weight:600; }
+
+    #__report .muted { color:#5a6478; font-size:10.5px; margin:8px 0 0; }
+    #__report ul { margin:0; padding-right:18px; font-size:11.5px; }
+    #__report ul li { margin:3px 0; }
+    #__report .empty { color:#8a93a6; font-size:11.5px; font-style:italic; }
+    #__report .footer { margin-top:20px; padding-top:10px; border-top:1px solid #eef2f7; color:#7a8398; font-size:10px; display:flex; justify-content:space-between; }
   </style>
 
-  <header style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid #1565C0; padding-bottom:14px; margin-bottom:20px;">
-    <div>
-      <h1>${title}</h1>
+  <header style="display:flex; justify-content:space-between; align-items:flex-end; gap:20px; border-bottom:3px solid ${accent}; padding-bottom:12px; margin-bottom:18px;">
+    <div style="min-width:0;">
+      <h1>${esc(title)}</h1>
       <div class="sub">${subtitle}</div>
     </div>
-    <div style="text-align:left; color:#1E3A5F; font-weight:700;">המעקב שלי · כולל</div>
+    <div class="brand">סדר פלוס<small>${esc(owner)}</small></div>
   </header>
 
   ${body}
 
   <div class="footer">
     <span>דוח אישי — מסמך פנימי</span>
-    <span>הופק אוטומטית · המעקב שלי</span>
+    <span>הופק אוטומטית · סדר פלוס</span>
   </div>
 </div>`;
 }
@@ -129,9 +187,9 @@ function buildReportHTML(
       <h3>פילוח דקות</h3>
       <div class="bars">
         ${[
-          { k: "missing", l: "חסרות (לא מוצדק)", v: nonExcused, color: "#F44336" },
-          { k: "excused", l: "מוצדק", v: excused, color: "#2196F3" },
-          { k: "bonus", l: "בונוס", v: bonus, color: "#4CAF50" },
+          { k: "missing", l: "חסרות (לא מוצדק)", v: nonExcused, color: "#E5533D" },
+          { k: "excused", l: "מוצדק", v: excused, color: "#2F80ED" },
+          { k: "bonus", l: "בונוס", v: bonus, color: "#3EA55E" },
         ].map((row) => {
           const max = Math.max(1, nonExcused + excused + bonus);
           const pct = Math.round((row.v / max) * 100);
@@ -149,13 +207,14 @@ function buildReportHTML(
     <section class="card">
       <h3>סיכום חודשי</h3>
       <table>
-        <thead><tr><th>חודש</th><th>רישומים</th><th>איחור</th><th>היעדרות</th><th>חסר נטו</th><th>בונוס</th><th>אוהבי ה׳</th><th>ציון</th></tr></thead>
+        <colgroup><col style="width:16%"><col span="7"></colgroup>
+        <thead><tr><th>חודש</th><th class="num">רישומים</th><th class="num">איחור</th><th class="num">היעדרות</th><th class="num">חסר נטו</th><th class="num">בונוס</th><th class="num">אוהבי ה׳</th><th class="num">ציון</th></tr></thead>
         <tbody>
-          ${monthKeys.map((k) => {
+          ${monthKeys.length === 0 ? `<tr><td colspan="8" class="empty">אין נתונים בטווח</td></tr>` : monthKeys.map((k) => {
             const [y, m] = k.split("-").map(Number);
             const s = monthlySummary(y, m - 1);
             const score = attendanceScore(y, m - 1);
-            return `<tr><td>${k}</td><td>${s.entries}</td><td>${s.lateCount}</td><td>${s.absenceCount}</td><td>${s.netMissing}</td><td>${s.bonus}</td><td>${s.oheveiCount}</td><td>${score}</td></tr>`;
+            return `<tr><td>${k}</td><td class="num">${s.entries}</td><td class="num">${s.lateCount}</td><td class="num">${s.absenceCount}</td><td class="num">${s.netMissing}</td><td class="num">${s.bonus}</td><td class="num">${s.oheveiCount}</td><td class="num">${score}</td></tr>`;
           }).join("")}
         </tbody>
       </table>
@@ -166,19 +225,20 @@ function buildReportHTML(
     <section class="card">
       <h3>פירוט סדרים</h3>
       <table>
-        <thead><tr><th>תאריך</th><th>סדר</th><th>הגעה</th><th>יציאה</th><th>חסר</th><th>בונוס</th><th>מוצדק</th><th>אוהבי ה׳</th></tr></thead>
+        <colgroup><col style="width:17%"><col style="width:8%"><col style="width:11%"><col style="width:11%"><col span="4"></colgroup>
+        <thead><tr><th>תאריך</th><th class="num">סדר</th><th class="num">הגעה</th><th class="num">יציאה</th><th class="num">חסר</th><th class="num">בונוס</th><th class="num">מוצדק</th><th class="num">אוהבי ה׳</th></tr></thead>
         <tbody>
-          ${ents.slice(0, 200).map((e) => {
+          ${ents.length === 0 ? `<tr><td colspan="8" class="empty">אין רישומים בטווח</td></tr>` : ents.slice(0, 200).map((e) => {
             const c = calcSeder(e);
             return `<tr>
               <td>${e.date}</td>
-              <td>${e.seder === 1 ? "א׳" : "ב׳"}</td>
-              <td>${e.absent ? "—" : (e.arrival || "—")}</td>
-              <td>${e.absent ? "—" : (e.departure || "—")}</td>
-              <td>${c.missingMin}</td>
-              <td>${c.bonusMin}</td>
-              <td>${c.excusedMin}</td>
-              <td>${c.isOhevei ? "✓" : ""}</td>
+              <td class="num">${e.seder === 1 ? "א׳" : "ב׳"}</td>
+              <td class="num">${e.absent ? "—" : (e.arrival || "—")}</td>
+              <td class="num">${e.absent ? "—" : (e.departure || "—")}</td>
+              <td class="num">${c.missingMin}</td>
+              <td class="num">${c.bonusMin}</td>
+              <td class="num">${c.excusedMin}</td>
+              <td class="num">${c.isOhevei ? "✓" : ""}</td>
             </tr>`;
           }).join("")}
         </tbody>
@@ -187,25 +247,29 @@ function buildReportHTML(
     </section>
   `;
 
+  const excusedRows = ents.filter((e) => e.excusedAll || e.excusedMinutes > 0);
   const excusedHtml = !sections.excusedSummary ? "" : `
     <section class="card">
       <h3>סיכום היעדרויות מוצדקות</h3>
       <p>סה"כ דקות מוצדקות: <b>${excused}</b></p>
-      <ul>
-        ${ents.filter((e) => e.excusedAll || e.excusedMinutes > 0).slice(0, 30).map((e) =>
-          `<li>${e.date} · סדר ${e.seder === 1 ? "א׳" : "ב׳"} — ${e.excusedAll ? "כל הסדר" : `${e.excusedMinutes} דק׳`}${e.excusedReason ? ` — ${e.excusedReason}` : ""}</li>`).join("")}
-      </ul>
+      ${excusedRows.length === 0 ? `<p class="empty">אין היעדרויות מוצדקות בטווח</p>` : `<ul>
+        ${excusedRows.slice(0, 30).map((e) =>
+          `<li>${e.date} · סדר ${e.seder === 1 ? "א׳" : "ב׳"} — ${e.excusedAll ? "כל הסדר" : `${e.excusedMinutes} דק׳`}${e.excusedReason ? ` — ${esc(e.excusedReason)}` : ""}</li>`).join("")}
+      </ul>`}
+      ${excusedRows.length > 30 ? `<p class="muted">מוצגים 30 מתוך ${excusedRows.length} רישומים</p>` : ""}
     </section>
   `;
 
+  const oheveiRows = ents.filter((e) => calcSeder(e).isOhevei);
   const oheveiHtml = !sections.oheveiList ? "" : `
     <section class="card">
       <h3>רשימת סדרי "אוהבי ה׳"</h3>
       <p>סה"כ: <b>${oheveiCount}</b></p>
-      <ul>
-        ${ents.filter((e) => calcSeder(e).isOhevei).slice(0, 50).map((e) =>
+      ${oheveiRows.length === 0 ? `<p class="empty">אין סדרי אוהבי ה׳ בטווח</p>` : `<ul>
+        ${oheveiRows.slice(0, 50).map((e) =>
           `<li>${e.date} · סדר ${e.seder === 1 ? "א׳" : "ב׳"}</li>`).join("")}
-      </ul>
+      </ul>`}
+      ${oheveiRows.length > 50 ? `<p class="muted">מוצגים 50 מתוך ${oheveiRows.length} רישומים</p>` : ""}
     </section>
   `;
 
@@ -214,17 +278,20 @@ function buildReportHTML(
       <h3>לימוד נוסף</h3>
       <p>סה"כ: <b>${totalLearnMin}</b> דק׳ (${(totalLearnMin / 60).toFixed(1)} שעות) · ${lsns.length} רישומים</p>
       <table>
-        <thead><tr><th>תאריך</th><th>מסגרת</th><th>דקות</th></tr></thead>
+        <colgroup><col style="width:22%"><col><col style="width:18%"></colgroup>
+        <thead><tr><th>תאריך</th><th>מסגרת</th><th class="num">דקות</th></tr></thead>
         <tbody>
-          ${lsns.slice(0, 100).map((l) => `<tr><td>${l.date}</td><td>${FRAMEWORK_LABELS[l.framework]}</td><td>${l.minutes}</td></tr>`).join("")}
+          ${lsns.length === 0 ? `<tr><td colspan="3" class="empty">אין רישומי לימוד בטווח</td></tr>` : lsns.slice(0, 100).map((l) =>
+            `<tr><td>${l.date}</td><td>${FRAMEWORK_LABELS[l.framework]}</td><td class="num">${l.minutes}</td></tr>`).join("")}
         </tbody>
       </table>
+      ${lsns.length > 100 ? `<p class="muted">מוצגים 100 מתוך ${lsns.length} רישומים</p>` : ""}
     </section>
   `;
 
   return reportShell(
     title,
-    `${range ? `טווח: ${range.from} → ${range.to}` : ""} · הופק ${heDate}`,
+    `${range ? `טווח: ${range.from} → ${range.to} · ` : ""}הופק ${heDate}`,
     `${kpiHtml}
   ${chartHtml}
   ${yearlyHtml}
@@ -235,6 +302,65 @@ function buildReportHTML(
   );
 }
 
+/** How much the canvas is oversampled relative to CSS pixels. */
+const RASTER_SCALE = 2;
+
+/**
+ * Y positions (in canvas pixels, measured from the top of the report) where a
+ * page may be cut without slicing through content.
+ *
+ * Only whole blocks count: the bottom edge of a section, a table, a table body
+ * row, a list item, a bar. Headings and paragraphs are deliberately left out —
+ * breaking straight after a heading would strand it alone at the foot of a
+ * page.
+ */
+function pageBreakOffsets(root: HTMLElement): number[] {
+  if (typeof root.querySelectorAll !== "function" || typeof root.getBoundingClientRect !== "function") {
+    return []; // not a real layout (tests) — fall back to fixed-height slices
+  }
+  const top = root.getBoundingClientRect().top;
+  const offsets = new Set<number>();
+  const blocks = root.querySelectorAll<HTMLElement>("section, table, tbody tr, ul li, .bar-row, .grid");
+  blocks.forEach((el) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    offsets.add(Math.round((rect.bottom - top) * RASTER_SCALE));
+  });
+  return [...offsets].sort((a, b) => a - b);
+}
+
+/**
+ * Splits the rasterized report into page-sized slices, preferring to cut on one
+ * of `breaks` so no row or card is severed mid-way. Falls back to a full-height
+ * cut when a single block is taller than a page (nothing else can be done) or
+ * when the only available break would leave the page mostly empty.
+ */
+export function sliceIntoPages(totalPx: number, pageSlicePx: number, breaks: number[]): { from: number; to: number }[] {
+  const pages: { from: number; to: number }[] = [];
+  // Never waste more than this much of a page hunting for a clean break.
+  const minFill = pageSlicePx * 0.55;
+  let y = 0;
+  while (y < totalPx) {
+    const hardEnd = Math.min(y + pageSlicePx, totalPx);
+    let end = hardEnd;
+    if (hardEnd < totalPx) {
+      let best = -1;
+      for (const b of breaks) {
+        if (b <= y) continue;
+        if (b > hardEnd) break;
+        if (b - y >= minFill) best = b;
+      }
+      // A couple of pixels past the edge so the block's own border is not
+      // shaved off by the cut.
+      if (best > 0) end = Math.min(best + RASTER_SCALE * 2, hardEnd);
+    }
+    if (end <= y) end = hardEnd; // safety: always make progress
+    pages.push({ from: y, to: end });
+    y = end;
+  }
+  return pages;
+}
+
 /**
  * Rasterizes report HTML (a #__report block from reportShell) into a paginated
  * A4 PDF and hands the bytes to the native save dialog.
@@ -242,15 +368,18 @@ function buildReportHTML(
  */
 async function renderHtmlToPdf(html: string, fname: string): Promise<boolean> {
   // Render the report HTML into a hidden off-screen container in the current
-  // page, rasterize it with html2canvas (splits across A4 pages), and write a
-  // real PDF file with jsPDF. No new window, no print dialog. Fonts are
-  // whatever the app already loads (Heebo via the app shell), so Hebrew/RTL
-  // renders correctly.
+  // page, rasterize it with html2canvas, and write a real PDF file with jsPDF.
+  // No new window, no print dialog. Fonts are whatever the app already loads
+  // (Heebo via the app shell), so Hebrew/RTL renders correctly.
+  //
+  // The host is only *visually* off-screen, never `display:none` and never
+  // zero-width: html2canvas measures real layout, and a hidden host rasterizes
+  // to nothing.
   const host = document.createElement("div");
   host.setAttribute("dir", "rtl");
   host.setAttribute("lang", "he");
   host.style.cssText =
-    "position:fixed;top:0;left:-10000px;width:794px;background:#fff;z-index:-1;pointer-events:none;";
+    `position:fixed;top:0;left:-10000px;width:${REPORT_WIDTH_PX}px;background:#fff;z-index:-1;pointer-events:none;`;
   host.innerHTML = html;
   document.body.appendChild(host);
 
@@ -266,11 +395,11 @@ async function renderHtmlToPdf(html: string, fname: string): Promise<boolean> {
     const node = target || host;
 
     const canvas = await html2canvas(node, {
-      scale: 2,
+      scale: RASTER_SCALE,
       backgroundColor: "#ffffff",
       useCORS: true,
       logging: false,
-      windowWidth: 794,
+      windowWidth: REPORT_WIDTH_PX,
     });
 
     const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
@@ -281,28 +410,33 @@ async function renderHtmlToPdf(html: string, fname: string): Promise<boolean> {
     const imgH = (canvas.height * imgW) / canvas.width;
 
     if (imgH <= pageH - margin * 2) {
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, imgW, imgH);
+      // PNG, not JPEG: at this size the chroma subsampling in a JPEG visibly
+      // furs the edges of Hebrew text, and a mostly-white page compresses well.
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imgW, imgH);
     } else {
-      // Slice the canvas into page-sized chunks so long reports paginate.
       const pxPerMm = canvas.width / imgW;
       const pageSlicePx = Math.floor((pageH - margin * 2) * pxPerMm);
-      let y = 0;
-      let first = true;
-      while (y < canvas.height) {
-        const sliceH = Math.min(pageSlicePx, canvas.height - y);
+      const pages = sliceIntoPages(canvas.height, pageSlicePx, pageBreakOffsets(node));
+
+      pages.forEach(({ from, to }, i) => {
+        const sliceH = to - from;
         const slice = document.createElement("canvas");
         slice.width = canvas.width;
         slice.height = sliceH;
         const ctx = slice.getContext("2d")!;
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, slice.width, slice.height);
-        ctx.drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-        const sliceMm = sliceH / pxPerMm;
-        if (!first) pdf.addPage();
-        pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, imgW, sliceMm);
-        first = false;
-        y += sliceH;
-      }
+        ctx.drawImage(canvas, 0, from, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        if (i > 0) pdf.addPage();
+        pdf.addImage(slice.toDataURL("image/png"), "PNG", margin, margin, imgW, sliceH / pxPerMm);
+        // Digits and "/" only — jsPDF's built-in fonts have no Hebrew glyphs,
+        // so anything else would come out as boxes.
+        if (typeof pdf.text === "function") {
+          pdf.setFontSize(8);
+          pdf.setTextColor(140);
+          pdf.text(`${i + 1} / ${pages.length}`, pageW / 2, pageH - 3, { align: "center" });
+        }
+      });
     }
 
     // Not pdf.save(): that builds an <a download>, which does nothing inside
@@ -377,29 +511,30 @@ function closingTableHtml(closings: MonthClosing[]): string {
     <section class="card">
       <h3>שורות סיכום חודשי</h3>
       <table class="compact">
+        <colgroup><col style="width:19%"><col span="10"></colgroup>
         <thead><tr>
-          <th>חודש</th><th>רישומים</th><th>סה״כ דקות</th><th>מוצדקות</th><th>בונוס</th><th>חסר נטו</th>
-          <th>אוהבי ה׳</th><th>איחורים</th><th>חיסורים</th><th>כולל ערב</th><th>תורתו בידו</th>
+          <th>חודש</th><th class="num">רישומים</th><th class="num">סה״כ דקות</th><th class="num">מוצדקות</th><th class="num">בונוס</th><th class="num">חסר נטו</th>
+          <th class="num">אוהבי ה׳</th><th class="num">איחורים</th><th class="num">חיסורים</th><th class="num">כולל ערב</th><th class="num">תורתו בידו</th>
         </tr></thead>
         <tbody>
           ${closings.map((c) => `<tr>
             <td>${c.gregorianLabel}<br><span class="muted">${c.hebrewLabel}${c.closed ? "" : " · פתוח"}</span></td>
-            <td>${c.seder.entries}</td>
-            <td>${c.seder.totalMissing}</td>
-            <td>${c.seder.excused}</td>
-            <td>${c.seder.bonus}</td>
-            <td>${c.seder.netMissing}</td>
-            <td>${c.seder.oheveiCount}</td>
-            <td>${c.seder.lateCount}</td>
-            <td>${c.seder.absenceCount}</td>
-            <td>${c.learning.kollelErev}</td>
-            <td>${c.learning.toratoBeyado}</td>
+            <td class="num">${c.seder.entries}</td>
+            <td class="num">${c.seder.totalMissing}</td>
+            <td class="num">${c.seder.excused}</td>
+            <td class="num">${c.seder.bonus}</td>
+            <td class="num">${c.seder.netMissing}</td>
+            <td class="num">${c.seder.oheveiCount}</td>
+            <td class="num">${c.seder.lateCount}</td>
+            <td class="num">${c.seder.absenceCount}</td>
+            <td class="num">${c.learning.kollelErev}</td>
+            <td class="num">${c.learning.toratoBeyado}</td>
           </tr>`).join("")}
           <tr class="total">
             <td>סה״כ (${closings.length} חודשים)</td>
-            <td>${t.entries}</td><td>${t.totalMissing}</td><td>${t.excused}</td><td>${t.bonus}</td>
-            <td>${t.netMissing}</td><td>${t.ohevei}</td><td>${t.late}</td><td>${t.absent}</td>
-            <td>${t.erev}</td><td>${t.torato}</td>
+            <td class="num">${t.entries}</td><td class="num">${t.totalMissing}</td><td class="num">${t.excused}</td><td class="num">${t.bonus}</td>
+            <td class="num">${t.netMissing}</td><td class="num">${t.ohevei}</td><td class="num">${t.late}</td><td class="num">${t.absent}</td>
+            <td class="num">${t.erev}</td><td class="num">${t.torato}</td>
           </tr>
         </tbody>
       </table>

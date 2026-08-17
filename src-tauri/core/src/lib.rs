@@ -14,6 +14,7 @@ use base64::Engine as _;
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -95,6 +96,24 @@ async fn open_main_window(app: AppHandle) -> Result<(), String> {
         return existing.set_focus().map_err(|e| e.to_string());
     }
     build_main_window(&app).map_err(|e| e.to_string())
+}
+
+/// Raises a Windows toast notification.
+///
+/// Driven from Rust like the dialog and opener plugins, so the capability
+/// files stay at `core:default` with no plugin permissions to declare.
+///
+/// Reminders are the one thing the app has to say while the user is looking at
+/// something else, so a failure here is reported rather than swallowed — the
+/// frontend decides whether to keep trying (see src/lib/notifications.ts).
+#[tauri::command]
+async fn notify(app: AppHandle, title: String, body: String) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|e| e.to_string())
 }
 
 /// Hands a link to the user's default browser. Used by the update prompt —
@@ -256,18 +275,20 @@ mod tests {
 
 pub fn run(context: tauri::Context, mode: Mode) {
     tauri::Builder::default()
-        // Both plugins are driven from Rust only (save_file_as,
-        // open_external_url), never called from the frontend — which is why
-        // the capability files need no plugin permissions.
+        // All three plugins are driven from Rust only (save_file_as,
+        // open_external_url, notify), never called from the frontend — which
+        // is why the capability files need no plugin permissions.
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             load_store,
             save_store_keys,
             store_stamp,
             save_file_as,
             open_main_window,
-            open_external_url
+            open_external_url,
+            notify
         ])
         .setup(move |app| {
             let handle = app.handle();

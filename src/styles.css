@@ -180,6 +180,45 @@
   box-shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 1px 3px oklch(0 0 0 / 0.06);
 }
 
+/* The look every text/number/date/time input and <select> in the app shares.
+   Deliberately sets no width, so a `w-24` or `flex-1` at the call site still
+   wins. */
+@utility field-input {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-input);
+  background-color: var(--color-card);
+  color: var(--color-foreground);
+  padding-block: calc(var(--spacing) * 2);
+  padding-inline: calc(var(--spacing) * 3);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+
+  &:focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: -1px;
+  }
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+/* Same control, in the dense filter bars. */
+@utility field-input-sm {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-input);
+  background-color: var(--color-card);
+  color: var(--color-foreground);
+  padding-block: calc(var(--spacing) * 1.5);
+  padding-inline: calc(var(--spacing) * 2);
+  font-size: 0.75rem;
+  line-height: 1rem;
+
+  &:focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: -1px;
+  }
+}
+
 /* Accessibility: high contrast */
 html.hc {
   --border: oklch(0.3 0.02 250);

@@ -54,6 +54,7 @@ import {
   exportPdfReport,
   exportXlsxWorkbook,
   exportMonthClosingsPdf,
+  sliceIntoPages,
   type ReportSections,
 } from "./exporters";
 import {
@@ -517,6 +518,35 @@ describe("exportPdfReport", () => {
       expect(rendered.html).not.toContain("NaN");
       expect(rendered.html).not.toContain("[object Object]");
     });
+
+    // html2canvas 1.4.1 throws on any colour function it does not know, and the
+    // app's own base layer paints every element's border with an oklch()
+    // custom property. The report is rendered inside the live document, so it
+    // inherits that unless the shell overrides it — which is what made exports
+    // come out wrong.
+    it("uses no colour the rasterizer cannot parse", async () => {
+      await exportPdfReport(base);
+      for (const unparseable of ["oklch", "color-mix", "var(--"]) {
+        expect(rendered.html, unparseable).not.toContain(unparseable);
+      }
+    });
+
+    it("forces border-color to a literal, beating the app's oklch base rule", async () => {
+      await exportPdfReport(base);
+      expect(rendered.html).toMatch(/border-color:\s*#[0-9a-fA-F]{3,8}\s*!important/);
+    });
+
+    it("pins tables to a fixed layout so a wide one cannot overflow the page", async () => {
+      // Overflow is not clipped by a scrollbar here — it falls outside the
+      // rasterized bounds and is simply missing from the PDF.
+      await exportPdfReport(base);
+      expect(rendered.html).toContain("table-layout:fixed");
+    });
+
+    it("titles the report with the profile it was saved under", async () => {
+      await exportPdfReport(base);
+      expect(rendered.html).toContain(DEFAULT_SETTINGS.profile.name);
+    });
   });
 
   describe("A4 pagination", () => {
@@ -551,6 +581,81 @@ describe("exportPdfReport", () => {
         orientation: "portrait",
       });
     });
+  });
+});
+
+// ============================================================================
+// sliceIntoPages
+// ============================================================================
+
+describe("sliceIntoPages", () => {
+  /** Every page must be within the page height, and the pages must tile the
+   *  whole canvas with no gap and no overlap. */
+  function expectCoversExactly(
+    pages: { from: number; to: number }[],
+    total: number,
+    pageSlicePx: number,
+  ) {
+    expect(pages[0].from).toBe(0);
+    expect(pages.at(-1)!.to).toBe(total);
+    for (const [i, p] of pages.entries()) {
+      expect(p.to, `page ${i} must make progress`).toBeGreaterThan(p.from);
+      expect(p.to - p.from, `page ${i} must fit the sheet`).toBeLessThanOrEqual(pageSlicePx);
+      if (i > 0) expect(p.from, `page ${i} must continue page ${i - 1}`).toBe(pages[i - 1].to);
+    }
+  }
+
+  it("keeps a canvas shorter than a page on one page", () => {
+    expect(sliceIntoPages(500, 2300, [])).toEqual([{ from: 0, to: 500 }]);
+  });
+
+  it("falls back to full-height slices with no break candidates", () => {
+    const pages = sliceIntoPages(5000, 2000, []);
+    expect(pages).toEqual([
+      { from: 0, to: 2000 },
+      { from: 2000, to: 4000 },
+      { from: 4000, to: 5000 },
+    ]);
+  });
+
+  it("cuts on a block boundary rather than through a row", () => {
+    // Rows every 100px. A blind cut would land at 2000, mid-row; the nearest
+    // boundary at or before that is 1900.
+    const rows = Array.from({ length: 40 }, (_, i) => (i + 1) * 100 + 50);
+    const [first] = sliceIntoPages(4000, 2000, rows);
+    expect(first.from).toBe(0);
+    // 1950 is the last row bottom that fits, plus the 4px border allowance.
+    expect(first.to).toBe(1954);
+  });
+
+  it("never lets a chosen break push a page past the sheet height", () => {
+    // A boundary exactly on the page edge: the +4px border allowance must be
+    // clamped away rather than overflowing onto the next sheet.
+    const [first] = sliceIntoPages(4000, 2000, [2000]);
+    expect(first.to).toBe(2000);
+  });
+
+  it("ignores a break that would leave the page mostly empty", () => {
+    // The only candidate sits 10% down the page — taking it would waste 90% of
+    // the sheet, so the full-height cut wins instead.
+    const [first] = sliceIntoPages(4000, 2000, [200]);
+    expect(first.to).toBe(2000);
+  });
+
+  it("still makes progress when one block is taller than a page", () => {
+    // A single 5000px block with no internal boundary cannot be broken
+    // cleanly; it must be sliced anyway rather than looping forever.
+    const pages = sliceIntoPages(5000, 2000, [5000]);
+    expect(pages).toHaveLength(3);
+    expectCoversExactly(pages, 5000, 2000);
+  });
+
+  it("tiles the canvas exactly, whatever the break layout", () => {
+    const rows = Array.from({ length: 60 }, (_, i) => (i + 1) * 137);
+    for (const total of [1, 1999, 2000, 2001, 4000, 8219]) {
+      const pages = sliceIntoPages(total, 2000, rows.filter((r) => r < total));
+      expectCoversExactly(pages, total, 2000);
+    }
   });
 });
 

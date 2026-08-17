@@ -4,6 +4,8 @@ import { AppShell } from "@/components/app-shell";
 import { FileDown, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { exportPdfReport, exportXlsxWorkbook, DEFAULT_SECTIONS, type ReportSections } from "@/lib/exporters";
 import { useSeder, useLearning } from "@/lib/kollel-store";
+import { StackedField } from "@/components/ui/form";
+import { IconBadge } from "@/components/ui/stat";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/reports")({
@@ -117,9 +119,7 @@ function ReportsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {presets.map((p) => (
           <div key={p.key} className="card-surface p-5 flex items-start gap-4">
-            <div className="size-12 rounded-xl bg-primary/10 text-primary grid place-items-center shrink-0">
-              <p.icon className="size-6" />
-            </div>
+            <IconBadge icon={p.icon} size="lg" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold">{p.title}</h3>
@@ -139,24 +139,21 @@ function ReportsPage() {
       <div className="mt-5 card-surface p-5">
         <h2 className="text-sm font-semibold mb-3">דוח מותאם אישית</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground">מתאריך</label>
+          <StackedField label="מתאריך">
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-              className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">עד תאריך</label>
+              className="field-input w-full" />
+          </StackedField>
+          <StackedField label="עד תאריך">
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-              className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">פורמט</label>
+              className="field-input w-full" />
+          </StackedField>
+          <StackedField label="פורמט">
             <select value={fmt} onChange={(e) => setFmt(e.target.value as "pdf" | "xlsx")}
-              className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm">
+              className="field-input w-full">
               <option value="pdf">PDF</option>
               <option value="xlsx">Excel (XLSX)</option>
             </select>
-          </div>
+          </StackedField>
         </div>
 
         <div className="mt-5">

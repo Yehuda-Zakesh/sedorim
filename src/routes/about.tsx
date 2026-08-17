@@ -3,6 +3,7 @@ import { AppShell, APP_VERSION, BUILD_COMMIT, BUILD_TIME } from "@/components/ap
 import {
   ClipboardCheck, BookOpen, BarChart3, CalendarDays, History, FileText,
   Search, Settings, Shield, Zap, Sparkles, Info, HeartHandshake, Palette,
+  BellRing, RefreshCw,
 } from "lucide-react";
 
 export const Route = createFileRoute("/about")({
@@ -26,8 +27,10 @@ const features = [
   { icon: Settings, title: "הגדרות אישיות", desc: "הגדרות סדרים, יעדים חודשיים, זמני איחור מותרים, גיבוי אוטומטי ויומן ביקורת." },
   { icon: Palette, title: "עיצוב מותאם", desc: "11 ערכות צבע לסרגל הצד, ערכות רקע מרובות, מצב בהיר/כהה, שינוי גודל גופן וניגודיות גבוהה." },
   { icon: Shield, title: "גיבוי ושחזור", desc: "גיבוי אוטומטי מקומי עם שמירת גרסאות, יצוא וייבוא ידני של כל הנתונים." },
-  { icon: Zap, title: "כניסה מהירה", desc: "אתר נפרד לרישום מהיר של הגעה/יציאה, שעובד על אותו מסד הנתונים המקומי." },
+  { icon: Zap, title: "כניסה מהירה", desc: "תוכנה נפרדת וקטנה לרישום מהיר של הגעה/יציאה, שעובדת על אותו קובץ הנתונים המקומי." },
   { icon: Sparkles, title: "קיצורי מקלדת ונגישות", desc: "קיצורים למעבר מהיר בין מסכים, תמיכה בקורא מסך והתאמות ראייה." },
+  { icon: BellRing, title: "התראות מערכת", desc: "תזכורת יומית כשלא נרשם סדר, התראה על חריגה ממכסת האיחורים וסיכום שבועי — כהודעות Windows." },
+  { icon: RefreshCw, title: "עדכוני גרסה", desc: "בדיקה אוטומטית מול מאגר GitHub שתגדיר, עם הצעה להוריד גרסה חדשה. כבוי כברירת מחדל." },
 ];
 
 function AboutPage() {
