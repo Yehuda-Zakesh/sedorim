@@ -9,6 +9,7 @@ import {
   removeSederScheduleEntry,
   addSederOverride,
   removeSederOverride,
+  sederTimesError,
   isOnboarded,
   markOnboarded,
   resetOnboarding,
@@ -76,8 +77,8 @@ describe("DEFAULT_SETTINGS", () => {
   it("uses only values the types allow", () => {
     expect(["off", "daily", "weekly"]).toContain(DEFAULT_SETTINGS.data.autoBackup);
     expect(["small", "normal", "large", "xlarge"]).toContain(DEFAULT_SETTINGS.appearance.fontSize);
-    expect(["iso", "he", "mixed", "hebrew"]).toContain(DEFAULT_SETTINGS.language.dateFormat);
-    expect(["seder_end", "blank"]).toContain(DEFAULT_SETTINGS.seder.defaultDeparture);
+    expect(["blue", "emerald", "violet", "rose", "amber", "teal", "pink", "slate", "crimson", "indigo", "lime"])
+      .toContain(DEFAULT_SETTINGS.appearance.colorTheme);
   });
 
   it("starts with no schedule changes and no overrides", () => {
@@ -152,9 +153,10 @@ describe("updateSettings", () => {
     expect(DEFAULT_SETTINGS).toEqual(snapshot);
   });
 
-  it("takes a skipAudit flag without changing the result", () => {
-    updateSettings({ goals: { monthlyTarget: 77, maxLatePerMonth: 2 } }, { skipAudit: true });
+  it("leaves the notification channels alone when only a goal changes", () => {
+    updateSettings({ goals: { monthlyTarget: 77, maxLatePerMonth: 2 } });
     expect(getSettings().goals.monthlyTarget).toBe(77);
+    expect(getSettings().notifications).toEqual(DEFAULT_SETTINGS.notifications);
   });
 });
 
@@ -339,7 +341,7 @@ describe("setSederTimesFromToday", () => {
   it("leaves the other seder settings alone", () => {
     setSederTimesFromToday(times("10:00", "14:00"), "2026-07-01");
     expect(getSettings().seder.bonusThresholdMin).toBe(DEFAULT_SETTINGS.seder.bonusThresholdMin);
-    expect(getSettings().seder.defaultDeparture).toBe(DEFAULT_SETTINGS.seder.defaultDeparture);
+    expect(getSettings().seder.alertMissingMinPerMonth).toBe(DEFAULT_SETTINGS.seder.alertMissingMinPerMonth);
   });
 
   it("defaults its effective date to today", () => {
@@ -470,5 +472,39 @@ describe("applyAppearance", () => {
       updateSettings({ appearance: { ...getSettings().appearance, fontSize } });
       expect(() => applyAppearance()).not.toThrow();
     }
+  });
+});
+
+// ============================================================================
+// sederTimesError
+// ============================================================================
+
+describe("sederTimesError", () => {
+  it("accepts a sane pair of sedarim", () => {
+    expect(sederTimesError(BASE)).toBe(null);
+  });
+
+  it("refuses a seder that ends before it starts", () => {
+    expect(sederTimesError({ ...BASE, s1Start: "13:00", s1End: "09:00" })).toContain("סדר א׳");
+    expect(sederTimesError({ ...BASE, s2Start: "19:30", s2End: "15:45" })).toContain("סדר ב׳");
+  });
+
+  it("refuses a seder of zero length", () => {
+    expect(sederTimesError({ ...BASE, s1Start: "09:00", s1End: "09:00" })).not.toBe(null);
+  });
+
+  it("refuses a time that is not a time", () => {
+    for (const bad of ["", "9:0", "25:00", "09:60", "nonsense"]) {
+      expect(sederTimesError({ ...BASE, s1Start: bad }), bad).not.toBe(null);
+    }
+  });
+
+  it("reports the first problem it finds, naming the seder", () => {
+    const err = sederTimesError({ s1Start: "13:00", s1End: "09:00", s2Start: "19:00", s2End: "15:00" });
+    expect(err).toContain("סדר א׳");
+  });
+
+  it("allows a seder that runs up to midnight", () => {
+    expect(sederTimesError({ ...BASE, s2Start: "20:00", s2End: "23:59" })).toBe(null);
   });
 });

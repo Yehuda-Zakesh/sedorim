@@ -11,7 +11,6 @@ import {
   summarizeEntries,
   monthlySummary,
   monthClosing,
-  groupEntriesByMonth,
   attendanceScore,
   currentDayStreak,
   type SederEntry,
@@ -150,45 +149,6 @@ describe("entriesByDate", () => {
 
   it("has no key for a date with no records", () => {
     expect(entriesByDate([entry({ date: "2026-07-08" })])["2026-07-09"]).toBeUndefined();
-  });
-});
-
-describe("groupEntriesByMonth", () => {
-  it("groups by calendar month, preserving the incoming order", () => {
-    const groups = groupEntriesByMonth([
-      entry({ id: "a", date: "2026-08-03" }),
-      entry({ id: "b", date: "2026-07-28" }),
-      entry({ id: "c", date: "2026-08-01" }),
-      entry({ id: "d", date: "2026-07-01" }),
-    ]);
-    expect(groups.map((g) => g.monthKey)).toEqual(["2026-08", "2026-07"]);
-    expect(groups[0].items.map((e) => e.id)).toEqual(["a", "c"]);
-    expect(groups[1].items.map((e) => e.id)).toEqual(["b", "d"]);
-  });
-
-  it("returns an empty list for no entries", () => {
-    expect(groupEntriesByMonth([])).toEqual([]);
-  });
-
-  it("keeps one group per month and loses nothing", () => {
-    const list = [
-      entry({ id: "a", date: "2026-07-01" }),
-      entry({ id: "b", date: "2026-06-01" }),
-      entry({ id: "c", date: "2026-07-02" }),
-      entry({ id: "d", date: "2025-12-31" }),
-    ];
-    const groups = groupEntriesByMonth(list);
-    expect(groups.map((g) => g.monthKey)).toEqual(["2026-07", "2026-06", "2025-12"]);
-    expect(groups.flatMap((g) => g.items)).toHaveLength(list.length);
-    expect(new Set(groups.map((g) => g.monthKey)).size).toBe(groups.length);
-  });
-
-  it("crosses a year boundary without merging months", () => {
-    const groups = groupEntriesByMonth([
-      entry({ id: "a", date: "2026-01-05" }),
-      entry({ id: "b", date: "2025-01-05" }),
-    ]);
-    expect(groups.map((g) => g.monthKey)).toEqual(["2026-01", "2025-01"]);
   });
 });
 

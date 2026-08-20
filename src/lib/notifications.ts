@@ -1,17 +1,22 @@
-// Real OS notifications.
+// Reminders, and the two ways they can be shown.
 //
-// The three switches under Settings → "התראות" used to control nothing: the
-// onboarding wizard even said so out loud ("visual only"). They now drive
-// actual Windows toasts, raised through the `notify` command in
-// src-tauri/core/src/lib.rs.
+// A reminder goes out on two independent channels, each with its own switch in
+// Settings → "יעדים והתראות":
+//
+//   popups  — a toast inside the app. Only useful while a window is in front,
+//             which is why it is on by default: it interrupts nothing.
+//   desktop — a real Windows notification, raised through the `notify` command
+//             in src-tauri/core/src/lib.rs. It appears over whatever the user
+//             is doing, so it starts off and has to be asked for.
 //
 // What this is not: a background scheduler. The app has no service and does
 // not run when closed, so a reminder can only fire while a window is open.
 // The rules below are written for that — they ask "is this still worth saying
 // *now*", not "was this due at 09:00" — and each one fires at most once per
 // day / week / month, tracked in the shared data file so the two EXEs don't
-// both toast the same reminder.
+// both raise the same reminder.
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { invoke, isDesktop } from "./tauri";
 import { sharedValue } from "./shared-state";
 import { getSettings } from "./settings-store";
@@ -34,11 +39,13 @@ export type DueNotification = {
 
 // ============ delivery ============
 
+export type Delivery = { popup: boolean; desktop: boolean };
+
 /**
- * Raises one notification. Resolves false when it could not be shown — no
- * transport, permission refused, or notifications muted at the OS level.
+ * Raises a desktop notification. Resolves false when it could not be shown —
+ * no transport, permission refused, or notifications muted at the OS level.
  */
-export async function deliverNotification(title: string, body: string): Promise<boolean> {
+export async function deliverDesktopNotification(title: string, body: string): Promise<boolean> {
   if (isDesktop) {
     try {
       await invoke<void>("notify", { title, body });
@@ -59,6 +66,29 @@ export async function deliverNotification(title: string, body: string): Promise<
   } catch {
     return false;
   }
+}
+
+/**
+ * Says something on every channel the user has switched on, and reports which
+ * ones actually carried it.
+ *
+ * A reminder counts as delivered if *either* channel worked — see
+ * runReminderCheck, which will not mark a reminder as sent until then.
+ */
+export async function announce(title: string, body: string): Promise<Delivery> {
+  const channels = getSettings().notifications;
+  const out: Delivery = { popup: false, desktop: false };
+
+  if (channels.popups) {
+    // The body is the message; the title is already implied by the app the
+    // toast appears in.
+    toast(title, { description: body, duration: 8000 });
+    out.popup = true;
+  }
+  if (channels.desktop) {
+    out.desktop = await deliverDesktopNotification(title, body);
+  }
+  return out;
 }
 
 // ============ once-per-period bookkeeping ============
@@ -101,6 +131,8 @@ export type ReminderFacts = {
   maxLatePerMonth: number;
   lastWeek: { entries: number; netMissing: number; oheveiCount: number };
   enabled: { dailyReminder: boolean; latenessAlert: boolean; weeklySummary: boolean };
+  /** Whether any channel is switched on at all. */
+  anyChannelOn: boolean;
   sent: SentMap;
 };
 
@@ -111,6 +143,9 @@ export type ReminderFacts = {
  */
 export function dueNotifications(f: ReminderFacts): DueNotification[] {
   const out: DueNotification[] = [];
+  // With both channels off there is nowhere to say anything, and a reminder
+  // marked "sent" into the void would never be seen at all.
+  if (!f.anyChannelOn) return out;
   const today = `${f.now.getFullYear()}-${String(f.now.getMonth() + 1).padStart(2, "0")}-${String(f.now.getDate()).padStart(2, "0")}`;
   const monthKey = today.slice(0, 7);
   const nowMin = f.now.getHours() * 60 + f.now.getMinutes();
@@ -198,6 +233,7 @@ export function collectFacts(now = new Date()): ReminderFacts {
     maxLatePerMonth: settings.goals.maxLatePerMonth,
     lastWeek: lastWeekSummary(entries, now),
     enabled: settings.notifications,
+    anyChannelOn: settings.notifications.popups || settings.notifications.desktop,
     sent: sent.get(),
   };
 }
@@ -207,10 +243,11 @@ export async function runReminderCheck(now = new Date()): Promise<DueNotificatio
   const due = dueNotifications(collectFacts(now));
   const delivered: DueNotification[] = [];
   for (const n of due) {
-    // Only mark it sent if it actually got through, so a reminder is not lost
-    // for the whole day because notifications happened to be muted when the
-    // first attempt ran.
-    if (await deliverNotification(n.title, n.body)) delivered.push(n);
+    // Only mark it sent once a channel actually carried it, so a reminder is
+    // not lost for the whole day because notifications happened to be muted
+    // when the first attempt ran.
+    const result = await announce(n.title, n.body);
+    if (result.popup || result.desktop) delivered.push(n);
   }
   if (delivered.length) {
     const next = { ...sent.get() };

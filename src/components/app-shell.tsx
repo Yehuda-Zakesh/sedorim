@@ -14,12 +14,16 @@ import { UpdatePrompt } from "./update-prompt";
 import { BUILD_COMMIT, BUILD_TIME } from "@/lib/build-info";
 import pkg from "../../package.json";
 
-// Single source of truth: package.json's "version" field. BUILD_COMMIT/
-// BUILD_TIME (from build-info.ts) are only meaningful in a packaged EXE —
-// see that file for why. Together these let you check, from the About
-// screen, exactly what code a given install actually has — no more
-// guessing whether a repackage picked up the latest fixes.
-export const APP_VERSION = pkg.version;
+// Versions are whole numbers, starting from 1: this is "גרסה 1", the next
+// release is 2. package.json still holds a semver string because npm requires
+// one, but only the major part carries meaning — scripts/set-version.mjs
+// stamps the release number into it (and into the Tauri and Cargo manifests)
+// at build time.
+//
+// BUILD_COMMIT/BUILD_TIME (from build-info.ts) are only meaningful in a
+// packaged EXE — see that file for why. Together with the version they let you
+// check, from the About screen, exactly what code a given install has.
+export const APP_VERSION = pkg.version.split(".")[0];
 export { BUILD_COMMIT, BUILD_TIME };
 
 export function AppShell({ title, subtitle, actions, children }: {
@@ -35,8 +39,10 @@ export function AppShell({ title, subtitle, actions, children }: {
 
   useEffect(() => { applyAppearance(); }, []);
   useGlobalShortcuts(() => setHelpOpen((v) => !v));
-  // Only the full app raises reminders. The quick window renders its own
-  // shell, so having it here means one set of toasts even with both EXEs open.
+  // The quick window raises reminders too (it renders its own shell) — a user
+  // who only ever opens that one would otherwise never be reminded of
+  // anything. Two open windows cannot double up: the "already sent" map lives
+  // in the shared data file. See src/lib/notifications.ts.
   useReminderNotifications();
   const { update, dismiss } = useAutoUpdateCheck();
 

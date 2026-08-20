@@ -17,6 +17,7 @@ function facts(over: Partial<ReminderFacts> = {}): ReminderFacts {
     maxLatePerMonth: 3,
     lastWeek: { entries: 0, netMissing: 0, oheveiCount: 0 },
     enabled: ALL_ON,
+    anyChannelOn: true,
     sent: {},
     ...over,
   };
@@ -160,6 +161,28 @@ describe("all together", () => {
       enabled: { dailyReminder: false, latenessAlert: false, weeklySummary: false },
     });
     expect(dueNotifications(f)).toEqual([]);
+  });
+
+  it("raises nothing when there is no channel to raise it on", () => {
+    // Both pop-ups and desktop notifications switched off. A reminder marked
+    // "sent" into the void would never be seen at all, so none is produced.
+    const f = facts({
+      hasEntryToday: false,
+      lateCountThisMonth: 9,
+      lastWeek: { entries: 8, netMissing: 45, oheveiCount: 2 },
+      anyChannelOn: false,
+    });
+    expect(dueNotifications(f)).toEqual([]);
+  });
+
+  it("still raises them with only the in-app channel on", () => {
+    const f = facts({
+      hasEntryToday: false,
+      lateCountThisMonth: 9,
+      lastWeek: { entries: 8, netMissing: 45, oheveiCount: 2 },
+      anyChannelOn: true,
+    });
+    expect(kinds(f)).toEqual(["daily-reminder", "lateness-alert", "weekly-summary"]);
   });
 
   it("can raise all three at once", () => {

@@ -2,6 +2,39 @@
 @source "../src";
 @import "tw-animate-css";
 
+/* Heebo, shipped with the app instead of pulled from fonts.googleapis.com.
+   The EXE has to render identically with no network, and src/lib/pdf-doc.ts
+   embeds these exact files into every generated PDF — so the report on paper
+   matches the screen. */
+@font-face {
+  font-family: "Heebo";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Heebo-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Heebo";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/Heebo-Medium.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Heebo";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/Heebo-SemiBold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Heebo";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/Heebo-Bold.ttf") format("truetype");
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

@@ -1,6 +1,6 @@
 [package]
 name = "seder-plus-quick"
-version = "1.0.3"
+version = "1.0.0"
 description = "Seder Plus Quick — fast arrival/departure entry"
 edition = "2021"
 rust-version = "1.77.2"

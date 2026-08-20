@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  calcSeder, hhmmToMin, monthClosing, groupEntriesByMonth,
+  calcSeder, hhmmToMin, monthClosing,
   type SederEntry, type LearningEntry,
 } from "./kollel-store";
 import { DEFAULT_SETTINGS } from "./settings-store";
@@ -117,20 +117,6 @@ describe("calcSeder", () => {
 function lesson(overrides: Partial<LearningEntry>): LearningEntry {
   return { id: "l1", framework: "kollel-erev", date: "2026-07-08", minutes: 60, source: "manual", ...overrides };
 }
-
-describe("groupEntriesByMonth", () => {
-  it("groups by calendar month, preserving the incoming order", () => {
-    const groups = groupEntriesByMonth([
-      entry({ id: "a", date: "2026-08-03" }),
-      entry({ id: "b", date: "2026-07-28" }),
-      entry({ id: "c", date: "2026-08-01" }),
-      entry({ id: "d", date: "2026-07-01" }),
-    ]);
-    expect(groups.map((g) => g.monthKey)).toEqual(["2026-08", "2026-07"]);
-    expect(groups[0].items.map((e) => e.id)).toEqual(["a", "c"]);
-    expect(groups[1].items.map((e) => e.id)).toEqual(["b", "d"]);
-  });
-});
 
 describe("monthClosing", () => {
   it("sums the month's minutes, splits out the excused part, and counts events", () => {

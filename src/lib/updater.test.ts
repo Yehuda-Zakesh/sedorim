@@ -6,6 +6,7 @@ vi.mock("@/components/app-shell", () => ({ APP_VERSION: "1.0.3" }));
 
 import {
   isVersionNewer,
+  DEFAULT_REPO,
   getUpdateRepo,
   setUpdateRepo,
   getSkippedVersion,
@@ -147,7 +148,13 @@ describe("isVersionNewer", () => {
 // ============================================================================
 
 describe("getUpdateRepo / setUpdateRepo", () => {
-  it("defaults to no repo, so the app makes no network calls at all", () => {
+  it("defaults to the app's own repository, so update checks work out of the box", () => {
+    expect(getUpdateRepo()).toBe(DEFAULT_REPO);
+    expect(DEFAULT_REPO).toContain("/");
+  });
+
+  it("treats a stored empty string as an explicit off, not as unset", () => {
+    setUpdateRepo("");
     expect(getUpdateRepo()).toBe("");
   });
 
@@ -206,7 +213,8 @@ describe("skipVersion / getSkippedVersion / clearSkip", () => {
 // ============================================================================
 
 describe("checkForUpdate", () => {
-  it("makes no request and returns null with no repo configured", async () => {
+  it("makes no request and returns null once the repo is cleared", async () => {
+    setUpdateRepo("");
     const fetchMock = mockFetch(release());
     expect(await checkForUpdate()).toBe(null);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -297,25 +305,32 @@ describe("checkForUpdate", () => {
       expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe("https://x/SederPlus.exe");
     });
 
-    it("falls back to a .zip when there is no exe", async () => {
+    // Anything that is not an installer is not worth downloading, so a
+    // release without one sends the user to the release page instead — and
+    // says so, by refusing to offer an in-app install.
+    it("offers the release page, not a .zip, when there is no installer", async () => {
+      const body = release({
+        assets: [
+          { name: "notes.txt", browser_download_url: "https://x/notes.txt", size: 1 },
+          { name: "bundle.zip", browser_download_url: "https://x/bundle.zip", size: 3 },
+        ],
+      });
+      mockFetch(body);
+      const info = (await checkForUpdate("acme/sedorim"))!;
+      expect(info.downloadUrl).toBe(body.html_url);
+      expect(info.canInstall).toBe(false);
+    });
+
+    it("prefers an asset named like a setup over any other exe", async () => {
       mockFetch(
         release({
           assets: [
-            { name: "notes.txt", browser_download_url: "https://x/notes.txt", size: 1 },
-            { name: "bundle.zip", browser_download_url: "https://x/bundle.zip", size: 3 },
+            { name: "SederPlus.exe", browser_download_url: "https://x/app.exe", size: 2 },
+            { name: "SederPlusSetup.exe", browser_download_url: "https://x/setup.exe", size: 3 },
           ],
         }),
       );
-      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe("https://x/bundle.zip");
-    });
-
-    it("falls back to the first asset when neither is present", async () => {
-      mockFetch(
-        release({
-          assets: [{ name: "notes.txt", browser_download_url: "https://x/notes.txt", size: 1 }],
-        }),
-      );
-      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe("https://x/notes.txt");
+      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe("https://x/setup.exe");
     });
 
     it("falls back to the release page when there are no assets", async () => {
@@ -334,15 +349,14 @@ describe("checkForUpdate", () => {
     });
 
     it("is not fooled by .exe inside the middle of a name", async () => {
-      mockFetch(
-        release({
-          assets: [
-            { name: "readme.exe.txt", browser_download_url: "https://x/readme.exe.txt", size: 1 },
-            { name: "real.zip", browser_download_url: "https://x/real.zip", size: 2 },
-          ],
-        }),
-      );
-      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe("https://x/real.zip");
+      const body = release({
+        assets: [
+          { name: "readme.exe.txt", browser_download_url: "https://x/readme.exe.txt", size: 1 },
+          { name: "real.zip", browser_download_url: "https://x/real.zip", size: 2 },
+        ],
+      });
+      mockFetch(body);
+      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe(body.html_url);
     });
   });
 });

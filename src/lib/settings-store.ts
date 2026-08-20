@@ -1,8 +1,6 @@
-import { logAudit } from "./audit-store";
 import { sharedValue, useHydrated } from "./shared-state";
 
 export type FontSize = "small" | "normal" | "large" | "xlarge";
-export type DateFormat = "iso" | "he" | "mixed" | "hebrew";
 export type ColorTheme =
   | "blue" | "emerald" | "violet" | "rose" | "amber"
   | "teal" | "pink" | "slate" | "crimson" | "indigo" | "lime";
@@ -15,7 +13,6 @@ export type SederConfig = {
   s2Start: string; s2End: string;
   bonusThresholdMin: number;
   alertMissingMinPerMonth: number;
-  defaultDeparture: "seder_end" | "blank";
 };
 
 export type SederTimes = { s1Start: string; s1End: string; s2Start: string; s2End: string };
@@ -30,6 +27,10 @@ export type Settings = {
   sederSchedule: SederScheduleEntry[];
   sederOverrides: SederOverride[];
   notifications: {
+    /** In-app pop-ups — a toast in whichever window is open. */
+    popups: boolean;
+    /** Real Windows notifications, which appear even behind another window. */
+    desktop: boolean;
     dailyReminder: boolean;
     latenessAlert: boolean;
     weeklySummary: boolean;
@@ -45,13 +46,6 @@ export type Settings = {
     showInsights: boolean;
     showReminders: boolean;
     showQuickActions: boolean;
-  };
-  language: {
-    dateFormat: DateFormat;
-  };
-  privacy: {
-    lockScreen: boolean;
-    enableAudit: boolean;
   };
   data: {
     autoBackup: "off" | "daily" | "weekly";
@@ -71,15 +65,18 @@ export const DEFAULT_SETTINGS: Settings = {
     s2Start: "15:45", s2End: "19:30",
     bonusThresholdMin: 15,
     alertMissingMinPerMonth: 180,
-    defaultDeparture: "seder_end",
   },
-  notifications: { dailyReminder: true, latenessAlert: true, weeklySummary: false },
+  // Desktop notifications start off: a Windows toast is the app talking over
+  // whatever the user is doing, and that has to be asked for. In-app pop-ups
+  // only show while a window is already in front, so they are on.
+  notifications: {
+    popups: true, desktop: false,
+    dailyReminder: true, latenessAlert: true, weeklySummary: false,
+  },
   sederSchedule: [],
   sederOverrides: [],
   appearance: { fontSize: "normal", highContrast: false, compactMode: false, colorTheme: "blue", background: "white" },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
-  language: { dateFormat: "mixed" },
-  privacy: { lockScreen: false, enableAudit: true },
   data: { autoBackup: "weekly", backupRetention: 5, autoBackupBeforeOps: true },
   goals: { monthlyTarget: 95, maxLatePerMonth: 3 },
 };
@@ -128,17 +125,12 @@ applyAppearance();
 
 export function getSettings(): Settings { return store.get(); }
 
-export function updateSettings(patch: Partial<Settings>, opts?: { skipAudit?: boolean }) {
-  const prev = store.get();
-  const next = deepMerge(prev, patch);
-  store.set(next);
-  if (!opts?.skipAudit) logAudit("settings.update", { oldValue: prev, newValue: next });
+export function updateSettings(patch: Partial<Settings>) {
+  store.set(deepMerge(store.get(), patch));
 }
 
 export function resetSettings() {
-  const prev = store.get();
   store.set(DEFAULT_SETTINGS);
-  logAudit("backup.reset_settings", { oldValue: prev, newValue: DEFAULT_SETTINGS });
 }
 
 // ============ Date-aware seder hours ============
@@ -149,6 +141,37 @@ function todayIso(): string {
 
 function baseTimes(s: Settings = store.get()): SederTimes {
   return { s1Start: s.seder.s1Start, s1End: s.seder.s1End, s2Start: s.seder.s2Start, s2End: s.seder.s2End };
+}
+
+/**
+ * What is wrong with a set of seder hours, or null if nothing is.
+ *
+ * A seder that ends before it starts makes every figure in the app
+ * nonsense — calcSeder would report a length of zero and then score every
+ * arrival against it — so neither the first-run wizard nor the Settings
+ * screen will save one.
+ */
+export function sederTimesError(t: SederTimes): string | null {
+  const pairs: [string, string, string][] = [
+    [t.s1Start, t.s1End, "סדר א׳"],
+    [t.s2Start, t.s2End, "סדר ב׳"],
+  ];
+  for (const [start, end, label] of pairs) {
+    const a = toMinutes(start), b = toMinutes(end);
+    if (a === null || b === null) return `${label}: שעה לא תקינה`;
+    if (b <= a) return `${label}: שעת הסיום חייבת להיות אחרי שעת ההתחלה`;
+  }
+  return null;
+}
+
+/** Local copy of hhmmToMin: kollel-store imports *this* module, and a cycle
+ *  back the other way would leave one of the two half-initialised. */
+function toMinutes(t: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t ?? "");
+  if (!m) return null;
+  const h = +m[1], mm = +m[2];
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
 }
 
 /** Seder hours that were in effect on a given ISO date (temporary override wins). */

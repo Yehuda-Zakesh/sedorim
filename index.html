@@ -9,16 +9,12 @@
          comes from src-tauri until React mounts a moment later. -->
     <meta name="description" content="מערכת לניהול שמירת סדרים ישיבת כתר תורה" />
     <link rel="icon" href="/favicon.ico" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Heebo, same as before. It comes off the network, so offline the app
-         falls back to the next font in --font-sans (Segoe UI). Dropping a
-         local copy into public/fonts/ and swapping this for an @font-face
-         rule would make the Hebrew rendering offline-proof. -->
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap"
-    />
+    <!-- Heebo is shipped inside the EXE (public/fonts, @font-face in
+         styles.css) rather than fetched from fonts.googleapis.com. The app is
+         a desktop program that has to look the same offline, and the PDF
+         exporter embeds the very same TTF files into the documents it
+         produces — one copy of the font, one appearance everywhere. -->
+    <link rel="preload" href="/fonts/Heebo-Regular.ttf" as="font" type="font/ttf" crossorigin />
   </head>
   <body>
     <div id="root"></div>

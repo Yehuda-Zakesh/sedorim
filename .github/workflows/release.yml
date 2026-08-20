@@ -1,0 +1,126 @@
+# A new version on every push to main.
+#
+# The version number is a whole number and comes from the tags, not from a file
+# in the repository: the newest `vN` tag decides, and this workflow publishes
+# N+1. Nothing is ever committed back to main, so a release cannot trigger
+# another release, and there is no version line for two branches to conflict
+# over.
+#
+# What ends up on the release:
+#   SederPlusSetup.exe    the installer — both programs, silent, per-user
+#   SederPlus.exe         the full app, for anyone who prefers no installer
+#   SederPlusQuick.exe    the quick-entry window
+#
+# The in-app updater looks for the setup file by name (pickInstaller in
+# src/lib/updater.ts), so keep it attached and keep the name.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "public/**"
+      - "installer/**"
+      - "index.html"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number to publish (blank = next after the newest tag)"
+        required: false
+        type: string
+
+permissions:
+  contents: write # to create the tag and the release
+
+concurrency:
+  # Two pushes in quick succession must not both try to publish the same
+  # number; the later one wins and the earlier is cancelled.
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags are how the version is decided
+
+      - name: Work out the version number
+        id: version
+        shell: pwsh
+        run: |
+          $requested = "${{ inputs.version }}"
+          if ($requested -match '^\d+$') {
+            $next = [int]$requested
+          } else {
+            # Highest existing vN tag, ignoring anything that is not just a
+            # number — an old v1.0.3-style tag must not become 104.
+            $numbers = @(git tag --list 'v*' |
+              ForEach-Object { if ($_ -match '^v(\d+)$') { [int]$Matches[1] } })
+            $latest = if ($numbers.Count -gt 0) { ($numbers | Measure-Object -Maximum).Maximum } else { 0 }
+            $next = $latest + 1
+          }
+          "number=$next" >> $env:GITHUB_OUTPUT
+          "tag=v$next" >> $env:GITHUB_OUTPUT
+          Write-Host "Publishing version $next"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Rust builds are the slow part; without a cache every run recompiles
+      # Tauri and its whole dependency tree.
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Stamp the version
+        run: node scripts/set-version.mjs ${{ steps.version.outputs.number }}
+
+      # A release that fails to start is worse than no release, so the same
+      # checks CI runs happen here too, against the stamped tree.
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Frontend tests
+        run: npm test
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/core/Cargo.toml
+
+      - name: Build both EXEs
+        run: npm run exe
+
+      - name: Build the installer
+        run: npm run installer
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: גרסה ${{ steps.version.outputs.number }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: |
+            release-win/SederPlusSetup.exe
+            release-win/SederPlus.exe
+            release-win/SederPlusQuick.exe
+          fail_on_unmatched_files: true

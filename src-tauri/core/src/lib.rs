@@ -7,7 +7,9 @@
 //! is embedded in the EXE and talks to this code over Tauri's IPC. The two
 //! EXEs share data purely through the JSON file in `store.rs`.
 
+mod logfile;
 mod store;
+mod updater;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -38,7 +40,64 @@ async fn load_store() -> Map<String, Value> {
 
 #[tauri::command]
 async fn save_store_keys(patch: Map<String, Value>) -> Result<store::SaveResult, String> {
-    store::save_keys(&patch)
+    let result = store::save_keys(&patch);
+    if let Err(err) = &result {
+        // Losing a write is the one failure the user must be able to find out
+        // about after the fact.
+        logfile::append("error", &format!("שמירת הנתונים נכשלה: {err}"));
+    }
+    result
+}
+
+// ============ the problem log ============
+// See core/src/logfile.rs. These three are what Settings → "יומן תקלות" and
+// src/lib/diagnostics.ts talk to.
+
+#[tauri::command]
+async fn append_log(level: String, message: String) {
+    logfile::append(&level, &message);
+}
+
+#[tauri::command]
+async fn read_log(max_bytes: Option<u64>) -> String {
+    logfile::tail_in(&logfile::log_dir(), max_bytes.unwrap_or(200_000))
+}
+
+#[tauri::command]
+async fn clear_log() -> Result<(), String> {
+    logfile::clear_in(&logfile::log_dir())
+}
+
+/// Opens the folder holding the log in Explorer, creating it first if the app
+/// has never had anything to complain about.
+#[tauri::command]
+async fn open_log_folder(app: AppHandle) -> Result<(), String> {
+    let dir = logfile::log_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    app.opener()
+        .open_path(dir.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/// Downloads the installer for a new version, runs it, and quits so it can
+/// replace this EXE. See core/src/updater.rs.
+#[tauri::command]
+async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
+    match updater::download_and_start(&url) {
+        Ok(_) => {
+            // Give the spawned installer a moment to get going before the
+            // process that started it disappears.
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(600));
+                app.exit(0);
+            });
+            Ok(())
+        }
+        Err(err) => {
+            logfile::append("error", &format!("התקנת העדכון נכשלה: {err}"));
+            Err(err)
+        }
+    }
 }
 
 /// Cheap "did anything change?" check — see store::file_stamp_in.
@@ -176,8 +235,8 @@ fn build_quick_window(app: &AppHandle) -> tauri::Result<()> {
         WebviewUrl::App("index.html?mode=quick".into()),
     )
     .title("כניסה מהירה — סדר פלוס")
-    .inner_size(480.0, 680.0)
-    .min_inner_size(380.0, 520.0)
+    .inner_size(480.0, 760.0)
+    .min_inner_size(380.0, 560.0)
     .center()
     .resizable(true)
     .on_navigation(navigation_guard(app))
@@ -208,7 +267,7 @@ mod tests {
 
     #[test]
     fn generated_content_the_page_makes_itself_is_internal() {
-        // html2canvas and jsPDF both produce these, and the report export would
+        // jsPDF and the file-save fallback both produce these, and exports would
         // break if navigating to them were blocked.
         assert!(is_internal_url(&url("blob:http://localhost/abc-123")));
         assert!(is_internal_url(&url("data:image/jpeg;base64,AAAA")));
@@ -288,7 +347,12 @@ pub fn run(context: tauri::Context, mode: Mode) {
             save_file_as,
             open_main_window,
             open_external_url,
-            notify
+            notify,
+            append_log,
+            read_log,
+            clear_log,
+            open_log_folder,
+            install_update
         ])
         .setup(move |app| {
             let handle = app.handle();

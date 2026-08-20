@@ -9,6 +9,9 @@ node_modules
 dist
 *.local
 
+# TanStack Router plugin scratch output
+.tanstack
+
 # Rust / Tauri build output — this gets very large
 src-tauri/target
 src-tauri/*/gen

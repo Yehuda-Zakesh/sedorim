@@ -1,4 +1,3 @@
-import { logAudit } from "./audit-store";
 import { getSettings } from "./settings-store";
 import { sharedValue } from "./shared-state";
 
@@ -54,7 +53,6 @@ export function createSnapshot(
   };
   const retention = Math.max(1, getSettings().data.backupRetention);
   store.set([snap, ...store.get()].slice(0, retention));
-  if (trigger === "auto") logAudit("backup.auto", { recordId: snap.id, detail: `${snap.size} bytes` });
   return snap;
 }
 

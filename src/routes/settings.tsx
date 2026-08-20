@@ -1,62 +1,65 @@
+// Settings, reorganised.
+//
+// There used to be ten sections, and the same decision could be made in two of
+// them: the monthly lateness quota lived under both "יעדים" and "התראות", the
+// missing-minutes alert threshold under "שעות סדרים" while the alert it drives
+// was under "התראות", and two whole sections — "שפה ואזור" and "פרטיות" —
+// contained nothing but switches that changed nothing at all.
+//
+// Seven sections now, each one a thing a person wants to change, with every
+// setting that feeds one decision sitting together. The audit log is gone; in
+// its place is the problem log — one file on disk, shown here (see
+// src/lib/diagnostics.ts).
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
-  ChevronDown, ChevronLeft, User, Bell, Palette, Globe, Shield, Database, Search,
-  RotateCcw, Type, Contrast, Target, Clock, ShieldCheck, DatabaseBackup,
-  RefreshCw, BellRing, Loader2, Download,
+  ChevronDown, ChevronLeft, User, Bell, Palette, Database, Search,
+  RotateCcw, LayoutDashboard, Contrast, Target, Clock, DatabaseBackup,
+  RefreshCw, BellRing, Loader2, Download, FileWarning, FolderOpen, Trash2,
 } from "lucide-react";
 import {
-  useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type DateFormat, type ColorTheme, type BgTheme, updateSettings,
+  useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type ColorTheme, type BgTheme, updateSettings,
   getSederTimesFor, setSederTimesFromToday, removeSederScheduleEntry, addSederOverride, removeSederOverride,
-  type SederTimes,
+  sederTimesError, type SederTimes,
 } from "@/lib/settings-store";
 import { COLOR_THEMES, BG_THEMES } from "@/lib/theme-colors";
-import { deliverNotification } from "@/lib/notifications";
+import { announce } from "@/lib/notifications";
 import {
-  getUpdateRepo, setUpdateRepo, checkForUpdate, getLastCheck, clearSkip, type UpdateInfo,
+  getUpdateRepo, setUpdateRepo, checkForUpdate, getLastCheck, clearSkip, installUpdate, type UpdateInfo,
 } from "@/lib/updater";
+import { readLog, openLogFolder, clearLog } from "@/lib/diagnostics";
 import { openExternal } from "@/lib/open-external";
+import { isDesktop } from "@/lib/tauri";
 import { Field, NumberField, SelectField, StackedField, TimeField, Toggle } from "@/components/ui/form";
 import { IconBadge } from "@/components/ui/stat";
 import { toastUndo } from "@/lib/undo";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({
-  head: () => ({ meta: [{ title: "הגדרות — המעקב שלי" }] }),
+  head: () => ({ meta: [{ title: "הגדרות — סדר פלוס" }] }),
   component: SettingsPage,
 });
 
-// Preferences only. Backup/restore and the audit log used to be inlined here as
-// two more accordion sections *and* exist as their own screens — which meant
-// "delete the database" was reachable from inside a settings panel. They are
-// now linked to instead; see LINKED_SCREENS below.
 const SECTIONS = [
-  { id: "profile", label: "פרופיל אישי", icon: User },
-  { id: "seder", label: "שעות סדרים", icon: Clock },
-  { id: "goals", label: "יעדים והתראות", icon: Target },
-  { id: "notifications", label: "התראות", icon: Bell },
-  { id: "appearance", label: "מראה ועיצוב", icon: Palette },
-  { id: "dashboard", label: "לוח בקרה", icon: Type },
-  { id: "language", label: "שפה ואזור", icon: Globe },
-  { id: "privacy", label: "פרטיות", icon: Shield },
-  { id: "data", label: "נתונים וגיבוי", icon: Database },
-  { id: "updates", label: "עדכוני גרסה", icon: RefreshCw },
-] as const;
-
-const LINKED_SCREENS = [
-  { to: "/backup", label: "גיבוי ושחזור", desc: "ייצוא, ייבוא, תמונות מצב ומחיקת נתונים", icon: DatabaseBackup },
-  { to: "/audit", label: "יומן ביקורת", desc: "כל הפעולות שבוצעו בתוכנה", icon: ShieldCheck },
+  { id: "seder", label: "שעות הסדרים", icon: Clock, hint: "מתי מתחיל ומסתיים כל סדר, כולל שינויים לתקופה" },
+  { id: "goals", label: "יעדים והתראות", icon: Target, hint: "יעד חודשי, מכסת איחורים ואיזה תזכורות להציג" },
+  { id: "profile", label: "פרופיל אישי", icon: User, hint: "השם שמופיע בדוחות" },
+  { id: "appearance", label: "מראה ועיצוב", icon: Palette, hint: "צבעים, רקע, גודל גופן" },
+  { id: "dashboard", label: "לוח הבקרה", icon: LayoutDashboard, hint: "אילו חלקים להציג במסך הראשי" },
+  { id: "data", label: "נתונים וגיבוי", icon: Database, hint: "גיבוי אוטומטי ומספר הגיבויים לשמור" },
+  { id: "updates", label: "עדכוני גרסה", icon: RefreshCw, hint: "בדיקה והתקנה של גרסה חדשה" },
+  { id: "log", label: "יומן תקלות", icon: FileWarning, hint: "מה נכשל, אם משהו נכשל" },
 ] as const;
 
 function SettingsPage() {
   const { settings, update } = useSettings();
   const [open, setOpen] = useState<string | null>("seder");
   const [q, setQ] = useState("");
-  const visible = SECTIONS.filter((s) => s.label.includes(q));
+  const visible = SECTIONS.filter((s) => s.label.includes(q) || s.hint.includes(q));
 
   return (
-    <AppShell title="הגדרות" subtitle="העדפות אישיות נשמרות אוטומטית">
+    <AppShell title="הגדרות" subtitle="כל שינוי נשמר מיד">
       <div className="card-surface p-3 mb-4 relative">
         <Search className="absolute right-5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש בהגדרות..."
@@ -72,42 +75,51 @@ function SettingsPage() {
                 aria-expanded={isOpen}
                 className="w-full flex items-center gap-3 px-5 py-4 text-right hover:bg-accent/40 transition">
                 <IconBadge icon={s.icon} size="md" />
-                <span className="flex-1 text-sm font-semibold">{s.label}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-semibold">{s.label}</span>
+                  <span className="block text-xs text-muted-foreground truncate">{s.hint}</span>
+                </span>
                 <ChevronDown className={`size-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
               </button>
 
               {isOpen && (
                 <div className="px-5 pb-5 border-t border-border pt-4 space-y-3">
-                  {s.id === "profile" && (
-                    <>
-                      <Field label="שם תצוגה" value={settings.profile.name}
-                        onChange={(v) => update({ profile: { ...settings.profile, name: v } })} />
-                      <Field label="כולל / קבוצה" value={settings.profile.classroom}
-                        onChange={(v) => update({ profile: { ...settings.profile, classroom: v } })} />
-                    </>
-                  )}
                   {s.id === "seder" && (
                     <>
                       <SederHoursManager />
                       <NumberField label="סף בונוס להגעה מוקדמת (דק׳)" min={0} max={60} value={settings.seder.bonusThresholdMin}
                         onChange={(v) => update({ seder: { ...settings.seder, bonusThresholdMin: v } })} />
-                      <NumberField label="סף התראה לדקות חסרות בחודש" min={0} max={1440} value={settings.seder.alertMissingMinPerMonth}
-                        onChange={(v) => update({ seder: { ...settings.seder, alertMissingMinPerMonth: v } })} />
-                      <SelectField label="ברירת מחדל לשעת יציאה" value={settings.seder.defaultDeparture}
-                        options={[{ v: "seder_end", l: "סוף הסדר" }, { v: "blank", l: "ריק" }]}
-                        onChange={(v) => update({ seder: { ...settings.seder, defaultDeparture: v as "seder_end" | "blank" } })} />
+                      <p className="text-[11px] text-muted-foreground">
+                        הגעה לפני תחילת הסדר נצברת כבונוס שמקטין את החסר — עד למספר הדקות הזה בכל סדר.
+                      </p>
                     </>
                   )}
+
                   {s.id === "goals" && (
                     <>
                       <NumberField label="יעד ציון נוכחות חודשי" min={50} max={100} value={settings.goals.monthlyTarget}
                         onChange={(v) => update({ goals: { ...settings.goals, monthlyTarget: v } })} />
                       <NumberField label="מקסימום איחורים בחודש" min={0} max={31} value={settings.goals.maxLatePerMonth}
                         onChange={(v) => update({ goals: { ...settings.goals, maxLatePerMonth: v } })} />
-                    </>
-                  )}
-                  {s.id === "notifications" && (
-                    <>
+                      <NumberField label="סף התראה לדקות חסרות בחודש" min={0} max={1440} value={settings.seder.alertMissingMinPerMonth}
+                        onChange={(v) => update({ seder: { ...settings.seder, alertMissingMinPerMonth: v } })} />
+
+                      <div className="pt-2 text-xs font-semibold text-muted-foreground">איך להציג את התזכורות</div>
+                      <Toggle label="הודעות קופצות בתוך התוכנה" on={settings.notifications.popups}
+                        onChange={(v) => update({ notifications: { ...settings.notifications, popups: v } })} />
+                      <Toggle
+                        label={
+                          <span>
+                            התראות בשולחן העבודה
+                            <span className="block text-[11px] text-muted-foreground">
+                              הודעות Windows — מופיעות גם כשהתוכנה מוסתרת מאחורי חלון אחר
+                            </span>
+                          </span>
+                        }
+                        on={settings.notifications.desktop}
+                        onChange={(v) => update({ notifications: { ...settings.notifications, desktop: v } })} />
+
+                      <div className="pt-2 text-xs font-semibold text-muted-foreground">אילו תזכורות</div>
                       <Toggle label="תזכורת יומית — כשלא נרשם סדר עד תחילת סדר א׳" on={settings.notifications.dailyReminder}
                         onChange={(v) => update({ notifications: { ...settings.notifications, dailyReminder: v } })} />
                       <Toggle label="התראה בחריגה ממכסת האיחורים החודשית" on={settings.notifications.latenessAlert}
@@ -117,7 +129,17 @@ function SettingsPage() {
                       <NotificationTester />
                     </>
                   )}
-                  {s.id === "updates" && <UpdateSettings />}
+
+                  {s.id === "profile" && (
+                    <>
+                      <Field label="שם תצוגה" value={settings.profile.name}
+                        onChange={(v) => update({ profile: { ...settings.profile, name: v } })} />
+                      <Field label="כולל / קבוצה" value={settings.profile.classroom}
+                        onChange={(v) => update({ profile: { ...settings.profile, classroom: v } })} />
+                      <p className="text-[11px] text-muted-foreground">שני השדות האלה מופיעים בכותרת כל דוח שמופק.</p>
+                    </>
+                  )}
+
                   {s.id === "appearance" && (
                     <>
                       <ColorThemePicker
@@ -138,9 +160,10 @@ function SettingsPage() {
                         onChange={(v) => update({ appearance: { ...settings.appearance, compactMode: v } })} />
                     </>
                   )}
+
                   {s.id === "dashboard" && (
                     <>
-                      <Toggle label="הצג תובנות" on={settings.dashboard.showInsights}
+                      <Toggle label="הצג סיכום מהיר ותובנות" on={settings.dashboard.showInsights}
                         onChange={(v) => update({ dashboard: { ...settings.dashboard, showInsights: v } })} />
                       <Toggle label="הצג תזכורות" on={settings.dashboard.showReminders}
                         onChange={(v) => update({ dashboard: { ...settings.dashboard, showReminders: v } })} />
@@ -148,24 +171,7 @@ function SettingsPage() {
                         onChange={(v) => update({ dashboard: { ...settings.dashboard, showQuickActions: v } })} />
                     </>
                   )}
-                  {s.id === "language" && (
-                    <SelectField label="פורמט תאריך" value={settings.language.dateFormat}
-                      options={[
-                        { v: "iso", l: "ISO (YYYY-MM-DD)" },
-                        { v: "he", l: "עברי גרגוריאני" },
-                        { v: "hebrew", l: "עברי (יט סיון תשפ״ו)" },
-                        { v: "mixed", l: "מעורב" },
-                      ]}
-                      onChange={(v) => update({ language: { dateFormat: v as DateFormat } })} />
-                  )}
-                  {s.id === "privacy" && (
-                    <>
-                      <Toggle label="תיעוד פעולות ביומן ביקורת" on={settings.privacy.enableAudit}
-                        onChange={(v) => update({ privacy: { ...settings.privacy, enableAudit: v } })} />
-                      <Toggle label="נעילת מסך באזורים רגישים" on={settings.privacy.lockScreen}
-                        onChange={(v) => update({ privacy: { ...settings.privacy, lockScreen: v } })} />
-                    </>
-                  )}
+
                   {s.id === "data" && (
                     <>
                       <SelectField label="תדירות גיבוי אוטומטי" value={settings.data.autoBackup}
@@ -175,27 +181,25 @@ function SettingsPage() {
                         onChange={(v) => update({ data: { ...settings.data, backupRetention: v } })} />
                       <Toggle label="גיבוי לפני פעולות גדולות" on={settings.data.autoBackupBeforeOps}
                         onChange={(v) => update({ data: { ...settings.data, autoBackupBeforeOps: v } })} />
+                      <Link to="/backup"
+                        className="mt-1 flex items-center gap-3 rounded-lg border border-border p-3 hover:border-primary transition">
+                        <IconBadge icon={DatabaseBackup} size="md" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold">גיבוי ושחזור</div>
+                          <div className="text-xs text-muted-foreground truncate">ייצוא, ייבוא, תמונות מצב ומחיקת נתונים</div>
+                        </div>
+                        <ChevronLeft className="size-4 text-muted-foreground shrink-0" />
+                      </Link>
                     </>
                   )}
+
+                  {s.id === "updates" && <UpdateSettings />}
+                  {s.id === "log" && <ProblemLog />}
                 </div>
               )}
             </div>
           );
         })}
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {LINKED_SCREENS.map((l) => (
-          <Link key={l.to} to={l.to}
-            className="card-surface p-4 flex items-center gap-3 hover:border-primary transition">
-            <IconBadge icon={l.icon} size="md" />
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">{l.label}</div>
-              <div className="text-xs text-muted-foreground truncate">{l.desc}</div>
-            </div>
-            <ChevronLeft className="size-4 text-muted-foreground shrink-0" />
-          </Link>
-        ))}
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -205,33 +209,33 @@ function SettingsPage() {
         </button>
         <button onClick={() => { resetOnboarding(); toast("האשף יוצג בטעינה הבאה"); }}
           className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs hover:bg-accent">
-          הפעל מחדש אשף התקנה
+          הפעל מחדש את אשף ההגדרה
         </button>
       </div>
     </AppShell>
   );
 }
 
-// Notifications are easy to have silently switched off at the OS level, and a
-// reminder you never see is indistinguishable from one that was never sent —
-// so there is a way to prove the channel works.
+// A reminder you never see is indistinguishable from one that was never sent,
+// so there is a way to prove the channel works — for both channels at once.
 function NotificationTester() {
   const [busy, setBusy] = useState(false);
   return (
     <div className="rounded-lg border border-border p-4">
       <div className="text-sm font-semibold">בדיקת התראות</div>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        ההתראות מוצגות כהודעות מערכת של Windows, ורק כשהתוכנה פתוחה — אין שירות רקע.
-        אם לא מופיעה הודעה, בדוק ב"הגדרות Windows ← מערכת ← התראות" שההתראות עבור סדר פלוס מופעלות.
+        נשלחת התראה לדוגמה בכל הערוצים שסימנת. אם התראת שולחן העבודה לא מופיעה,
+        בדוק ב"הגדרות Windows ← מערכת ← התראות" שההתראות עבור סדר פלוס מופעלות.
       </p>
       <button
         disabled={busy}
         onClick={async () => {
           setBusy(true);
           try {
-            const ok = await deliverNotification("סדר פלוס", "בדיקת התראות — ההתראות פועלות כשורה.");
-            if (ok) toast.success("נשלחה התראת בדיקה");
-            else toast.error("לא ניתן להציג התראה — בדוק את הגדרות ההתראות של Windows");
+            const result = await announce("סדר פלוס", "בדיקת התראות — ההתראות פועלות כשורה.");
+            if (result.desktop) toast.success("נשלחה התראת שולחן עבודה");
+            else if (result.popup) toast.success("הודעה קופצת פועלת. התראות שולחן העבודה כבויות או חסומות.");
+            else toast.error("שני ערוצי ההתראות כבויים — סמן לפחות אחד מהם");
           } finally { setBusy(false); }
         }}
         className="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50">
@@ -242,13 +246,10 @@ function NotificationTester() {
   );
 }
 
-// The updater has been in the codebase all along, but with no repository
-// configured and no UI to configure one it could never actually run. This is
-// that UI — still opt-in, so leaving the field empty means the app makes no
-// network requests at all.
 function UpdateSettings() {
   const [repo, setRepo] = useState(getUpdateRepo());
   const [busy, setBusy] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const [found, setFound] = useState<UpdateInfo | null>(null);
   const lastCheck = getLastCheck();
 
@@ -266,12 +267,24 @@ function UpdateSettings() {
     } finally { setBusy(false); }
   };
 
+  const install = async () => {
+    if (!found?.downloadUrl) return;
+    setInstalling(true);
+    try {
+      await installUpdate(found.downloadUrl);
+      toast.success("העדכון מותקן — התוכנה תיסגר ותיפתח מחדש");
+    } catch (err) {
+      setInstalling(false);
+      toast.error(err instanceof Error ? err.message : "ההתקנה נכשלה");
+    }
+  };
+
   return (
     <>
       <Field label="מאגר GitHub לעדכונים" value={repo} onChange={setRepo}
         placeholder="owner/repo — השאר ריק כדי לכבות" />
       <p className="text-[11px] text-muted-foreground">
-        כשמוגדר מאגר, התוכנה בודקת פעמיים ביום אם פורסמה גרסה חדשה ומציעה להוריד אותה.
+        התוכנה בודקת פעמיים ביום אם פורסמה גרסה חדשה, ויכולה להתקין אותה בעצמה.
         כשהשדה ריק — לא מתבצעת שום פנייה לאינטרנט.
         {lastCheck && ` בדיקה אחרונה: ${new Date(lastCheck).toLocaleString("he-IL")}.`}
       </p>
@@ -288,16 +301,92 @@ function UpdateSettings() {
         </button>
       </div>
       {found?.isNewer && found.downloadUrl && (
-        <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex items-center gap-3">
-          <div className="flex-1 text-xs">
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[12rem] text-xs">
             <b>גרסה {found.latest}</b> זמינה (מותקנת: {found.current}).
           </div>
-          <button onClick={() => openExternal(found.downloadUrl!)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
-            <Download className="size-3.5" /> הורדה
-          </button>
+          {found.canInstall ? (
+            <button onClick={install} disabled={installing}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
+              {installing ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+              {installing ? "מתקין..." : "התקן עכשיו"}
+            </button>
+          ) : (
+            <button onClick={() => openExternal(found.downloadUrl!)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+              <Download className="size-3.5" /> פתח דף ההורדה
+            </button>
+          )}
         </div>
       )}
+    </>
+  );
+}
+
+/**
+ * The tail of the log file. This is what replaced the audit log: not a record
+ * of what the user did, but of what went wrong — the thing that was genuinely
+ * impossible to find out from inside a packaged EXE.
+ */
+function ProblemLog() {
+  const [text, setText] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try { setText(await readLog()); } finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, []);
+
+  const lines = text.split("\n").filter((l) => l.trim().length > 0);
+
+  return (
+    <>
+      <p className="text-[11px] text-muted-foreground">
+        התוכנה כותבת לכאן כל תקלה — ייצוא שנכשל, שמירה שלא עברה, שגיאה לא צפויה.
+        {isDesktop
+          ? " הקובץ נמצא בתיקיית הנתונים, תחת logs\\sederplus.log."
+          : " בהרצה בדפדפן הרשומות נשמרות בזיכרון החלון בלבד."}
+      </p>
+
+      <div className="rounded-lg border border-border bg-muted/30 max-h-72 overflow-auto p-3" dir="ltr">
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" /> טוען...
+          </div>
+        ) : lines.length === 0 ? (
+          <div dir="rtl" className="text-xs text-muted-foreground">לא נרשמו תקלות. זה המצב הרצוי.</div>
+        ) : (
+          <ol className="space-y-1 font-mono text-[11px] leading-relaxed">
+            {/* Newest first — a log is read from the end. */}
+            {[...lines].reverse().map((line, i) => (
+              <li key={i} className={line.includes(" ERROR ") ? "text-destructive" : line.includes(" WARN ") ? "text-warning" : "text-muted-foreground"}>
+                {line}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={load}
+          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent">
+          <RefreshCw className="size-3.5" /> רענן
+        </button>
+        {isDesktop && (
+          <button onClick={async () => { if (!(await openLogFolder())) toast.error("פתיחת התיקייה נכשלה"); }}
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent">
+            <FolderOpen className="size-3.5" /> פתח את התיקייה
+          </button>
+        )}
+        {lines.length > 0 && (
+          <button onClick={async () => { await clearLog(); await load(); toast.success("היומן נמחק"); }}
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-destructive hover:bg-accent">
+            <Trash2 className="size-3.5" /> מחק את היומן
+          </button>
+        )}
+        <span className="text-[11px] text-muted-foreground">{lines.length} רשומות</span>
+      </div>
     </>
   );
 }
@@ -325,6 +414,7 @@ function SederHoursManager() {
   const [from, setFrom] = useState(todayIso());
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(current);
+  const draftError = sederTimesError(draft);
 
   // temporary override form
   const [ovOpen, setOvOpen] = useState(false);
@@ -352,8 +442,9 @@ function SederHoursManager() {
           </StackedField>
         </div>
         <TimesGrid times={draft} onChange={setDraft} />
+        {draftError && <p className="text-xs text-destructive">{draftError}</p>}
         <div className="flex items-center gap-2">
-          <button disabled={!dirty}
+          <button disabled={!dirty || draftError !== null}
             onClick={() => { setSederTimesFromToday(draft, from); toast.success(`השעות עודכנו מתאריך ${from} ואילך`); }}
             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40">
             שמור שינוי
@@ -421,6 +512,8 @@ function SederHoursManager() {
             <button
               onClick={() => {
                 if (ovTo < ovFrom) { toast.error("תאריך הסיום מוקדם מתאריך ההתחלה"); return; }
+                const err = sederTimesError(ovTimes);
+                if (err) { toast.error(err); return; }
                 addSederOverride({ from: ovFrom, to: ovTo, label: ovLabel || undefined, times: ovTimes });
                 setOvOpen(false); setOvLabel("");
                 toast.success("נוסף שינוי זמני");

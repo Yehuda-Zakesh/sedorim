@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { useSeder, useLearning, replaceAllData } from "@/lib/kollel-store";
 import { useSnapshots, createSnapshot, deleteSnapshot, verifySnapshot, getLastAutoBackupTs, clearAllSnapshots } from "@/lib/auto-backup";
-import { logAudit } from "@/lib/audit-store";
 import { useSettings } from "@/lib/settings-store";
 import { saveTextFile } from "@/lib/save-file";
 import { KpiCard, IconBadge } from "@/components/ui/stat";
@@ -53,7 +52,6 @@ function BackupView() {
       toast.error("הייצוא נכשל");
       return;
     }
-    logAudit("backup.export", { detail: formatSize(new TextEncoder().encode(json).length) });
     toast.success("הגיבוי נשמר");
   };
 
@@ -66,7 +64,6 @@ function BackupView() {
       if (!Array.isArray(sederArr) || !Array.isArray(lrnArr)) throw new Error("invalid");
       createSnapshot({ attendance: entries, learning: items }, "before-op");
       replaceAllData(sederArr, lrnArr);
-      logAudit("backup.import", { detail: `${sederArr.length} סדרים · ${lrnArr.length} רישומי לימוד` });
       toast.success("השחזור הושלם");
     } catch {
       toast.error("קובץ לא תקין");
@@ -75,7 +72,6 @@ function BackupView() {
 
   const snapshotNow = () => {
     const snap = createSnapshot({ attendance: entries, learning: items }, "manual");
-    logAudit("backup.export", { recordId: snap.id, detail: "תמונת מצב מקומית" });
     toast.success("נוצרה תמונת מצב");
   };
 
@@ -85,14 +81,12 @@ function BackupView() {
     if (!verifySnapshot(snap)) { toast.error("גיבוי פגום — checksum לא תואם"); return; }
     createSnapshot({ attendance: entries, learning: items }, "before-op");
     replaceAllData((snap.payload.attendance as any[]) || [], (snap.payload.learning as any[]) || []);
-    logAudit("backup.restore", { recordId: id, detail: `שוחזר מ-${formatTs(snap.ts)}` });
     toast.success("הגיבוי שוחזר");
   };
 
   const doDelete = () => {
     createSnapshot({ attendance: entries, learning: items }, "before-op");
     clearSeder(); clearLrn();
-    logAudit("backup.delete_db", { detail: "כל הנתונים נמחקו" });
     toast.success("הנתונים נמחקו");
     setConfirmDelete(false);
   };

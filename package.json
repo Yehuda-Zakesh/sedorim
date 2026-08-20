@@ -1,6 +1,6 @@
 {
   "name": "seder-plus",
-  "version": "1.0.3",
+  "version": "1.0.0",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -14,7 +14,10 @@
     "test:rust": "cargo test --manifest-path src-tauri/core/Cargo.toml",
     "test:all": "vitest run && cargo test --manifest-path src-tauri/core/Cargo.toml",
     "format": "prettier --write .",
-    "exe": "node scripts/build-exes.mjs"
+    "exe": "node scripts/build-exes.mjs",
+    "installer": "node scripts/build-installer.mjs",
+    "dist": "node scripts/build-exes.mjs && node scripts/build-installer.mjs",
+    "set-version": "node scripts/set-version.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -23,7 +26,6 @@
     "@tauri-apps/api": "^2.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",

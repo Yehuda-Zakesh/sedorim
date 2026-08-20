@@ -1,40 +1,64 @@
+// The first-run wizard.
+//
+// It used to open on a welcome screen asking for a display name, then a screen
+// of goal percentages — two screens of things that have sensible defaults and
+// can be changed at any time in Settings, in front of the one thing the app
+// genuinely cannot guess and cannot work without: when the sedarim start and
+// end. Every minute the app counts is measured against those four times.
+//
+// So the hours come first, notifications second, backups third.
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Check, Target, Bell, Database, User } from "lucide-react";
-import { getSettings, markOnboarded, updateSettings } from "@/lib/settings-store";
-import { StackedField, Toggle } from "@/components/ui/form";
+import { ChevronLeft, ChevronRight, Check, Bell, Database, Clock } from "lucide-react";
+import {
+  getSettings, markOnboarded, updateSettings, setSederTimesFromToday, getSederTimesFor,
+  sederTimesError, type SederTimes,
+} from "@/lib/settings-store";
+import { StackedField, TimeField, Toggle } from "@/components/ui/form";
 
 const STEPS = [
-  { id: "welcome", title: "ברוכים הבאים", icon: User },
-  { id: "goals", title: "יעדים אישיים", icon: Target },
-  { id: "notifications", title: "התראות", icon: Bell },
+  { id: "seder", title: "שעות הסדרים", icon: Clock },
+  { id: "notifications", title: "התראות ותזכורות", icon: Bell },
   { id: "backup", title: "גיבויים", icon: Database },
   { id: "done", title: "הכל מוכן", icon: Check },
 ];
 
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const initial = getSettings();
   const [step, setStep] = useState(0);
-  const [name, setName] = useState(initial.profile.name);
-  const [classroom, setClassroom] = useState(initial.profile.classroom);
-  const [target, setTarget] = useState(initial.goals.monthlyTarget);
-  const [maxLate, setMaxLate] = useState(initial.goals.maxLatePerMonth);
+  const [times, setTimes] = useState<SederTimes>(() => getSederTimesFor(todayIso()));
+  const [popups, setPopups] = useState(initial.notifications.popups);
+  const [desktop, setDesktop] = useState(initial.notifications.desktop);
   const [reminder, setReminder] = useState(initial.notifications.dailyReminder);
   const [lateAlert, setLateAlert] = useState(initial.notifications.latenessAlert);
   const [auto, setAuto] = useState(initial.data.autoBackup);
   const [retention, setRetention] = useState(initial.data.backupRetention);
 
+  const timesError = sederTimesError(times);
+
   const finish = () => {
+    // Recorded as a schedule entry from today onwards, exactly like a later
+    // change in Settings, so the two paths cannot drift apart.
+    setSederTimesFromToday(times, todayIso());
     updateSettings({
-      profile: { name: name.trim() || "המשתמש שלי", classroom: classroom.trim() },
-      goals: { monthlyTarget: target, maxLatePerMonth: maxLate },
-      notifications: { dailyReminder: reminder, latenessAlert: lateAlert, weeklySummary: initial.notifications.weeklySummary },
-      data: { autoBackup: auto, backupRetention: retention, autoBackupBeforeOps: initial.data.autoBackupBeforeOps },
+      notifications: {
+        ...initial.notifications,
+        popups, desktop,
+        dailyReminder: reminder,
+        latenessAlert: lateAlert,
+      },
+      data: { ...initial.data, autoBackup: auto, backupRetention: retention },
     });
     markOnboarded();
     onComplete();
   };
 
   const StepIcon = STEPS[step].icon;
+  const blocked = step === 0 && timesError !== null;
 
   return (
     <div className="fixed inset-0 z-[60] bg-background grid place-items-center p-4">
@@ -56,48 +80,56 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           </div>
         </div>
 
-        <div className="p-6 min-h-[260px]">
+        <div className="p-6 min-h-[280px]">
           {step === 0 && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                ברוכים הבאים ל"המעקב שלי" — כלי אישי לניהול נוכחות ולימוד.
-                נגדיר יחד מספר העדפות בסיסיות. תוכל לשנות הכל מאוחר יותר בהגדרות.
+                כל החישובים בתוכנה — דקות חסרות, איחורים, בונוס, אוהבי ה׳ — נמדדים מול השעות האלה.
+                אפשר לשנות אותן בכל עת, ושינוי יחול מאותו יום ואילך בלבד.
               </p>
-              <StackedField label="שם תצוגה">
-                <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60}
-                  className="field-input w-full" />
-              </StackedField>
-              <StackedField label="כולל / קבוצה (אופציונלי)">
-                <input value={classroom} onChange={(e) => setClassroom(e.target.value)} maxLength={40}
-                  className="field-input w-full" />
-              </StackedField>
+              <div className="grid grid-cols-2 gap-3">
+                <TimeField label="סדר א׳ — תחילה" value={times.s1Start}
+                  onChange={(v) => setTimes({ ...times, s1Start: v })} />
+                <TimeField label="סדר א׳ — סיום" value={times.s1End}
+                  onChange={(v) => setTimes({ ...times, s1End: v })} />
+                <TimeField label="סדר ב׳ — תחילה" value={times.s2Start}
+                  onChange={(v) => setTimes({ ...times, s2Start: v })} />
+                <TimeField label="סדר ב׳ — סיום" value={times.s2End}
+                  onChange={(v) => setTimes({ ...times, s2End: v })} />
+              </div>
+              {timesError && <p className="text-xs text-destructive">{timesError}</p>}
             </div>
           )}
+
           {step === 1 && (
-            <div className="space-y-4">
-              <StackedField label="יעד נוכחות חודשי (%)">
-                <input type="number" min={50} max={100} value={target}
-                  onChange={(e) => setTarget(Math.max(50, Math.min(100, +e.target.value || 0)))}
-                  className="field-input w-full" />
-              </StackedField>
-              <StackedField label="מקסימום איחורים בחודש">
-                <input type="number" min={0} max={31} value={maxLate}
-                  onChange={(e) => setMaxLate(Math.max(0, Math.min(31, +e.target.value || 0)))}
-                  className="field-input w-full" />
-              </StackedField>
-            </div>
-          )}
-          {step === 2 && (
             <div className="space-y-3">
+              <Toggle label="הודעות קופצות בתוך התוכנה" on={popups} onChange={setPopups} />
+              <Toggle
+                label={
+                  <span>
+                    התראות בשולחן העבודה
+                    <span className="block text-[11px] text-muted-foreground">
+                      הודעות Windows — מופיעות גם כשהתוכנה מוסתרת
+                    </span>
+                  </span>
+                }
+                on={desktop}
+                onChange={setDesktop}
+              />
+              <div className="pt-2 text-xs font-semibold text-muted-foreground">אילו תזכורות</div>
               <Toggle label="תזכורת יומית לרישום נוכחות" on={reminder} onChange={setReminder} />
-              <Toggle label="התראה כשמתקרב למכסת איחורים" on={lateAlert} onChange={setLateAlert} />
+              <Toggle label="התראה כשמתקרב למכסת האיחורים" on={lateAlert} onChange={setLateAlert} />
               <p className="text-xs text-muted-foreground">
-                ההתראות מוצגות כהודעות מערכת של Windows — אך רק כשהתוכנה פתוחה, שכן אין שירות רקע.
+                תזכורת מוצגת רק כשהתוכנה פתוחה — אין שירות שרץ ברקע.
               </p>
             </div>
           )}
-          {step === 3 && (
+
+          {step === 2 && (
             <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                הנתונים נשמרים אצלך במחשב. גיבוי אוטומטי שומר עותקים נוספים, כדי שגם טעות תהיה הפיכה.
+              </p>
               <StackedField label="תדירות גיבוי אוטומטי">
                 <select value={auto} onChange={(e) => setAuto(e.target.value as "off" | "daily" | "weekly")}
                   className="field-input w-full">
@@ -113,14 +145,18 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
               </StackedField>
             </div>
           )}
-          {step === 4 && (
+
+          {step === 3 && (
             <div className="text-center py-6">
               <div className="size-14 rounded-full bg-success/15 text-success grid place-items-center mx-auto">
                 <Check className="size-7" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">הגדרת ראשונית הושלמה</h3>
+              <h3 className="mt-4 text-lg font-semibold">הכל מוכן</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                הכל מוכן. המעקב שלך מתחיל עכשיו.
+                סדר א׳ {times.s1Start}–{times.s1End} · סדר ב׳ {times.s2Start}–{times.s2End}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                את השם שיופיע בדוחות, ואת שאר ההעדפות, אפשר להגדיר בכל עת במסך ההגדרות.
               </p>
             </div>
           )}
@@ -132,8 +168,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             <ChevronRight className="size-4" /> חזור
           </button>
           {step < STEPS.length - 1 ? (
-            <button onClick={() => setStep((s) => s + 1)}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            <button onClick={() => setStep((s) => s + 1)} disabled={blocked}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
               המשך <ChevronLeft className="size-4" />
             </button>
           ) : (

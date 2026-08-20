@@ -25,7 +25,6 @@ export type StoreKey =
   | "settings"
   | "theme"
   | "onboarded"
-  | "audit"
   | "snapshots"
   | "lastAutoBackupAt"
   // Which reminders have already been raised, so two open EXEs don't both
@@ -79,7 +78,7 @@ export function loadStore(): Promise<StoreShape> {
  * An opaque token that changes whenever the data file does — the file's mtime.
  *
  * Poll this instead of loadStore(): it's one stat call with nothing read or
- * parsed, whereas the file holds the audit log and the in-app snapshots and is
+ * parsed, whereas the file also holds the in-app snapshots and is
  * not cheap to re-parse every few seconds in every window. Only fetch the
  * store itself once this has moved.
  */

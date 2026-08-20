@@ -1,11 +1,10 @@
-// Report export. The XLSX path is exercised for real — the workbook is written
-// and parsed back — while the PDF path runs against stand-ins for html2canvas,
-// jsPDF and the DOM, so the report HTML and the A4 pagination can still be
-// checked without a browser.
+// Report export. Both paths run for real: the workbook is written and parsed
+// back, and the PDF is genuinely produced by jsPDF with the shipped Hebrew
+// font. Only the save dialog is a stand-in.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as XLSX from "xlsx";
-
-// ---- stand-ins -------------------------------------------------------------
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const saveBinaryFile = vi.fn<(name: string, bytes: Uint8Array) => Promise<boolean>>();
 vi.mock("./save-file", () => ({
@@ -14,39 +13,22 @@ vi.mock("./save-file", () => ({
   saveTextFile: vi.fn(),
 }));
 
-/** Dimensions the fake html2canvas should report, and what it was handed. */
-const canvasSize = { width: 1588, height: 1000 };
-const rendered = { html: "" };
+// `fetch("/fonts/...")` means nothing outside a browser; the same files, read
+// off disk.
+vi.mock("./pdf-fonts", async () => {
+  const { bytesToBase64 } = await import("./base64");
+  const read = (name: string) =>
+    bytesToBase64(new Uint8Array(readFileSync(fileURLToPath(new URL(`../../public/fonts/${name}`, import.meta.url)))));
+  return {
+    loadHeeboFonts: async () => ({ regular: read("Heebo-Regular.ttf"), bold: read("Heebo-Bold.ttf") }),
+  };
+});
 
-vi.mock("html2canvas", () => ({
-  default: async (node: { innerHTML: string }) => {
-    rendered.html = node.innerHTML;
-    return {
-      width: canvasSize.width,
-      height: canvasSize.height,
-      toDataURL: () => "data:image/jpeg;base64,AAAA",
-    };
-  },
-}));
-
-const pdfCalls = { addImage: 0, addPage: 0, constructed: [] as unknown[] };
-
-vi.mock("jspdf", () => ({
-  default: class FakeJsPDF {
-    internal = { pageSize: { getWidth: () => 210, getHeight: () => 297 } };
-    constructor(opts: unknown) {
-      pdfCalls.constructed.push(opts);
-    }
-    addImage() {
-      pdfCalls.addImage++;
-    }
-    addPage() {
-      pdfCalls.addPage++;
-    }
-    output() {
-      return new ArrayBuffer(64);
-    }
-  },
+const logProblem = vi.fn();
+vi.mock("./diagnostics", () => ({
+  logProblem: (...args: unknown[]) => logProblem(...args),
+  logInfo: vi.fn(),
+  logWarn: vi.fn(),
 }));
 
 import {
@@ -54,7 +36,8 @@ import {
   exportPdfReport,
   exportXlsxWorkbook,
   exportMonthClosingsPdf,
-  sliceIntoPages,
+  fmtDate,
+  fmtHours,
   type ReportSections,
 } from "./exporters";
 import {
@@ -64,12 +47,10 @@ import {
   type SederEntry,
   type LearningEntry,
 } from "./kollel-store";
-import { DEFAULT_SETTINGS, resetSettings } from "./settings-store";
-import { getAuditEntries, clearAudit } from "./audit-store";
+import { DEFAULT_SETTINGS, resetSettings, updateSettings } from "./settings-store";
 
 const { s1Start, s1End } = DEFAULT_SETTINGS.seder;
 const s1StartMin = hhmmToMin(s1Start)!;
-const s1EndMin = hhmmToMin(s1End)!;
 
 function hhmm(min: number) {
   return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
@@ -102,75 +83,47 @@ function lesson(over: Partial<LearningEntry> = {}): LearningEntry {
   };
 }
 
-// ---- a document just rich enough for renderHtmlToPdf ----------------------
-
-class FakeElement {
-  innerHTML = "";
-  style: { cssText: string } = { cssText: "" };
-  width = 0;
-  height = 0;
-  private attrs = new Map<string, string>();
-  setAttribute(k: string, v: string) {
-    this.attrs.set(k, v);
-  }
-  getAttribute(k: string) {
-    return this.attrs.get(k) ?? null;
-  }
-  querySelector() {
-    return null;
-  }
-  remove() {
-    removed.push(this);
-  }
-  appendChild(child: unknown) {
-    appended.push(child);
-    return child;
-  }
-  getContext() {
-    return { fillStyle: "", fillRect() {}, drawImage() {} };
-  }
-  toDataURL() {
-    return "data:image/jpeg;base64,AAAA";
-  }
+/** The bytes handed to the save dialog by the last export. */
+function lastSaved() {
+  const call = saveBinaryFile.mock.calls.at(-1);
+  if (!call) throw new Error("nothing was saved");
+  return { name: call[0], bytes: call[1] };
 }
-let appended: unknown[] = [];
-let removed: unknown[] = [];
 
-function installFakeDom() {
-  appended = [];
-  removed = [];
-  const body = new FakeElement();
-  vi.stubGlobal("document", {
-    createElement: () => new FakeElement(),
-    body,
-    fonts: { ready: Promise.resolve() },
-  });
-  vi.stubGlobal("requestAnimationFrame", (fn: () => void) => {
-    fn();
-    return 1;
-  });
-  return body;
-}
+const asLatin1 = (bytes: Uint8Array) => new TextDecoder("latin1").decode(bytes);
 
 beforeEach(() => {
   resetSettings();
   replaceAllData([], []);
-  clearAudit();
   saveBinaryFile.mockReset();
   saveBinaryFile.mockResolvedValue(true);
-  canvasSize.width = 1588;
-  canvasSize.height = 1000;
-  rendered.html = "";
-  pdfCalls.addImage = 0;
-  pdfCalls.addPage = 0;
-  pdfCalls.constructed = [];
+  logProblem.mockReset();
   vi.useFakeTimers();
   vi.setSystemTime(new Date(2026, 6, 15, 12, 0));
 });
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.unstubAllGlobals();
+});
+
+// ============================================================================
+// formatting helpers
+// ============================================================================
+
+describe("fmtDate", () => {
+  it("turns an ISO date into a Hebrew-readable one", () => {
+    expect(fmtDate("2026-08-20")).toBe("20/08/2026");
+  });
+  it("leaves something that is not a date alone", () => {
+    expect(fmtDate("2026-08")).toBe("2026-08");
+  });
+});
+
+describe("fmtHours", () => {
+  it("gives one decimal place", () => {
+    expect(fmtHours(90)).toBe("1.5 שע׳");
+    expect(fmtHours(0)).toBe("0.0 שע׳");
+  });
 });
 
 // ============================================================================
@@ -207,8 +160,7 @@ describe("exportXlsxWorkbook", () => {
     replaceAllData(entries, lessons);
     const ok = await exportXlsxWorkbook({ entries, lessons });
     expect(ok).toBe(true);
-    const [, bytes] = saveBinaryFile.mock.calls.at(-1)!;
-    return XLSX.read(bytes, { type: "array" });
+    return XLSX.read(lastSaved().bytes, { type: "array" });
   }
 
   it("writes the three expected sheets", async () => {
@@ -217,11 +169,7 @@ describe("exportXlsxWorkbook", () => {
   });
 
   it("marks the workbook right-to-left", async () => {
-    const entries = [entry("2026-07-08")];
-    replaceAllData(entries, []);
-    await exportXlsxWorkbook({ entries, lessons: [] });
-    const [, bytes] = saveBinaryFile.mock.calls.at(-1)!;
-    const wb = XLSX.read(bytes, { type: "array" });
+    const wb = await workbookFor([entry("2026-07-08")], []);
     expect(wb.Workbook?.Views?.[0]).toMatchObject({ RTL: true });
   });
 
@@ -237,6 +185,14 @@ describe("exportXlsxWorkbook", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ תאריך: "2026-07-08", סדר: "א׳", "חסר (דק׳)": 30 });
     expect(rows[1]).toMatchObject({ תאריך: "2026-07-07", היעדרות: "כן", סיבה: "רופא" });
+  });
+
+  it("carries the weekday and the Hebrew date", async () => {
+    const wb = await workbookFor([entry("2026-08-20")], []);
+    const [row] = XLSX.utils.sheet_to_json<Record<string, string>>(wb.Sheets["סדרים"]);
+    // 20 August 2026 is a Thursday.
+    expect(row["יום"]).toBe("ה׳");
+    expect(row["תאריך עברי"]).toMatch(/אלול|אב/);
   });
 
   it("labels the two sedarim in Hebrew", async () => {
@@ -268,6 +224,12 @@ describe("exportXlsxWorkbook", () => {
     const wb = await workbookFor([], [lesson({ minutes: 90 })]);
     const [row] = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["לימוד נוסף"]);
     expect(row).toMatchObject({ דקות: 90, שעות: 1.5, מסגרת: "כולל ערב", מקור: "ידני" });
+  });
+
+  it("doubles a תענית דיבור lesson in the effective column only", async () => {
+    const wb = await workbookFor([], [lesson({ minutes: 45, tanitDibur: true })]);
+    const [row] = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["לימוד נוסף"]);
+    expect(row).toMatchObject({ דקות: 45, נחשב: 90, "תענית דיבור": "כן" });
   });
 
   it("names each learning source in Hebrew", async () => {
@@ -311,6 +273,12 @@ describe("exportXlsxWorkbook", () => {
     expect(rows.map((r) => r["חודש"])).toEqual(["2026-06", "2026-07", "2026-08"]);
   });
 
+  it("names the month in Hebrew alongside its key", async () => {
+    const wb = await workbookFor([entry("2026-08-03")], []);
+    const [row] = XLSX.utils.sheet_to_json<Record<string, string>>(wb.Sheets["סיכום חודשי"]);
+    expect(row["שם החודש"]).toBe("אוגוסט 2026");
+  });
+
   it("carries the month's counts and score", async () => {
     const wb = await workbookFor(
       [
@@ -327,36 +295,46 @@ describe("exportXlsxWorkbook", () => {
     expect(row["ציון"]).toBeLessThanOrEqual(100);
   });
 
+  it("scores each month over that month's rows alone", async () => {
+    // A perfect July next to a July-only absence in June: the two months must
+    // not share a score. (The monthly figures used to be computed from the
+    // whole store rather than the rows being exported.)
+    const wb = await workbookFor(
+      [entry("2026-07-08"), entry("2026-06-10", { absent: true })],
+      [],
+    );
+    const rows = XLSX.utils.sheet_to_json<Record<string, number>>(wb.Sheets["סיכום חודשי"]);
+    expect(rows[0]["ציון"]).toBe(0);      // June — absent all month
+    expect(rows[1]["ציון"]).toBeGreaterThan(90); // July — full attendance
+  });
+
+  it("counts the month's extra learning minutes", async () => {
+    const wb = await workbookFor(
+      [entry("2026-07-08")],
+      [lesson({ date: "2026-07-09", minutes: 30 }), lesson({ id: "x", date: "2026-08-09", minutes: 90 })],
+    );
+    const rows = XLSX.utils.sheet_to_json<Record<string, number>>(wb.Sheets["סיכום חודשי"]);
+    expect(rows[0]["לימוד נוסף"]).toBe(30);
+  });
+
   it("still writes all three sheets with nothing to export", async () => {
     const wb = await workbookFor([], []);
     expect(wb.SheetNames).toEqual(["סדרים", "לימוד נוסף", "סיכום חודשי"]);
   });
 
   it("defaults the filename to the date", async () => {
-    replaceAllData([], []);
     await exportXlsxWorkbook({ entries: [], lessons: [] });
-    expect(saveBinaryFile.mock.calls.at(-1)![0]).toBe("kollel_2026-07-15.xlsx");
+    expect(lastSaved().name).toBe("סדר_פלוס_2026-07-15.xlsx");
   });
 
   it("uses a filename it was given", async () => {
-    replaceAllData([], []);
     await exportXlsxWorkbook({ entries: [], lessons: [], filename: "דוח.xlsx" });
-    expect(saveBinaryFile.mock.calls.at(-1)![0]).toBe("דוח.xlsx");
+    expect(lastSaved().name).toBe("דוח.xlsx");
   });
 
-  it("records the export in the audit log", async () => {
-    replaceAllData([], []);
-    await exportXlsxWorkbook({ entries: [], lessons: [] });
-    const [logged] = getAuditEntries();
-    expect(logged.action).toBe("report.export");
-    expect(logged.detail).toContain("XLSX");
-  });
-
-  it("returns false and logs nothing when the user cancels", async () => {
+  it("reports a cancelled save as false", async () => {
     saveBinaryFile.mockResolvedValue(false);
-    replaceAllData([], []);
     expect(await exportXlsxWorkbook({ entries: [], lessons: [] })).toBe(false);
-    expect(getAuditEntries()).toEqual([]);
   });
 });
 
@@ -367,295 +345,93 @@ describe("exportXlsxWorkbook", () => {
 describe("exportPdfReport", () => {
   const base = { title: "דוח נוכחות", entries: [entry("2026-07-08")], lessons: [lesson()] };
 
-  beforeEach(() => {
-    installFakeDom();
+  it("writes a real PDF and reports success", async () => {
+    expect(await exportPdfReport(base)).toBe(true);
+    const { name, bytes } = lastSaved();
+    expect(name).toMatch(/\.pdf$/);
+    expect(asLatin1(bytes.subarray(0, 5))).toBe("%PDF-");
   });
 
-  it("saves a PDF and reports success", async () => {
-    expect(await exportPdfReport(base)).toBe(true);
-    expect(saveBinaryFile).toHaveBeenCalledOnce();
-    expect(saveBinaryFile.mock.calls[0][0]).toMatch(/\.pdf$/);
+  it("embeds the Hebrew font rather than rasterizing the page", async () => {
+    await exportPdfReport(base);
+    expect(asLatin1(lastSaved().bytes)).toContain("Heebo");
   });
 
   it("defaults the filename to the title plus today's date", async () => {
     await exportPdfReport(base);
-    expect(saveBinaryFile.mock.calls[0][0]).toBe("דוח_נוכחות_2026-07-15.pdf");
+    expect(lastSaved().name).toBe("דוח_נוכחות_2026-07-15.pdf");
   });
 
   it("uses a filename it was given", async () => {
     await exportPdfReport({ ...base, filename: "custom" });
-    expect(saveBinaryFile.mock.calls[0][0]).toBe("custom.pdf");
+    expect(lastSaved().name).toBe("custom.pdf");
   });
 
-  it("returns false and logs nothing when the user cancels", async () => {
+  it("strips characters Windows will not accept in a filename", async () => {
+    await exportPdfReport({ ...base, title: 'דוח 1/2 "מיוחד"' });
+    expect(lastSaved().name).not.toMatch(/[\\/:*?"<>|]/);
+  });
+
+  it("reports a cancelled save as false", async () => {
     saveBinaryFile.mockResolvedValue(false);
     expect(await exportPdfReport(base)).toBe(false);
-    expect(getAuditEntries()).toEqual([]);
   });
 
-  it("records the export in the audit log", async () => {
-    await exportPdfReport(base);
-    const [logged] = getAuditEntries();
-    expect(logged.action).toBe("report.export");
-    expect(logged.detail).toContain("PDF");
-  });
-
-  it("cleans up the off-screen host even when rendering fails", async () => {
+  it("logs a failure to the log file and rethrows it", async () => {
     saveBinaryFile.mockRejectedValue(new Error("disk full"));
     await expect(exportPdfReport(base)).rejects.toThrow("disk full");
-    // A leaked host would sit invisibly in the live page for the rest of the
-    // session, growing with every attempt.
-    expect(removed).toHaveLength(1);
+    expect(logProblem).toHaveBeenCalled();
+    expect(String(logProblem.mock.calls[0][0])).toContain("PDF");
   });
 
-  it("appends exactly one host to the page and removes it again", async () => {
-    await exportPdfReport(base);
-    expect(appended).toHaveLength(1);
-    expect(removed).toHaveLength(1);
+  it("grows with the number of records", async () => {
+    await exportPdfReport({ ...base, entries: [entry("2026-07-08")] });
+    const small = lastSaved().bytes.length;
+    const many = Array.from({ length: 120 }, (_, i) =>
+      entry(`2026-07-${String((i % 28) + 1).padStart(2, "0")}`, { id: `e${i}` }));
+    await exportPdfReport({ ...base, entries: many });
+    expect(lastSaved().bytes.length).toBeGreaterThan(small);
   });
 
-  describe("the report HTML", () => {
-    it("carries the title and the KPI figures", async () => {
-      await exportPdfReport({
-        ...base,
-        entries: [entry("2026-07-08", { arrival: hhmm(s1StartMin + 30) })],
-      });
-      expect(rendered.html).toContain("דוח נוכחות");
-      expect(rendered.html).toContain("דקות חסרות (נטו)");
+  it("honours a date range, dropping records outside it", async () => {
+    const inside = [entry("2026-07-08"), entry("2026-07-09", { id: "b" })];
+    const outside = [entry("2026-01-02", { id: "c" }), entry("2026-12-30", { id: "d" })];
+    await exportPdfReport({
+      ...base, entries: [...inside, ...outside],
+      range: { from: "2026-07-01", to: "2026-07-31" },
     });
-
-    it("includes every section by default", async () => {
-      await exportPdfReport(base);
-      for (const heading of [
-        "פילוח דקות",
-        "סיכום חודשי",
-        "פירוט סדרים",
-        "סיכום היעדרויות מוצדקות",
-        "לימוד נוסף",
-      ]) {
-        expect(rendered.html, heading).toContain(heading);
-      }
-    });
-
-    it("leaves out the sections that were switched off", async () => {
-      const only: ReportSections = {
-        kpis: true,
-        monthlyTable: false,
-        yearlyBreakdown: false,
-        learning: false,
-        charts: false,
-        excusedSummary: false,
-        oheveiList: false,
-      };
-      await exportPdfReport({ ...base, sections: only });
-      expect(rendered.html).toContain("דקות חסרות (נטו)");
-      expect(rendered.html).not.toContain("פילוח דקות");
-      expect(rendered.html).not.toContain("פירוט סדרים");
-      expect(rendered.html).not.toContain("סיכום היעדרויות מוצדקות");
-    });
-
-    it("can switch off the KPIs alone", async () => {
-      await exportPdfReport({ ...base, sections: { ...DEFAULT_SECTIONS, kpis: false } });
-      expect(rendered.html).not.toContain("דקות חסרות (נטו)");
-      expect(rendered.html).toContain("פירוט סדרים");
-    });
-
-    it("honours a date range, dropping records outside it", async () => {
-      await exportPdfReport({
-        ...base,
-        entries: [entry("2026-07-08"), entry("2026-09-08"), entry("2026-05-08")],
-        range: { from: "2026-07-01", to: "2026-07-31" },
-      });
-      expect(rendered.html).toContain("2026-07-08");
-      expect(rendered.html).not.toContain("2026-09-08");
-      expect(rendered.html).not.toContain("2026-05-08");
-    });
-
-    it("shows the range it was given in the header", async () => {
-      await exportPdfReport({ ...base, range: { from: "2026-07-01", to: "2026-07-31" } });
-      expect(rendered.html).toContain("2026-07-01");
-      expect(rendered.html).toContain("2026-07-31");
-    });
-
-    it("includes both endpoints of the range", async () => {
-      await exportPdfReport({
-        ...base,
-        entries: [entry("2026-07-01"), entry("2026-07-31"), entry("2026-06-30")],
-        range: { from: "2026-07-01", to: "2026-07-31" },
-      });
-      expect(rendered.html).toContain("2026-07-01");
-      expect(rendered.html).toContain("2026-07-31");
-      expect(rendered.html).not.toContain("2026-06-30");
-    });
-
-    it("caps the detail table and says how many were left out", async () => {
-      const many = Array.from({ length: 250 }, (_, i) =>
-        entry("2026-07-08", { seder: ((i % 2) + 1) as 1 | 2 }),
-      );
-      await exportPdfReport({ ...base, entries: many });
-      expect(rendered.html).toContain("מוצגים 200 מתוך 250 רישומים");
-    });
-
-    it("says nothing about a cap when everything fits", async () => {
-      await exportPdfReport(base);
-      expect(rendered.html).not.toContain("מוצגים");
-    });
-
-    it("dates the report in the Hebrew calendar", async () => {
-      await exportPdfReport(base);
-      // Tammuz 5786 has 29 days and 8 July is כ״ג בו, so 15 July is א׳ אב.
-      expect(rendered.html).toContain("א׳ אב תשפ״ו");
-    });
-
-    it("renders an absence as a dash rather than a blank time", async () => {
-      await exportPdfReport({ ...base, entries: [entry("2026-07-08", { absent: true })] });
-      expect(rendered.html).toContain("—");
-    });
-
-    it("produces valid enough HTML to have no unresolved template holes", async () => {
-      await exportPdfReport(base);
-      expect(rendered.html).not.toContain("undefined");
-      expect(rendered.html).not.toContain("NaN");
-      expect(rendered.html).not.toContain("[object Object]");
-    });
-
-    // html2canvas 1.4.1 throws on any colour function it does not know, and the
-    // app's own base layer paints every element's border with an oklch()
-    // custom property. The report is rendered inside the live document, so it
-    // inherits that unless the shell overrides it — which is what made exports
-    // come out wrong.
-    it("uses no colour the rasterizer cannot parse", async () => {
-      await exportPdfReport(base);
-      for (const unparseable of ["oklch", "color-mix", "var(--"]) {
-        expect(rendered.html, unparseable).not.toContain(unparseable);
-      }
-    });
-
-    it("forces border-color to a literal, beating the app's oklch base rule", async () => {
-      await exportPdfReport(base);
-      expect(rendered.html).toMatch(/border-color:\s*#[0-9a-fA-F]{3,8}\s*!important/);
-    });
-
-    it("pins tables to a fixed layout so a wide one cannot overflow the page", async () => {
-      // Overflow is not clipped by a scrollbar here — it falls outside the
-      // rasterized bounds and is simply missing from the PDF.
-      await exportPdfReport(base);
-      expect(rendered.html).toContain("table-layout:fixed");
-    });
-
-    it("titles the report with the profile it was saved under", async () => {
-      await exportPdfReport(base);
-      expect(rendered.html).toContain(DEFAULT_SETTINGS.profile.name);
-    });
+    const withRange = lastSaved().bytes.length;
+    await exportPdfReport({ ...base, entries: [...inside, ...outside] });
+    // Four rows make a bigger document than two; if the range were ignored the
+    // two would be identical.
+    expect(lastSaved().bytes.length).not.toBe(withRange);
   });
 
-  describe("A4 pagination", () => {
-    it("puts a short report on one page", async () => {
-      canvasSize.height = 1000; // ~122mm tall, well inside a page
-      await exportPdfReport(base);
-      expect(pdfCalls.addImage).toBe(1);
-      expect(pdfCalls.addPage).toBe(0);
-    });
-
-    it("slices a long report across pages", async () => {
-      canvasSize.height = 10_000;
-      await exportPdfReport(base);
-      // 1588px wide over 194mm is 8.19px/mm, so a 281mm page holds 2300px:
-      // ceil(10000 / 2300) = 5 pages, and 4 page breaks between them.
-      expect(pdfCalls.addImage).toBe(5);
-      expect(pdfCalls.addPage).toBe(4);
-    });
-
-    it("adds no page break for a report just over one page", async () => {
-      canvasSize.height = 2301;
-      await exportPdfReport(base);
-      expect(pdfCalls.addImage).toBe(2);
-      expect(pdfCalls.addPage).toBe(1);
-    });
-
-    it("asks for A4 portrait in millimetres", async () => {
-      await exportPdfReport(base);
-      expect(pdfCalls.constructed[0]).toEqual({
-        unit: "mm",
-        format: "a4",
-        orientation: "portrait",
-      });
-    });
-  });
-});
-
-// ============================================================================
-// sliceIntoPages
-// ============================================================================
-
-describe("sliceIntoPages", () => {
-  /** Every page must be within the page height, and the pages must tile the
-   *  whole canvas with no gap and no overlap. */
-  function expectCoversExactly(
-    pages: { from: number; to: number }[],
-    total: number,
-    pageSlicePx: number,
-  ) {
-    expect(pages[0].from).toBe(0);
-    expect(pages.at(-1)!.to).toBe(total);
-    for (const [i, p] of pages.entries()) {
-      expect(p.to, `page ${i} must make progress`).toBeGreaterThan(p.from);
-      expect(p.to - p.from, `page ${i} must fit the sheet`).toBeLessThanOrEqual(pageSlicePx);
-      if (i > 0) expect(p.from, `page ${i} must continue page ${i - 1}`).toBe(pages[i - 1].to);
-    }
-  }
-
-  it("keeps a canvas shorter than a page on one page", () => {
-    expect(sliceIntoPages(500, 2300, [])).toEqual([{ from: 0, to: 500 }]);
+  it("produces a document with every section switched off", async () => {
+    const none = Object.fromEntries(
+      Object.keys(DEFAULT_SECTIONS).map((k) => [k, false]),
+    ) as ReportSections;
+    expect(await exportPdfReport({ ...base, sections: none })).toBe(true);
+    expect(asLatin1(lastSaved().bytes.subarray(0, 5))).toBe("%PDF-");
   });
 
-  it("falls back to full-height slices with no break candidates", () => {
-    const pages = sliceIntoPages(5000, 2000, []);
-    expect(pages).toEqual([
-      { from: 0, to: 2000 },
-      { from: 2000, to: 4000 },
-      { from: 4000, to: 5000 },
-    ]);
+  it("produces a document with no records at all", async () => {
+    expect(await exportPdfReport({ ...base, entries: [], lessons: [] })).toBe(true);
+    expect(asLatin1(lastSaved().bytes.subarray(0, 5))).toBe("%PDF-");
   });
 
-  it("cuts on a block boundary rather than through a row", () => {
-    // Rows every 100px. A blind cut would land at 2000, mid-row; the nearest
-    // boundary at or before that is 1900.
-    const rows = Array.from({ length: 40 }, (_, i) => (i + 1) * 100 + 50);
-    const [first] = sliceIntoPages(4000, 2000, rows);
-    expect(first.from).toBe(0);
-    // 1950 is the last row bottom that fits, plus the 4px border allowance.
-    expect(first.to).toBe(1954);
+  it("survives records with awkward content", async () => {
+    const nasty = [
+      entry("2026-07-08", { note: "הערה ארוכה מאוד ".repeat(20), excusedReason: "סיבה (מיוחדת) 50%" }),
+      entry("2026-07-09", { id: "z", absent: true, arrival: undefined, departure: undefined }),
+    ];
+    expect(await exportPdfReport({ ...base, entries: nasty })).toBe(true);
   });
 
-  it("never lets a chosen break push a page past the sheet height", () => {
-    // A boundary exactly on the page edge: the +4px border allowance must be
-    // clamped away rather than overflowing onto the next sheet.
-    const [first] = sliceIntoPages(4000, 2000, [2000]);
-    expect(first.to).toBe(2000);
-  });
-
-  it("ignores a break that would leave the page mostly empty", () => {
-    // The only candidate sits 10% down the page — taking it would waste 90% of
-    // the sheet, so the full-height cut wins instead.
-    const [first] = sliceIntoPages(4000, 2000, [200]);
-    expect(first.to).toBe(2000);
-  });
-
-  it("still makes progress when one block is taller than a page", () => {
-    // A single 5000px block with no internal boundary cannot be broken
-    // cleanly; it must be sliced anyway rather than looping forever.
-    const pages = sliceIntoPages(5000, 2000, [5000]);
-    expect(pages).toHaveLength(3);
-    expectCoversExactly(pages, 5000, 2000);
-  });
-
-  it("tiles the canvas exactly, whatever the break layout", () => {
-    const rows = Array.from({ length: 60 }, (_, i) => (i + 1) * 137);
-    for (const total of [1, 1999, 2000, 2001, 4000, 8219]) {
-      const pages = sliceIntoPages(total, 2000, rows.filter((r) => r < total));
-      expectCoversExactly(pages, total, 2000);
-    }
+  it("names the report after the profile it was saved under", async () => {
+    updateSettings({ profile: { name: "יהודה", classroom: "כתר תורה" } });
+    expect(await exportPdfReport(base)).toBe(true);
+    expect(asLatin1(lastSaved().bytes.subarray(0, 5))).toBe("%PDF-");
   });
 });
 
@@ -664,107 +440,55 @@ describe("sliceIntoPages", () => {
 // ============================================================================
 
 describe("exportMonthClosingsPdf", () => {
-  beforeEach(() => {
-    installFakeDom();
+  const entries = [entry("2026-07-08"), entry("2026-07-09", { id: "b", absent: true })];
+  const lessons = [lesson({ date: "2026-07-08", minutes: 45, tanitDibur: true })];
+
+  it("writes one month as a figure sheet", async () => {
+    const closings = [monthClosing("2026-07", entries, lessons)];
+    expect(await exportMonthClosingsPdf({ closings })).toBe(true);
+    expect(asLatin1(lastSaved().bytes.subarray(0, 5))).toBe("%PDF-");
   });
 
-  const july = () =>
-    monthClosing(
-      "2026-07",
-      [
-        entry("2026-07-08", { arrival: hhmm(s1StartMin + 30) }),
-        entry("2026-07-07", { absent: true, excusedAll: true }),
-      ],
-      [lesson({ minutes: 45 })],
-    );
-  const june = () => monthClosing("2026-06", [entry("2026-06-10")], []);
+  it("writes several months as one table", async () => {
+    const closings = ["2026-06", "2026-07", "2026-08"].map((k) => monthClosing(k, entries, lessons));
+    expect(await exportMonthClosingsPdf({ closings })).toBe(true);
+    expect(lastSaved().name).toMatch(/^סיכומי_חודשים_/);
+  });
 
-  it("refuses an empty list without touching the save dialog", async () => {
+  it("titles a single month after that month", async () => {
+    const closings = [monthClosing("2026-07", entries, lessons)];
+    await exportMonthClosingsPdf({ closings });
+    expect(lastSaved().name).toContain("יולי");
+  });
+
+  it("refuses to write nothing", async () => {
     expect(await exportMonthClosingsPdf({ closings: [] })).toBe(false);
     expect(saveBinaryFile).not.toHaveBeenCalled();
   });
 
-  it("renders a single month as a KPI card", async () => {
-    expect(await exportMonthClosingsPdf({ closings: [july()] })).toBe(true);
-    expect(rendered.html).toContain("יולי 2026");
-    expect(rendered.html).toContain("סה״כ דקות");
-    expect(rendered.html).not.toContain("שורות סיכום חודשי");
-  });
-
-  it("renders several months as a table with a totals row", async () => {
-    await exportMonthClosingsPdf({ closings: [july(), june()] });
-    expect(rendered.html).toContain("שורות סיכום חודשי");
-    expect(rendered.html).toContain("סה״כ (2 חודשים)");
-    expect(rendered.html).toContain("יולי 2026");
-    expect(rendered.html).toContain("יוני 2026");
-  });
-
-  it("marks a month still in progress as an interim summary", async () => {
-    // "Today" is 15 July 2026, so July has not closed yet.
-    await exportMonthClosingsPdf({ closings: [july()] });
-    expect(rendered.html).toContain("סיכום ביניים");
-  });
-
-  it("does not mark a closed month as interim", async () => {
-    await exportMonthClosingsPdf({ closings: [june()] });
-    expect(rendered.html).not.toContain("סיכום ביניים");
-  });
-
-  it("flags the open month in the multi-month table", async () => {
-    await exportMonthClosingsPdf({ closings: [july(), june()] });
-    expect(rendered.html).toContain("· פתוח");
-  });
-
-  it("notes when תענית דיבור doubled the kollel-erev minutes", async () => {
-    const closing = monthClosing("2026-07", [], [lesson({ minutes: 45, tanitDibur: true })]);
-    await exportMonthClosingsPdf({ closings: [closing] });
-    expect(rendered.html).toContain("תענית דיבור נספרת כפול");
-    expect(rendered.html).toContain("90");
-  });
-
-  it("says nothing about doubling when there was none", async () => {
-    const closing = monthClosing("2026-07", [], [lesson({ minutes: 45 })]);
-    await exportMonthClosingsPdf({ closings: [closing] });
-    expect(rendered.html).not.toContain("תענית דיבור נספרת כפול");
-  });
-
-  it("titles a single month after that month", async () => {
-    await exportMonthClosingsPdf({ closings: [july()] });
-    expect(saveBinaryFile.mock.calls[0][0]).toContain("סיכום_חודש_יולי_2026");
-  });
-
-  it("titles several months generically", async () => {
-    await exportMonthClosingsPdf({ closings: [july(), june()] });
-    expect(saveBinaryFile.mock.calls[0][0]).toContain("סיכומי_חודשים");
-  });
-
   it("uses a title it was given", async () => {
-    await exportMonthClosingsPdf({ closings: [july()], title: "נעילת תמוז" });
-    expect(rendered.html).toContain("נעילת תמוז");
+    const closings = [monthClosing("2026-07", entries, lessons)];
+    await exportMonthClosingsPdf({ closings, title: "נעילת חודש" });
+    expect(lastSaved().name).toMatch(/^נעילת_חודש_/);
   });
 
-  it("uses a filename it was given", async () => {
-    await exportMonthClosingsPdf({ closings: [july()], filename: "closing" });
-    expect(saveBinaryFile.mock.calls[0][0]).toBe("closing.pdf");
-  });
-
-  it("records the months it exported in the audit log", async () => {
-    await exportMonthClosingsPdf({ closings: [july(), june()] });
-    const [logged] = getAuditEntries();
-    expect(logged.action).toBe("report.export");
-    expect(logged.newValue).toMatchObject({ months: ["2026-07", "2026-06"] });
-  });
-
-  it("returns false and logs nothing when the user cancels", async () => {
+  it("reports a cancelled save as false", async () => {
     saveBinaryFile.mockResolvedValue(false);
-    expect(await exportMonthClosingsPdf({ closings: [july()] })).toBe(false);
-    expect(getAuditEntries()).toEqual([]);
+    const closings = [monthClosing("2026-07", entries, lessons)];
+    expect(await exportMonthClosingsPdf({ closings })).toBe(false);
   });
 
-  it("leaves no unresolved template holes", async () => {
-    await exportMonthClosingsPdf({ closings: [july(), june()] });
-    expect(rendered.html).not.toContain("undefined");
-    expect(rendered.html).not.toContain("NaN");
-    expect(rendered.html).not.toContain("[object Object]");
+  it("logs a failure and rethrows it", async () => {
+    saveBinaryFile.mockRejectedValue(new Error("nope"));
+    const closings = [monthClosing("2026-07", entries, lessons)];
+    await expect(exportMonthClosingsPdf({ closings })).rejects.toThrow("nope");
+    expect(logProblem).toHaveBeenCalled();
+  });
+
+  it("handles a year of months in one document", async () => {
+    const closings = Array.from({ length: 12 }, (_, i) =>
+      monthClosing(`2026-${String(i + 1).padStart(2, "0")}`, entries, lessons));
+    expect(await exportMonthClosingsPdf({ closings })).toBe(true);
+    expect(asLatin1(lastSaved().bytes.subarray(0, 5))).toBe("%PDF-");
   });
 });

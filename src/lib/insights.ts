@@ -1,8 +1,9 @@
 import {
   type SederEntry, type LearningEntry,
   calcSeder, monthlySummary, attendanceScore, entriesInMonth, getSederSnapshot,
-  currentDayStreak, FRAMEWORK_LABELS,
+  currentDayStreak, hhmmToMin, FRAMEWORK_LABELS,
 } from "./kollel-store";
+import { getSederTimesFor, getSettings } from "./settings-store";
 import { isLearningDay } from "./hebrew-calendar";
 
 export type Insight = {
@@ -17,6 +18,133 @@ export function fmtMin(m: number): string {
   if (m < 60) return `${m} דק׳`;
   const h = Math.floor(m / 60), r = m % 60;
   return r === 0 ? `${h} שע׳` : `${h}:${String(r).padStart(2, "0")} שע׳`;
+}
+
+// ============ plain-language summary ============
+// The screen used to open with four bare numbers and a 0–100 score, which says
+// nothing on its own — 84 out of 100 is good or bad depending on the target.
+// This turns the same figures into one sentence.
+
+export type Verdict = {
+  tone: "success" | "warning" | "destructive" | "info";
+  headline: string;
+  sentence: string;
+};
+
+export function monthVerdict(f: {
+  score: number;
+  target: number;
+  entries: number;
+  netMissing: number;
+  lateCount: number;
+  maxLatePerMonth: number;
+}): Verdict {
+  if (f.entries === 0) {
+    return {
+      tone: "info",
+      headline: "אין עדיין רישומים החודש",
+      sentence: "ברגע שתרשום סדר אחד, כאן תופיע תמונת המצב של החודש.",
+    };
+  }
+  const gap = f.target - f.score;
+  if (f.score >= f.target) {
+    return {
+      tone: "success",
+      headline: "החודש הזה מעל היעד",
+      sentence: `ציון ${f.score} מול יעד ${f.target}. חסרות לך ${fmtMin(f.netMissing)} בסך הכל — המשך כך.`,
+    };
+  }
+  if (gap <= 5) {
+    return {
+      tone: "info",
+      headline: "כמעט ביעד",
+      sentence: `ציון ${f.score}, חסרות ${gap} נקודות ליעד ${f.target}. הגעה בזמן בימים הקרובים תסגור את הפער.`,
+    };
+  }
+  if (f.lateCount > f.maxLatePerMonth) {
+    return {
+      tone: "destructive",
+      headline: "האיחורים הם מה שמוריד את הציון",
+      sentence: `${f.lateCount} איחורים החודש מול מכסה של ${f.maxLatePerMonth}, וציון ${f.score} מול יעד ${f.target}.`,
+    };
+  }
+  return {
+    tone: "warning",
+    headline: "יש מה לשפר החודש",
+    sentence: `ציון ${f.score} מול יעד ${f.target}, ובסך הכל חסרות ${fmtMin(f.netMissing)}.`,
+  };
+}
+
+/**
+ * Average distance between arrival and the start of the seder, in minutes:
+ * negative means early, positive means late. Absences and rows with no
+ * arrival time are left out — they say nothing about punctuality.
+ */
+export function averageArrivalOffsetMin(entries: SederEntry[]): number | null {
+  let total = 0, count = 0;
+  for (const e of entries) {
+    if (e.absent) continue;
+    const arrival = hhmmToMin(e.arrival);
+    if (arrival === null) continue;
+    const t = getSederTimesFor(e.date);
+    const start = hhmmToMin(e.seder === 1 ? t.s1Start : t.s2Start);
+    if (start === null) continue;
+    total += arrival - start;
+    count++;
+  }
+  return count === 0 ? null : Math.round(total / count);
+}
+
+/**
+ * Bonus minutes left on the table: for each seder arrived at *on* time or late,
+ * the bonus that arriving `earlyBy` minutes sooner would have earned.
+ *
+ * This is the one number that turns "you are behind" into something to do
+ * about it.
+ */
+export function bonusOpportunityMin(entries: SederEntry[], earlyBy: number): number {
+  const threshold = getSettings().seder.bonusThresholdMin;
+  const perSeder = Math.min(earlyBy, threshold);
+  let count = 0;
+  for (const e of entries) {
+    if (e.absent) continue;
+    const arrival = hhmmToMin(e.arrival);
+    if (arrival === null) continue;
+    const t = getSederTimesFor(e.date);
+    const start = hhmmToMin(e.seder === 1 ? t.s1Start : t.s2Start);
+    if (start === null) continue;
+    if (arrival >= start) count++;
+  }
+  return count * perSeder;
+}
+
+/** Net missing minutes over the last 7 days against the 7 before them. */
+export function weekOverWeek(entries: SederEntry[], now = new Date()): {
+  recent: number; previous: number; diff: number;
+} | null {
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const dayBefore = (n: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - n);
+    return iso(d);
+  };
+  const recentFrom = dayBefore(6), recentTo = iso(now);
+  const prevFrom = dayBefore(13), prevTo = dayBefore(7);
+
+  const sum = (from: string, to: string) => {
+    let net = 0, count = 0;
+    for (const e of entries) {
+      if (e.date < from || e.date > to) continue;
+      net += calcSeder(e).netMissingMin;
+      count++;
+    }
+    return { net, count };
+  };
+  const recent = sum(recentFrom, recentTo);
+  const previous = sum(prevFrom, prevTo);
+  if (recent.count === 0 || previous.count === 0) return null;
+  return { recent: recent.net, previous: previous.net, diff: recent.net - previous.net };
 }
 
 export function generateInsights(
@@ -249,6 +377,53 @@ export function generateInsights(
         detail: `${fmtMin(top[1])} החודש במסגרת זו.`,
       });
     }
+  }
+
+  // How the arrival habit actually looks, in one sentence. This is the figure
+  // a user can act on directly, unlike a 0–100 score.
+  const offset = averageArrivalOffsetMin(monthEntries);
+  if (offset !== null && monthEntries.length >= 6) {
+    if (offset <= -3) {
+      out.push({
+        id: "arrive-early", tone: "success", category: "trend",
+        title: `אתה מגיע בממוצע ${Math.abs(offset)} דק׳ לפני תחילת הסדר`,
+        detail: "הגעה מוקדמת צוברת דקות בונוס שמקטינות את החסר.",
+      });
+    } else if (offset >= 4) {
+      out.push({
+        id: "arrive-late", tone: "warning", category: "opportunity",
+        title: `אתה מגיע בממוצע ${offset} דק׳ אחרי תחילת הסדר`,
+        detail: "יציאה מהבית עשר דקות מוקדם יותר מבטלת כמעט את כל החסר הזה.",
+      });
+    }
+  }
+
+  // What earlier arrivals would be worth this month — the recommendation with
+  // an actual number attached.
+  const opportunity = bonusOpportunityMin(monthEntries, 10);
+  if (opportunity >= 60) {
+    out.push({
+      id: "bonus-opportunity", tone: "info", category: "recommendation",
+      title: `הגעה 10 דק׳ מוקדם יותר הייתה שווה ${fmtMin(opportunity)} החודש`,
+      detail: "כל הגעה לפני תחילת הסדר נצברת כבונוס, עד לגובה הסף שבהגדרות.",
+    });
+  }
+
+  // The last week against the one before it — a month-long average hides a
+  // week that has just gone wrong.
+  const week = weekOverWeek(entries, now);
+  if (week && Math.abs(week.diff) >= 20) {
+    out.push(week.diff < 0
+      ? {
+          id: "week-better", tone: "success", category: "trend",
+          title: `השבוע האחרון טוב ב-${fmtMin(Math.abs(week.diff))} מקודמו`,
+          detail: `${fmtMin(week.recent)} חסרות בשבוע האחרון, מול ${fmtMin(week.previous)} בשבוע שלפניו.`,
+        }
+      : {
+          id: "week-worse", tone: "warning", category: "opportunity",
+          title: `השבוע האחרון חלש ב-${fmtMin(week.diff)} מקודמו`,
+          detail: `${fmtMin(week.recent)} חסרות בשבוע האחרון, מול ${fmtMin(week.previous)} בשבוע שלפניו.`,
+        });
   }
 
   // Missing entries — detect gap

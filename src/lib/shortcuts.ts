@@ -12,11 +12,9 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "g c", label: "לוח שנה",        to: "/calendar" },
   { keys: "g h", label: "היסטוריה",       to: "/history" },
   { keys: "g l", label: "לימוד נוסף",     to: "/learning" },
-  { keys: "g s", label: "סטטיסטיקות",     to: "/statistics" },
-  { keys: "g i", label: "תובנות חכמות",   to: "/insights" },
+  { keys: "g s", label: "סטטיסטיקות ותובנות", to: "/statistics" },
   { keys: "g r", label: "דוחות",          to: "/reports" },
   { keys: "g b", label: "גיבוי ושחזור",   to: "/backup" },
-  { keys: "g u", label: "יומן ביקורת",    to: "/audit" },
   { keys: "g ,", label: "הגדרות",         to: "/settings" },
   { keys: "/",   label: "חיפוש",          to: "/search" },
   { keys: "?",   label: "הצג קיצורי דרך" },
@@ -41,8 +39,8 @@ export function useGlobalShortcuts(toggleHelp: () => void) {
       if (chord === "g") {
         const map: Record<string, string> = {
           d: "/", a: "/attendance", c: "/calendar", h: "/history",
-          l: "/learning", s: "/statistics", i: "/insights",
-          r: "/reports", b: "/backup", u: "/audit", ",": "/settings",
+          l: "/learning", s: "/statistics",
+          r: "/reports", b: "/backup", ",": "/settings",
         };
         if (map[k]) { e.preventDefault(); navigate({ to: map[k] }); }
         clearChord();

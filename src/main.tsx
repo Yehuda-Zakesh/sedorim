@@ -2,7 +2,14 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider, createHashHistory, createRouter } from "@tanstack/react-router";
 
 import { routeTree } from "./routeTree.gen";
+import { installGlobalErrorLogging } from "./lib/diagnostics";
 import "./styles.css";
+
+// Before anything else runs: inside a packaged EXE there is no console, so an
+// error that escapes React would otherwise leave no trace at all. This writes
+// it to %APPDATA%\SederPlus\logs\sederplus.log, which Settings → "יומן תקלות"
+// shows.
+installGlobalErrorLogging();
 
 // The EXEs open index.html with no hash at all, and SederPlusQuick.exe adds
 // ?mode=quick (see src-tauri/core/src/lib.rs) — that query is all the

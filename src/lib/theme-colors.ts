@@ -2,10 +2,10 @@
 // on what "the user's colour" actually is.
 //
 // These are plain hex on purpose. The live app themes itself through the
-// oklch() custom properties in styles.css, but html2canvas (which rasterizes
-// the PDF reports) cannot parse oklch — so anything that has to survive an
-// export needs a hex value it can read. Keep the two in step: each hex here is
-// the light-mode `--primary` of the matching `html[data-theme=...]` block.
+// oklch() custom properties in styles.css, but a PDF has no stylesheet and no
+// colour functions — anything that has to survive an export needs a literal
+// value. Keep the two in step: each hex here is the light-mode `--primary` of
+// the matching `html[data-theme=...]` block.
 import type { ColorTheme, BgTheme } from "./settings-store";
 
 export const COLOR_THEMES: { id: ColorTheme; label: string; hex: string }[] = [

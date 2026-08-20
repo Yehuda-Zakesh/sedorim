@@ -1,16 +1,33 @@
+// Version checks and in-app installation.
+//
+// Versions are whole numbers: this build is "גרסה 1", the next release is 2.
+// package.json still carries a semver string because npm insists on one, but
+// the major is the only part that means anything — see APP_VERSION in
+// src/components/app-shell.tsx and scripts/set-version.mjs, which stamps the
+// number into package.json, both tauri.conf.json files and the three
+// Cargo.toml files at release time.
+//
+// "Update" used to mean "open the download page in a browser and good luck".
+// It now downloads the installer and runs it (Rust: install_update, see
+// src-tauri/core/src/updater.rs); the installer closes the app, replaces it and
+// starts it again.
 import { useEffect, useState } from "react";
 import { APP_VERSION } from "@/components/app-shell";
+import { invoke, isDesktop } from "./tauri";
+import { logProblem } from "./diagnostics";
 
 const REPO_KEY = "tracker.updater.repo.v1";
 const SKIP_KEY = "tracker.updater.skipVersion.v1";
 const LAST_CHECK_KEY = "tracker.updater.lastCheck.v1";
 
-// Left empty on purpose: with no repo configured, checkForUpdate() returns
-// null and the app makes no network requests at all. There is currently no
-// Settings UI calling setUpdateRepo(), so defaulting this to
-// "Yehuda-Zakesh/sedorim" would turn on a daily call to api.github.com that
-// the user has no way to switch off.
-const DEFAULT_REPO = "";
+/**
+ * The app's own repository, so update checks work out of the box.
+ *
+ * Clearing the field in Settings stores an empty string, which is an explicit
+ * "off" and stops every network request — that is the only state in which the
+ * app talks to nothing at all.
+ */
+export const DEFAULT_REPO = "Yehuda-Zakesh/sedorim";
 
 export type GithubRelease = {
   tag_name: string;
@@ -27,7 +44,10 @@ export type UpdateInfo = {
   latest: string;
   isNewer: boolean;
   release: GithubRelease;
+  /** The installer, when the release carries one. */
   downloadUrl: string | null;
+  /** Whether that URL is something install() can actually run. */
+  canInstall: boolean;
 };
 
 export function getUpdateRepo(): string {
@@ -71,13 +91,11 @@ export function isVersionNewer(latest: string, current: string): boolean {
   return false;
 }
 
-function pickAsset(release: GithubRelease): string | null {
-  if (!release.assets?.length) return release.html_url;
-  const exe = release.assets.find((a) => /\.exe$/i.test(a.name));
-  if (exe) return exe.browser_download_url;
-  const zip = release.assets.find((a) => /\.zip$/i.test(a.name));
-  if (zip) return zip.browser_download_url;
-  return release.assets[0].browser_download_url;
+/** The installer asset, which is the only thing worth downloading. */
+export function pickInstaller(release: GithubRelease): string | null {
+  const assets = release.assets ?? [];
+  const setup = assets.find((a) => /setup.*\.exe$/i.test(a.name)) ?? assets.find((a) => /\.exe$/i.test(a.name));
+  return setup ? setup.browser_download_url : null;
 }
 
 export async function checkForUpdate(repoOverride?: string): Promise<UpdateInfo | null> {
@@ -90,13 +108,31 @@ export async function checkForUpdate(repoOverride?: string): Promise<UpdateInfo 
   if (typeof window !== "undefined") {
     localStorage.setItem(LAST_CHECK_KEY, new Date().toISOString());
   }
+  const installer = pickInstaller(release);
   return {
     current: APP_VERSION,
     latest: release.tag_name,
     isNewer: isVersionNewer(release.tag_name, APP_VERSION),
     release,
-    downloadUrl: pickAsset(release),
+    downloadUrl: installer ?? release.html_url,
+    // A browser has nothing to install into, and a release with no installer
+    // attached leaves nothing to run.
+    canInstall: isDesktop && installer !== null,
   };
+}
+
+/**
+ * Downloads the installer and starts it. The app quits a moment later — the
+ * installer is waiting to replace the EXE that is running — so this resolving
+ * means "the update is under way", not "the update finished".
+ */
+export async function installUpdate(url: string): Promise<void> {
+  try {
+    await invoke<void>("install_update", { url });
+  } catch (err) {
+    logProblem("התקנת עדכון", err);
+    throw err;
+  }
 }
 
 export function getLastCheck(): string {
@@ -119,7 +155,7 @@ export function useAutoUpdateCheck() {
     const t = setTimeout(() => {
       checkForUpdate().then((info) => {
         if (info?.isNewer && info.latest !== getSkippedVersion()) setUpdate(info);
-      }).catch(() => {/* silent */});
+      }).catch(() => {/* offline is not worth a message */});
     }, 3000);
     return () => clearTimeout(t);
   }, []);

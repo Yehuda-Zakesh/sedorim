@@ -1,8 +1,11 @@
+# Checks for anything that is not a push to main.
+#
+# A push to main goes through .github/workflows/release.yml instead, which runs
+# these same three checks against the version-stamped tree before it publishes
+# anything — so running them here as well would only duplicate the work.
 name: CI (typecheck + tests)
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch: {}
@@ -19,8 +22,6 @@ jobs:
         with:
           node-version: 22
 
-      # See the note in build-windows.yml — switch back to `npm ci` once the
-      # refreshed package-lock.json is committed.
       - name: Install dependencies
         run: npm install
 
@@ -30,7 +31,7 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-      # Catches a broken frontend build before the (much slower) Windows EXE
+      # Catches a broken frontend build before the (much slower) release
       # workflow gets that far.
       - name: Build frontend
         run: npm run build

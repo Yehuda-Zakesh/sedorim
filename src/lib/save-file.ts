@@ -1,4 +1,5 @@
 import { invoke, isDesktop } from "./tauri";
+import { base64ToBytes, bytesToBase64 } from "./base64";
 
 // Saving a generated file (PDF, Excel, JSON backup) to disk.
 //
@@ -27,24 +28,6 @@ export function saveBinaryFile(filename: string, bytes: Uint8Array): Promise<boo
 /** Text is written as UTF-8, so Hebrew survives the round trip. */
 export function saveTextFile(filename: string, text: string): Promise<boolean> {
   return saveBinaryFile(filename, new TextEncoder().encode(text));
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  // Chunked: String.fromCharCode(...bytes) on a multi-megabyte PDF blows the
-  // argument limit and throws.
-  const CHUNK = 0x8000;
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
 }
 
 /** `npm run dev` only — a normal browser download. */

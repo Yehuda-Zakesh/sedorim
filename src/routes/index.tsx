@@ -204,8 +204,8 @@ function Dashboard() {
                   <Sparkles className="size-4 text-primary" />
                   <h2 className="text-sm font-semibold">סיכום מהיר</h2>
                 </div>
-                <Link to="/insights" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-                  לתובנות <ChevronLeft className="size-3" />
+                <Link to="/statistics" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                  לסטטיסטיקות <ChevronLeft className="size-3" />
                 </Link>
               </div>
               <ul className="space-y-2 text-sm">

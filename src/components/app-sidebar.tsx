@@ -2,16 +2,17 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, ClipboardCheck, History, BookOpen, CalendarDays,
-  BarChart3, FileText, Settings, Info, Sparkles, DatabaseBackup, ShieldCheck,
+  BarChart3, FileText, Settings, Info, DatabaseBackup,
   PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 
-// Every screen the app has, grouped. Calendar, insights, backup and the audit
-// log used to be reachable only by keyboard shortcut or by being embedded as a
-// tab inside another screen — so pressing `g c` landed on a page that no
-// sidebar item claimed, and the same content existed twice under two different
-// layouts. Each screen now lives in exactly one place, and this list is the
-// place it lives. Keep it in step with SHORTCUTS in src/lib/shortcuts.ts.
+// Every screen the app has, grouped. Each screen lives in exactly one place,
+// and this list is the place it lives — keep it in step with SHORTCUTS in
+// src/lib/shortcuts.ts.
+//
+// Statistics and insights used to be two entries showing the same four
+// figures; they are one screen now. The audit log is gone entirely — see
+// src/lib/diagnostics.ts for what replaced it.
 const NAV_GROUPS = [
   {
     label: "מעקב",
@@ -26,8 +27,7 @@ const NAV_GROUPS = [
   {
     label: "ניתוח",
     items: [
-      { to: "/statistics", label: "סטטיסטיקות", icon: BarChart3 },
-      { to: "/insights", label: "תובנות חכמות", icon: Sparkles },
+      { to: "/statistics", label: "סטטיסטיקות ותובנות", icon: BarChart3 },
       { to: "/reports", label: "דוחות", icon: FileText },
     ],
   },
@@ -35,7 +35,6 @@ const NAV_GROUPS = [
     label: "מערכת",
     items: [
       { to: "/backup", label: "גיבוי ושחזור", icon: DatabaseBackup },
-      { to: "/audit", label: "יומן ביקורת", icon: ShieldCheck },
       { to: "/settings", label: "הגדרות", icon: Settings },
       { to: "/about", label: "אודות", icon: Info },
     ],

@@ -15,11 +15,9 @@ import { Route as SearchRouteImport } from './routes/search'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as QuickRouteImport } from './routes/quick'
 import { Route as LearningRouteImport } from './routes/learning'
-import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as BackupRouteImport } from './routes/backup'
-import { Route as AuditRouteImport } from './routes/audit'
 import { Route as AttendanceRouteImport } from './routes/attendance'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
@@ -54,11 +52,6 @@ const LearningRoute = LearningRouteImport.update({
   path: '/learning',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InsightsRoute = InsightsRouteImport.update({
-  id: '/insights',
-  path: '/insights',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const HistoryRoute = HistoryRouteImport.update({
   id: '/history',
   path: '/history',
@@ -72,11 +65,6 @@ const CalendarRoute = CalendarRouteImport.update({
 const BackupRoute = BackupRouteImport.update({
   id: '/backup',
   path: '/backup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuditRoute = AuditRouteImport.update({
-  id: '/audit',
-  path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AttendanceRoute = AttendanceRouteImport.update({
@@ -99,11 +87,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/attendance': typeof AttendanceRoute
-  '/audit': typeof AuditRoute
   '/backup': typeof BackupRoute
   '/calendar': typeof CalendarRoute
   '/history': typeof HistoryRoute
-  '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
   '/quick': typeof QuickRoute
   '/reports': typeof ReportsRoute
@@ -115,11 +101,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/attendance': typeof AttendanceRoute
-  '/audit': typeof AuditRoute
   '/backup': typeof BackupRoute
   '/calendar': typeof CalendarRoute
   '/history': typeof HistoryRoute
-  '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
   '/quick': typeof QuickRoute
   '/reports': typeof ReportsRoute
@@ -132,11 +116,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/attendance': typeof AttendanceRoute
-  '/audit': typeof AuditRoute
   '/backup': typeof BackupRoute
   '/calendar': typeof CalendarRoute
   '/history': typeof HistoryRoute
-  '/insights': typeof InsightsRoute
   '/learning': typeof LearningRoute
   '/quick': typeof QuickRoute
   '/reports': typeof ReportsRoute
@@ -150,11 +132,9 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/attendance'
-    | '/audit'
     | '/backup'
     | '/calendar'
     | '/history'
-    | '/insights'
     | '/learning'
     | '/quick'
     | '/reports'
@@ -166,11 +146,9 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/attendance'
-    | '/audit'
     | '/backup'
     | '/calendar'
     | '/history'
-    | '/insights'
     | '/learning'
     | '/quick'
     | '/reports'
@@ -182,11 +160,9 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/attendance'
-    | '/audit'
     | '/backup'
     | '/calendar'
     | '/history'
-    | '/insights'
     | '/learning'
     | '/quick'
     | '/reports'
@@ -199,11 +175,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   AttendanceRoute: typeof AttendanceRoute
-  AuditRoute: typeof AuditRoute
   BackupRoute: typeof BackupRoute
   CalendarRoute: typeof CalendarRoute
   HistoryRoute: typeof HistoryRoute
-  InsightsRoute: typeof InsightsRoute
   LearningRoute: typeof LearningRoute
   QuickRoute: typeof QuickRoute
   ReportsRoute: typeof ReportsRoute
@@ -256,13 +230,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LearningRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/insights': {
-      id: '/insights'
-      path: '/insights'
-      fullPath: '/insights'
-      preLoaderRoute: typeof InsightsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/history': {
       id: '/history'
       path: '/history'
@@ -282,13 +249,6 @@ declare module '@tanstack/react-router' {
       path: '/backup'
       fullPath: '/backup'
       preLoaderRoute: typeof BackupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/audit': {
-      id: '/audit'
-      path: '/audit'
-      fullPath: '/audit'
-      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/attendance': {
@@ -319,11 +279,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   AttendanceRoute: AttendanceRoute,
-  AuditRoute: AuditRoute,
   BackupRoute: BackupRoute,
   CalendarRoute: CalendarRoute,
   HistoryRoute: HistoryRoute,
-  InsightsRoute: InsightsRoute,
   LearningRoute: LearningRoute,
   QuickRoute: QuickRoute,
   ReportsRoute: ReportsRoute,

@@ -98,10 +98,8 @@ describe("SHORTCUTS", () => {
       "/history",
       "/learning",
       "/statistics",
-      "/insights",
       "/reports",
       "/backup",
-      "/audit",
       "/settings",
       "/search",
     ];

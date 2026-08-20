@@ -115,7 +115,6 @@ describe("saveStoreKey", () => {
       "settings",
       "theme",
       "onboarded",
-      "audit",
       "snapshots",
       "lastAutoBackupAt",
     ];

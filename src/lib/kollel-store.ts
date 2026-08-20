@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { logAudit } from "./audit-store";
+import { logWarn } from "./diagnostics";
 import { getSettings, getSederTimesFor } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
 import { isLearningDay, hebrewFromGregorian, hebrewMonthName, hebrewYearLetters, formatHebrewMonthYear } from "./hebrew-calendar";
@@ -39,10 +39,6 @@ export type TimerSession = {
   limitMinutes?: number;   // הגבלת זמן אופציונלית — בסיום עוצר ושומר אוטומטית
   tanitDibur?: boolean;    // רק לכולל ערב — סימון תענית דיבור
 };
-
-const LEGACY_ATT = "tracker.attendance.v1";
-const LEGACY_LRN = "tracker.learning.v1";
-const LEGACY_ARCHIVE = "tracker.legacy.archive.v1";
 
 const MIGRATED_FLAG = "kollel.serverStoreMigrated.v1";
 const LIVE_SEDER_KEY = "kollel.seder.v1";
@@ -84,26 +80,6 @@ async function migrateLegacyLocalStorageIfNeeded() {
     // of silently giving up on migrating the user's existing data.
   }
 }
-
-// One-time legacy migration only — the old localStorage keys above are read
-// once (if present) and archived. This does NOT run for the live seder/
-// learning/timer data anymore; that now lives server-side (see below).
-
-// One-time silent legacy archive
-function archiveLegacyOnce() {
-  if (typeof window === "undefined") return;
-  if (localStorage.getItem(LEGACY_ARCHIVE)) return;
-  const att = localStorage.getItem(LEGACY_ATT);
-  const lrn = localStorage.getItem(LEGACY_LRN);
-  if (att || lrn) {
-    localStorage.setItem(LEGACY_ARCHIVE, JSON.stringify({ at: Date.now(), attendance: att, learning: lrn }));
-    localStorage.removeItem(LEGACY_ATT);
-    localStorage.removeItem(LEGACY_LRN);
-  } else {
-    localStorage.setItem(LEGACY_ARCHIVE, "{}");
-  }
-}
-archiveLegacyOnce();
 
 // ============ File-backed store ============
 // The in-memory arrays below are the synchronous source of truth for all UI
@@ -162,9 +138,9 @@ function persistKeys(partial: { seder?: SederEntry[]; learning?: LearningEntry[]
 // Cross-window sync: poll the shared data file so a write made in the
 // *other* EXE/window shows up here without a manual refresh. Gated on the
 // file's mtime (a stat, nothing read or parsed) because the same file also
-// holds the audit log and the in-app snapshots — re-parsing all of that every
+// holds the settings and the in-app snapshots — re-parsing all of that every
 // few seconds in every window would not be free. The shared-state module runs
-// its own poll over the same file for settings/theme/audit/snapshots; both are
+// its own poll over the same file for settings/theme/snapshots; both are
 // mtime-gated, so an idle app does two stat calls every 4s and nothing more.
 if (typeof window !== "undefined") {
   hydrate();
@@ -330,7 +306,7 @@ export function useSeder() {
     upsert(e: SederEntry) {
       const v = validateSeder(e);
       if (!v.ok) {
-        logAudit("data.validation_failed", { recordId: e.id, detail: v.error, newValue: e });
+        logWarn(`רישום סדר נדחה (${e.date}, סדר ${e.seder}): ${v.error}`);
         throw new ValidationError(v.error);
       }
       const prev = sederEntries.find((x) => x.id === e.id);
@@ -338,7 +314,6 @@ export function useSeder() {
       sederEntries = [e, ...sederEntries.filter((x) => x.id !== e.id)]
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
       persistKey("seder", sederEntries);
-      logAudit(prev ? "seder.update" : "seder.create", { recordId: e.id, oldValue: prev, newValue: e });
       maybeAutoBackup({ attendance: sederEntries as unknown, learning: learningEntries as unknown });
       emit();
     },
@@ -348,7 +323,6 @@ export function useSeder() {
       snapshotIfConfigured();
       sederEntries = sederEntries.filter((x) => x.id !== id);
       persistKey("seder", sederEntries);
-      logAudit("seder.delete", { recordId: id, oldValue: prev });
       emit();
     },
     replaceAll(list: SederEntry[]) {
@@ -378,12 +352,11 @@ export function useLearning() {
     add(item: LearningEntry) {
       const v = validateLearning(item);
       if (!v.ok) {
-        logAudit("data.validation_failed", { recordId: item.id, detail: v.error, newValue: item });
+        logWarn(`רישום לימוד נדחה (${item.date}): ${v.error}`);
         throw new ValidationError(v.error);
       }
       learningEntries = [item, ...learningEntries];
       persistKey("learning", learningEntries);
-      logAudit("learning.create", { recordId: item.id, newValue: item });
       maybeAutoBackup({ attendance: sederEntries as unknown, learning: learningEntries as unknown });
       emit();
     },
@@ -392,7 +365,6 @@ export function useLearning() {
       if (!prev) return;
       learningEntries = learningEntries.filter((i) => i.id !== id);
       persistKey("learning", learningEntries);
-      logAudit("learning.delete", { recordId: id, oldValue: prev });
       emit();
     },
     replaceAll(list: LearningEntry[]) {
@@ -431,7 +403,6 @@ export function startTimer(framework: LearningFramework, opts?: { limitMinutes?:
   };
   timerSession = t;
   persistKey("timer", t);
-  logAudit("learning.timer_start", { detail: framework });
   emit();
   return t;
 }
@@ -442,7 +413,6 @@ export function stopTimer(): { framework: LearningFramework; minutes: number; ta
   if (t.limitMinutes && minutes > t.limitMinutes) minutes = t.limitMinutes;
   timerSession = null;
   persistKey("timer", null);
-  logAudit("learning.timer_stop", { detail: `${t.framework} · ${minutes} דק׳` });
   emit();
   return { framework: t.framework, minutes, tanitDibur: t.tanitDibur };
 }
@@ -566,22 +536,14 @@ export function monthClosing(monthKey: string, entries: SederEntry[], lessons: L
   };
 }
 
-/** Groups seder entries by calendar month, preserving the order they arrive in. */
-export function groupEntriesByMonth(list: SederEntry[]): { monthKey: string; items: SederEntry[] }[] {
-  const out: { monthKey: string; items: SederEntry[] }[] = [];
-  const index = new Map<string, SederEntry[]>();
-  for (const e of list) {
-    const key = e.date.slice(0, 7);
-    let bucket = index.get(key);
-    if (!bucket) { bucket = []; index.set(key, bucket); out.push({ monthKey: key, items: bucket }); }
-    bucket.push(e);
-  }
-  return out;
-}
-
-// Attendance score 0–100 for a month
-export function attendanceScore(year: number, monthIdx: number): number {
-  const list = entriesInMonth(sederEntries, year, monthIdx);
+/**
+ * Attendance score 0–100 over an arbitrary set of entries.
+ *
+ * Takes the list rather than reading the store, so a report built over a date
+ * range scores the rows it is actually showing — the month columns used to be
+ * computed from every record on file regardless of the range asked for.
+ */
+export function scoreEntries(list: SederEntry[]): number {
   if (!list.length) return 0;
   // expected total minutes = sum of seder lengths across entries
   let expected = 0, net = 0, bonus = 0, lateCount = 0;
@@ -598,6 +560,11 @@ export function attendanceScore(year: number, monthIdx: number): number {
   score += Math.min(3, bonus / 30);
   score -= Math.min(5, lateCount * 0.5);
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+/** Attendance score 0–100 for one calendar month of the live store. */
+export function attendanceScore(year: number, monthIdx: number): number {
+  return scoreEntries(entriesInMonth(sederEntries, year, monthIdx));
 }
 
 export function currentDayStreak(): number {

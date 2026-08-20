@@ -1,19 +1,33 @@
+// History — one month at a time.
+//
+// It used to render every record ever entered in one table, with a month
+// header and a closing line injected between each month. After a year that is
+// several hundred rows on one screen, and the month you actually wanted was
+// somewhere in the middle of it.
+//
+// Now the screen opens on the current month and nothing else. Moving between
+// months is two arrows and a list; the closing summary belongs to the month on
+// screen, so the numbers always add up to the rows above them.
 import { createFileRoute } from "@tanstack/react-router";
-import { Fragment, useState } from "react";
+import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Search, Trash2, History as HistoryIcon, BookOpen, FileDown, Loader2, Lock, LockOpen } from "lucide-react";
 import {
-  useSeder, useLearning, calcSeder, monthlySummary, monthClosing, groupEntriesByMonth,
-  FRAMEWORK_LABELS, type MonthClosing, type LearningEntry,
+  Search, Trash2, History as HistoryIcon, BookOpen, FileDown, Loader2, Lock,
+  LockOpen, ChevronRight, ChevronLeft, CalendarRange, X,
+} from "lucide-react";
+import {
+  useSeder, useLearning, calcSeder, monthClosing,
+  FRAMEWORK_LABELS, type MonthClosing, type LearningEntry, type SederEntry,
 } from "@/lib/kollel-store";
 import { exportMonthClosingsPdf } from "@/lib/exporters";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
-import { MonthSummaryCard } from "@/components/month-summary";
+import { currentMonthKey, monthKeyLabel, monthsWithData, shiftMonth } from "@/lib/month-nav";
+import { logProblem } from "@/lib/diagnostics";
 import { toastUndo } from "@/lib/undo";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/history")({
-  head: () => ({ meta: [{ title: "היסטוריה — המעקב שלי" }] }),
+  head: () => ({ meta: [{ title: "היסטוריה — סדר פלוס" }] }),
   component: HistoryPage,
 });
 
@@ -24,16 +38,178 @@ function HistoryPage() {
   const { entries, remove, upsert } = useSeder();
   const learning = useLearning();
   const [tab, setTab] = useState<"list" | "learning">("list");
+  const [month, setMonth] = useState(currentMonthKey());
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+
+  const months = useMemo(() => monthsWithData(entries, learning.items), [entries, learning.items]);
+  const monthEntries = useMemo(() => entries.filter((e) => e.date.startsWith(month)), [entries, month]);
+  const monthLessons = useMemo(() => learning.items.filter((l) => l.date.startsWith(month)), [learning.items, month]);
+  const closing = useMemo(() => monthClosing(month, monthEntries, monthLessons), [month, monthEntries, monthLessons]);
+
+  const exportClosings = async (closings: MonthClosing[], busyKey: string) => {
+    setPdfBusy(busyKey);
+    try {
+      // False means the save dialog was cancelled, not that anything failed.
+      if (await exportMonthClosingsPdf({ closings })) toast.success("הסיכום יוצא ל-PDF");
+    } catch (e) {
+      logProblem("ייצוא סיכום חודשי", e);
+      toast.error("הייצוא נכשל");
+    } finally { setPdfBusy(null); }
+  };
+
+  const exportAllMonths = () => {
+    const all = months
+      .filter((key) => entries.some((e) => e.date.startsWith(key)) || learning.items.some((l) => l.date.startsWith(key)))
+      .sort()
+      .map((key) => monthClosing(
+        key,
+        entries.filter((e) => e.date.startsWith(key)),
+        learning.items.filter((l) => l.date.startsWith(key)),
+      ));
+    if (!all.length) { toast.error("אין נתונים לייצוא"); return; }
+    void exportClosings(all, "__all");
+  };
+
+  return (
+    <AppShell
+      title="היסטוריה"
+      subtitle={`${entries.length} רישומי סדר · ${learning.items.length} רישומי לימוד`}
+      actions={
+        <button onClick={exportAllMonths} disabled={pdfBusy !== null}
+          title="ייצוא שורת סיכום לכל החודשים"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent disabled:opacity-50">
+          {pdfBusy === "__all" ? <Loader2 className="size-4 animate-spin" /> : <CalendarRange className="size-4" />}
+          <span className="hidden sm:inline">סיכום כל החודשים</span>
+        </button>
+      }
+    >
+      <MonthPicker value={month} months={months} onChange={setMonth} closing={closing} />
+
+      <div className="mt-4 mb-4 inline-flex rounded-lg border border-border bg-card p-1">
+        <button onClick={() => setTab("list")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <HistoryIcon className="size-3.5" /> נוכחות ({monthEntries.length})
+        </button>
+        <button onClick={() => setTab("learning")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <BookOpen className="size-3.5" /> לימוד נוסף ({monthLessons.length})
+        </button>
+      </div>
+
+      {tab === "learning" ? (
+        <LearningHistory
+          items={monthLessons}
+          onRemove={(item) => {
+            learning.remove(item.id);
+            toastUndo("רישום הלימוד נמחק", () => learning.add(item));
+          }}
+        />
+      ) : (
+        <AttendanceHistory
+          entries={monthEntries}
+          onRemove={(e) => {
+            remove(e.id);
+            toastUndo(`הרישום מ-${e.date} נמחק`, () => upsert(e));
+          }}
+        />
+      )}
+
+      <MonthClosingCard
+        closing={closing}
+        busy={pdfBusy === month}
+        disabled={pdfBusy !== null}
+        onExport={() => exportClosings([closing], month)}
+      />
+    </AppShell>
+  );
+}
+
+/** Arrows for the month either side, and a list for anything further away. */
+function MonthPicker({
+  value, months, onChange, closing,
+}: {
+  value: string;
+  months: string[];
+  onChange: (key: string) => void;
+  closing: MonthClosing;
+}) {
+  const [listOpen, setListOpen] = useState(false);
+  const isCurrent = value === currentMonthKey();
+
+  return (
+    <div className="card-surface p-4">
+      <div className="flex items-center gap-2">
+        {/* Right arrow steps back in time: in an RTL layout, back is to the right. */}
+        <button onClick={() => onChange(shiftMonth(value, -1))} title="החודש הקודם"
+          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent transition">
+          <ChevronRight className="size-4" />
+        </button>
+
+        <button onClick={() => setListOpen((v) => !v)}
+          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 transition">
+          <div className="flex items-center justify-center gap-2">
+            {closing.closed
+              ? <Lock className="size-3.5 text-muted-foreground" />
+              : <LockOpen className="size-3.5 text-primary" />}
+            <span className="text-base font-semibold">{closing.gregorianLabel}</span>
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            {closing.hebrewLabel}
+            {!closing.closed && " · חודש פתוח"}
+          </div>
+        </button>
+
+        <button onClick={() => onChange(shiftMonth(value, 1))} disabled={isCurrent} title="החודש הבא"
+          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent transition disabled:opacity-30">
+          <ChevronLeft className="size-4" />
+        </button>
+      </div>
+
+      {listOpen && (
+        <div className="mt-3 border-t border-border pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-muted-foreground">בחר חודש</span>
+            <button onClick={() => setListOpen(false)} className="text-muted-foreground hover:text-foreground">
+              <X className="size-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-auto">
+            {months.map((key) => (
+              <button key={key}
+                onClick={() => { onChange(key); setListOpen(false); }}
+                className={`rounded-md border px-2.5 py-2 text-xs transition ${
+                  key === value ? "border-primary bg-primary/10 text-primary font-medium" : "border-border hover:bg-accent"
+                }`}>
+                {monthKeyLabel(key)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isCurrent && (
+        <button onClick={() => onChange(currentMonthKey())}
+          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-[11px] text-muted-foreground hover:bg-accent transition">
+          חזור לחודש הנוכחי
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AttendanceHistory({
+  entries, onRemove,
+}: {
+  entries: SederEntry[];
+  onRemove: (e: SederEntry) => void;
+}) {
   const [q, setQ] = useState("");
   const [sederFilter, setSederFilter] = useState<"all" | "1" | "2">("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [excusedFilter, setExcusedFilter] = useState<ExcusedFilter>("all");
-  const [month, setMonth] = useState("");
-  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
 
   const filtered = entries.filter((e) => {
     if (sederFilter !== "all" && String(e.seder) !== sederFilter) return false;
-    if (month && !e.date.startsWith(month)) return false;
     const c = calcSeder(e);
     if (typeFilter === "late" && !c.isLate) return false;
     if (typeFilter === "absent" && !e.absent) return false;
@@ -46,47 +222,10 @@ function HistoryPage() {
     return true;
   });
 
-  const now = new Date();
-  const summary = monthlySummary(now.getFullYear(), now.getMonth());
-
-  // Each month gets closed at its end with a summary row under its rows. The
-  // closing is computed over the *displayed* rows so the numbers always add up
-  // to what's on screen, even with filters active.
-  const monthGroups = groupEntriesByMonth(filtered)
-    .map((g) => ({ ...g, closing: monthClosing(g.monthKey, g.items, learning.items) }));
-
-  const exportClosings = async (closings: MonthClosing[], busyKey: string) => {
-    setPdfBusy(busyKey);
-    try {
-      // False means the save dialog was cancelled, not that anything failed.
-      if (await exportMonthClosingsPdf({ closings })) toast.success("הסיכום יוצא ל-PDF");
-    } catch (e) { toast.error("הייצוא נכשל"); console.error(e); }
-    finally { setPdfBusy(null); }
-  };
+  const filtersOn = q !== "" || sederFilter !== "all" || typeFilter !== "all" || excusedFilter !== "all";
 
   return (
-    <AppShell title="היסטוריה" subtitle={`${entries.length} רישומים סה״כ`}>
-      <div className="mb-4 inline-flex rounded-lg border border-border bg-card p-1">
-        <button onClick={() => setTab("list")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-          <HistoryIcon className="size-3.5" /> נוכחות
-        </button>
-        <button onClick={() => setTab("learning")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-          <BookOpen className="size-3.5" /> לימוד נוסף
-        </button>
-      </div>
-
-      {tab === "learning" ? (
-        <LearningHistory
-          items={learning.items}
-          onRemove={(item) => {
-            learning.remove(item.id);
-            toastUndo("רישום הלימוד נמחק", () => learning.add(item));
-          }}
-        />
-      ) : (
-      <>
+    <>
       <div className="card-surface p-4 mb-4 space-y-3">
         <div className="relative">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -94,7 +233,7 @@ function HistoryPage() {
             placeholder="חיפוש לפי תאריך, הערה, סיבה או תגית..."
             className="w-full rounded-md border border-input bg-card pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
           <select value={sederFilter} onChange={(e) => setSederFilter(e.target.value as "all" | "1" | "2")}
             className="field-input-sm">
             <option value="all">כל הסדרים</option>
@@ -112,36 +251,29 @@ function HistoryPage() {
           </select>
           <select value={excusedFilter} onChange={(e) => setExcusedFilter(e.target.value as ExcusedFilter)}
             className="field-input-sm">
-            <option value="all">הכל</option>
-            <option value="excused">מוצדק</option>
-            <option value="non-excused">לא מוצדק</option>
+            <option value="all">מוצדק ולא מוצדק</option>
+            <option value="excused">מוצדק בלבד</option>
+            <option value="non-excused">לא מוצדק בלבד</option>
           </select>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-            className="field-input-sm" />
         </div>
+        {filtersOn && (
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>{filtered.length} מתוך {entries.length} רישומי החודש</span>
+            <button onClick={() => { setQ(""); setSederFilter("all"); setTypeFilter("all"); setExcusedFilter("all"); }}
+              className="hover:text-foreground">נקה סינון</button>
+          </div>
+        )}
       </div>
 
-      {monthGroups.length > 1 && (
-        <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>{monthGroups.length} חודשים · שורת סיכום בסיום כל חודש</span>
-          <button onClick={() => exportClosings(monthGroups.map((g) => g.closing), "__all")}
-            disabled={pdfBusy !== null}
-            className="inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-1.5 font-medium text-foreground hover:bg-accent disabled:opacity-50">
-            {pdfBusy === "__all" ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />}
-            ייצוא שורות הסיכום ל-PDF
-          </button>
-        </div>
-      )}
-
       <div className="card-surface overflow-x-auto">
-        <table className="w-full text-sm min-w-[800px]">
+        <table className="w-full text-sm min-w-[760px]">
           <thead className="bg-muted/50 text-xs text-muted-foreground">
             <tr>
               <th className="text-right px-3 py-3 font-medium">תאריך</th>
               <th className="text-right px-3 py-3 font-medium">סדר</th>
               <th className="text-right px-3 py-3 font-medium">הגעה</th>
               <th className="text-right px-3 py-3 font-medium">יציאה</th>
-              <th className="text-right px-3 py-3 font-medium">חסר</th>
+              <th className="text-right px-3 py-3 font-medium">חסר נטו</th>
               <th className="text-right px-3 py-3 font-medium">בונוס</th>
               <th className="text-right px-3 py-3 font-medium">מוצדק</th>
               <th className="text-right px-3 py-3 font-medium">סטטוס</th>
@@ -149,80 +281,48 @@ function HistoryPage() {
             </tr>
           </thead>
           <tbody>
-            {monthGroups.map((g) => (
-              <Fragment key={g.monthKey}>
-                <tr className="border-t border-border bg-muted/40">
-                  <td colSpan={9} className="px-3 py-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold">
-                      {g.closing.closed
-                        ? <Lock className="size-3 text-muted-foreground" />
-                        : <LockOpen className="size-3 text-primary" />}
-                      {g.closing.gregorianLabel}
-                      <span className="font-normal text-muted-foreground">· {g.closing.hebrewLabel}</span>
-                      {!g.closing.closed && (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">חודש פתוח</span>
-                      )}
-                    </div>
+            {filtered.map((e) => {
+              const c = calcSeder(e);
+              const tags: string[] = [];
+              if (e.absent) tags.push("היעדרות");
+              if (c.isLate) tags.push("איחור");
+              if (c.isEarlyDeparture) tags.push("יצא מוקדם");
+              if (c.isOhevei) tags.push("אוהבי ה׳");
+              return (
+                <tr key={e.id} className="border-t border-border hover:bg-accent/40">
+                  <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(e.date))}>{e.date}</td>
+                  <td className="px-3 py-3">{e.seder === 1 ? "א׳" : "ב׳"}</td>
+                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.arrival || "—")}</td>
+                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.departure || "—")}</td>
+                  <td className="px-3 py-3 tabular-nums">{c.netMissingMin}</td>
+                  <td className="px-3 py-3 tabular-nums">{c.bonusMin}</td>
+                  <td className="px-3 py-3 tabular-nums">{c.excusedMin}</td>
+                  <td className="px-3 py-3 text-xs text-muted-foreground">{tags.join(", ") || "מלא"}</td>
+                  <td className="px-3 py-3">
+                    <button title="מחק רישום" onClick={() => onRemove(e)}
+                      className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </td>
                 </tr>
-
-                {g.items.map((e) => {
-                  const c = calcSeder(e);
-                  const tags: string[] = [];
-                  if (e.absent) tags.push("היעדרות");
-                  if (c.isLate) tags.push("איחור");
-                  if (c.isEarlyDeparture) tags.push("יצא מוקדם");
-                  if (c.isOhevei) tags.push("אוהבי ה׳");
-                  return (
-                    <tr key={e.id} className="border-t border-border hover:bg-accent/40">
-                      <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(e.date))}>{e.date}</td>
-                      <td className="px-3 py-3">{e.seder === 1 ? "א׳" : "ב׳"}</td>
-                      <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.arrival || "—")}</td>
-                      <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.departure || "—")}</td>
-                      <td className="px-3 py-3 tabular-nums">{c.netMissingMin}</td>
-                      <td className="px-3 py-3 tabular-nums">{c.bonusMin}</td>
-                      <td className="px-3 py-3 tabular-nums">{c.excusedMin}</td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">{tags.join(", ") || "מלא"}</td>
-                      <td className="px-3 py-3">
-                        <button
-                          title="מחק רישום"
-                          onClick={() => {
-                            remove(e.id);
-                            toastUndo(`הרישום מ-${e.date} נמחק`, () => upsert(e));
-                          }}
-                          className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                <MonthClosingRow
-                  closing={g.closing}
-                  busy={pdfBusy === g.monthKey}
-                  disabled={pdfBusy !== null}
-                  onExport={() => exportClosings([g.closing], g.monthKey)}
-                />
-              </Fragment>
-            ))}
+              );
+            })}
           </tbody>
         </table>
-        {!filtered.length && <div className="p-10 text-center text-sm text-muted-foreground">לא נמצאו רישומים</div>}
+        {!filtered.length && (
+          <div className="p-10 text-center text-sm text-muted-foreground">
+            {entries.length === 0 ? "אין רישומי סדר בחודש הזה" : "אין רישומים שתואמים לסינון"}
+          </div>
+        )}
       </div>
-
-      <div className="mt-4">
-        <MonthSummaryCard title="סיכום החודש הנוכחי" summary={summary} />
-      </div>
-      </>
-      )}
-    </AppShell>
+    </>
   );
 }
 
-// Closing line for one month: the seder totals plus the extra-learning minutes
-// logged in it, with a PDF export of this summary alone.
-function MonthClosingRow({ closing, busy, disabled, onExport }: {
+/** The month's closing line: seder totals plus the learning minutes in it. */
+function MonthClosingCard({
+  closing, busy, disabled, onExport,
+}: {
   closing: MonthClosing;
   busy: boolean;
   disabled: boolean;
@@ -232,49 +332,60 @@ function MonthClosingRow({ closing, busy, disabled, onExport }: {
   const erevTitle = learning.kollelErev !== learning.kollelErevRaw
     ? `${learning.kollelErevRaw} דק׳ בפועל · תענית דיבור נספרת כפול`
     : undefined;
+
   return (
-    <tr className="border-t-2 border-primary/40 bg-primary/5">
-      <td colSpan={9} className="px-3 py-3">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <span className="text-xs font-semibold">
-            {closing.closed ? "סיכום חודש" : "סיכום עד כה"} — {closing.gregorianLabel}
-          </span>
-          <ClosingStat label="סה״כ דקות" value={seder.totalMissing} />
-          <ClosingStat label="מוצדקות" value={seder.excused} />
-          <ClosingStat label="אוהבי ה׳" value={seder.oheveiCount} />
-          <ClosingStat label="איחורים" value={seder.lateCount} />
-          <ClosingStat label="חיסורים" value={seder.absenceCount} />
-          <ClosingStat label="כולל ערב" value={learning.kollelErev} title={erevTitle} />
-          <ClosingStat label="תורתו בידו" value={learning.toratoBeyado} />
-          <button onClick={onExport} disabled={disabled}
-            title="ייצוא שורת הסיכום של החודש ל-PDF"
-            className="ms-auto inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50">
-            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />}
-            PDF
-          </button>
+    <div className="mt-4 card-surface border-t-2 border-t-primary/40 p-5">
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div>
+          <h3 className="text-sm font-semibold">
+            {closing.closed ? "סיכום החודש" : "סיכום עד כה"} — {closing.gregorianLabel}
+          </h3>
+          <p className="text-[11px] text-muted-foreground">
+            {closing.hebrewLabel} · {seder.entries} רישומי סדר
+            {!closing.closed && " · החודש טרם הסתיים"}
+          </p>
         </div>
-      </td>
-    </tr>
+        <button onClick={onExport} disabled={disabled}
+          className="inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-2 text-xs font-medium hover:bg-accent disabled:opacity-50">
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />}
+          ייצוא סיכום החודש ל-PDF
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <ClosingStat label="סה״כ דקות" value={seder.totalMissing} />
+        <ClosingStat label="מוצדקות" value={seder.excused} />
+        <ClosingStat label="חסר נטו" value={seder.netMissing} />
+        <ClosingStat label="איחורים" value={seder.lateCount} />
+        <ClosingStat label="חיסורים" value={seder.absenceCount} />
+        <ClosingStat label="אוהבי ה׳" value={seder.oheveiCount} />
+        <ClosingStat label="כולל ערב" value={learning.kollelErev} title={erevTitle} />
+      </div>
+      {learning.toratoBeyado > 0 || learning.beinHazmanim > 0 ? (
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {learning.toratoBeyado > 0 && <ClosingStat label="תורתו בידו" value={learning.toratoBeyado} />}
+          {learning.beinHazmanim > 0 && <ClosingStat label="בין הזמנים" value={learning.beinHazmanim} />}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
 function ClosingStat({ label, value, title }: { label: string; value: number; title?: string }) {
   return (
-    <span className="flex items-baseline gap-1.5 text-xs" title={title}>
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-sm font-bold tabular-nums">{value}</span>
-    </span>
+    <div className="rounded-lg border border-border p-3" title={title}>
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-xl font-bold tabular-nums">{value}</div>
+    </div>
   );
 }
 
 function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove: (item: LearningEntry) => void }) {
   const [q, setQ] = useState("");
   const [framework, setFramework] = useState<string>("all");
-  const [month, setMonth] = useState("");
 
   const filtered = items.filter((i) => {
     if (framework !== "all" && i.framework !== framework) return false;
-    if (month && !i.date.startsWith(month)) return false;
     if (q && !(i.date.includes(q) || (i.note || "").includes(q) || FRAMEWORK_LABELS[i.framework].includes(q))) return false;
     return true;
   });
@@ -290,7 +401,7 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
             placeholder="חיפוש לפי תאריך, מסגרת או הערה..."
             className="w-full rounded-md border border-input bg-card pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
           <select value={framework} onChange={(e) => setFramework(e.target.value)}
             className="field-input-sm">
             <option value="all">כל המסגרות</option>
@@ -298,8 +409,6 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
             <option value="torato-beyado">תורתו בידו</option>
             <option value="bein-hazmanim">ישיבת בין הזמנים</option>
           </select>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-            className="field-input-sm" />
           <div className="rounded-md border border-border px-2 py-1.5 text-center">
             סה״כ: <span className="font-semibold tabular-nums">{totalMin}</span> דק׳ · {filtered.length} רישומים
           </div>
@@ -313,6 +422,7 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
               <th className="text-right px-3 py-3 font-medium">תאריך</th>
               <th className="text-right px-3 py-3 font-medium">מסגרת</th>
               <th className="text-right px-3 py-3 font-medium">דקות</th>
+              <th className="text-right px-3 py-3 font-medium">נחשב</th>
               <th className="text-right px-3 py-3 font-medium">מקור</th>
               <th className="text-right px-3 py-3 font-medium">הערה</th>
               <th className="px-3 py-3 w-12"></th>
@@ -324,6 +434,9 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
                 <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(i.date))}>{i.date}</td>
                 <td className="px-3 py-3">{FRAMEWORK_LABELS[i.framework]}</td>
                 <td className="px-3 py-3 tabular-nums">{i.minutes}</td>
+                <td className="px-3 py-3 tabular-nums">
+                  {i.tanitDibur ? <span className="text-primary">{i.minutes * 2} ×2</span> : i.minutes}
+                </td>
                 <td className="px-3 py-3 text-xs text-muted-foreground">{i.source === "timer" ? "טיימר" : i.source === "range" ? "טווח שעות" : "ידני"}</td>
                 <td className="px-3 py-3 text-xs text-muted-foreground">{i.note || "—"}</td>
                 <td className="px-3 py-3">
@@ -336,7 +449,11 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
             ))}
           </tbody>
         </table>
-        {!filtered.length && <div className="p-10 text-center text-sm text-muted-foreground">לא נמצאו רישומי לימוד</div>}
+        {!filtered.length && (
+          <div className="p-10 text-center text-sm text-muted-foreground">
+            {items.length === 0 ? "אין רישומי לימוד בחודש הזה" : "אין רישומים שתואמים לסינון"}
+          </div>
+        )}
       </div>
     </>
   );
