@@ -7,6 +7,13 @@
 // number into package.json, both tauri.conf.json files and the three
 // Cargo.toml files at release time.
 //
+// The whole mechanism is invisible: there is nothing to configure and nothing
+// to press. Every time the app starts it asks GitHub once whether a newer
+// release exists, and the only time the user hears about it is the one moment
+// it matters — there is a new version, so a dialog asks whether to install it.
+// Everything else (the check itself, a failed check, "you are up to date") is
+// silent by design.
+//
 // "Update" used to mean "open the download page in a browser and good luck".
 // It now downloads the installer and runs it (Rust: install_update, see
 // src-tauri/core/src/updater.rs); the installer closes the app, replaces it and
@@ -16,18 +23,12 @@ import { APP_VERSION } from "@/components/app-shell";
 import { invoke, isDesktop } from "./tauri";
 import { logProblem } from "./diagnostics";
 
-const REPO_KEY = "tracker.updater.repo.v1";
-const SKIP_KEY = "tracker.updater.skipVersion.v1";
-const LAST_CHECK_KEY = "tracker.updater.lastCheck.v1";
-
 /**
- * The app's own repository, so update checks work out of the box.
- *
- * Clearing the field in Settings stores an empty string, which is an explicit
- * "off" and stops every network request — that is the only state in which the
- * app talks to nothing at all.
+ * The app's own repository. Fixed on purpose: an update source is not a
+ * preference, and a settings field for it only invited someone to break
+ * updates by clearing it.
  */
-export const DEFAULT_REPO = "Yehuda-Zakesh/sedorim";
+export const UPDATE_REPO = "Yehuda-Zakesh/sedorim";
 
 export type GithubRelease = {
   tag_name: string;
@@ -49,30 +50,6 @@ export type UpdateInfo = {
   /** Whether that URL is something install() can actually run. */
   canInstall: boolean;
 };
-
-export function getUpdateRepo(): string {
-  if (typeof window === "undefined") return "";
-  // A stored empty string is an explicit "off" and must not fall back to the
-  // default, so only an entirely unset key uses DEFAULT_REPO.
-  const stored = localStorage.getItem(REPO_KEY);
-  return stored === null ? DEFAULT_REPO : stored;
-}
-export function setUpdateRepo(repo: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(REPO_KEY, repo.trim());
-}
-export function getSkippedVersion(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem(SKIP_KEY) || "";
-}
-export function skipVersion(v: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SKIP_KEY, v);
-}
-export function clearSkip() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(SKIP_KEY);
-}
 
 function normalize(v: string): number[] {
   return v.replace(/^v/i, "").split(/[.\-+]/).map((p) => {
@@ -98,16 +75,11 @@ export function pickInstaller(release: GithubRelease): string | null {
   return setup ? setup.browser_download_url : null;
 }
 
-export async function checkForUpdate(repoOverride?: string): Promise<UpdateInfo | null> {
-  const repo = (repoOverride ?? getUpdateRepo()).trim();
-  if (!repo || !repo.includes("/")) return null;
-  const url = `https://api.github.com/repos/${repo}/releases/latest`;
+export async function checkForUpdate(): Promise<UpdateInfo> {
+  const url = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
   const res = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
   if (!res.ok) throw new Error(`GitHub API ${res.status}`);
   const release = (await res.json()) as GithubRelease;
-  if (typeof window !== "undefined") {
-    localStorage.setItem(LAST_CHECK_KEY, new Date().toISOString());
-  }
   const installer = pickInstaller(release);
   return {
     current: APP_VERSION,
@@ -135,30 +107,43 @@ export async function installUpdate(url: string): Promise<void> {
   }
 }
 
-export function getLastCheck(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem(LAST_CHECK_KEY) || "";
+// Once per launch means once per window, not once per screen: AppShell mounts
+// again on every navigation, so what decides whether to check has to outlive
+// the component. These two live as long as the window does, which is exactly
+// what "every time the program opens" means — closing it and opening it again
+// is what asks GitHub again.
+let launchCheck: Promise<UpdateInfo | null> | null = null;
+let dismissedThisLaunch = false;
+
+function checkOncePerLaunch(): Promise<UpdateInfo | null> {
+  // Being offline is not worth a message, so a failed check simply produces
+  // nothing — and is not retried until the next launch.
+  launchCheck ??= checkForUpdate().catch(() => null);
+  return launchCheck;
 }
 
-/** Background auto-check hook — runs once per day, prompts via state. */
+/**
+ * The silent check on startup. Says nothing when there is nothing to say, and
+ * returns an update only so the caller can put the one question worth asking
+ * on screen. Dismissing it is final for this run of the app.
+ */
 export function useAutoUpdateCheck() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
-    const repo = getUpdateRepo();
-    if (!repo) return;
-    const last = getLastCheck();
-    if (last) {
-      const age = Date.now() - new Date(last).getTime();
-      if (age < 12 * 60 * 60 * 1000) return; // check at most twice a day
-    }
+    if (dismissedThisLaunch) return;
+    let alive = true;
+    // A few seconds of grace, so the check never competes with the first paint.
     const t = setTimeout(() => {
-      checkForUpdate().then((info) => {
-        if (info?.isNewer && info.latest !== getSkippedVersion()) setUpdate(info);
-      }).catch(() => {/* offline is not worth a message */});
+      void checkOncePerLaunch().then((info) => {
+        if (alive && !dismissedThisLaunch && info?.isNewer) setUpdate(info);
+      });
     }, 3000);
-    return () => clearTimeout(t);
+    return () => { alive = false; clearTimeout(t); };
   }, []);
 
-  return { update, dismiss: () => setUpdate(null) };
+  return {
+    update,
+    dismiss: () => { dismissedThisLaunch = true; setUpdate(null); },
+  };
 }

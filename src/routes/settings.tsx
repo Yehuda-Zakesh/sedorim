@@ -6,17 +6,21 @@
 // was under "התראות", and two whole sections — "שפה ואזור" and "פרטיות" —
 // contained nothing but switches that changed nothing at all.
 //
-// Seven sections now, each one a thing a person wants to change, with every
+// Six sections now, each one a thing a person wants to change, with every
 // setting that feeds one decision sitting together. The audit log is gone; in
 // its place is the problem log — one file on disk, shown here (see
 // src/lib/diagnostics.ts).
+//
+// Version updates are deliberately absent from this screen: the check runs
+// silently in the background and the only thing anyone ever sees is the dialog
+// asking whether to install a new version (see src/lib/updater.ts).
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   ChevronDown, ChevronLeft, User, Bell, Palette, Database, Search,
   RotateCcw, LayoutDashboard, Contrast, Target, Clock, DatabaseBackup,
-  RefreshCw, BellRing, Loader2, Download, FileWarning, FolderOpen, Trash2,
+  RefreshCw, BellRing, Loader2, FileWarning, FolderOpen, Trash2,
 } from "lucide-react";
 import {
   useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type ColorTheme, type BgTheme, updateSettings,
@@ -25,11 +29,7 @@ import {
 } from "@/lib/settings-store";
 import { COLOR_THEMES, BG_THEMES } from "@/lib/theme-colors";
 import { announce } from "@/lib/notifications";
-import {
-  getUpdateRepo, setUpdateRepo, checkForUpdate, getLastCheck, clearSkip, installUpdate, type UpdateInfo,
-} from "@/lib/updater";
 import { readLog, openLogFolder, clearLog } from "@/lib/diagnostics";
-import { openExternal } from "@/lib/open-external";
 import { isDesktop } from "@/lib/tauri";
 import { Field, NumberField, SelectField, StackedField, TimeField, Toggle } from "@/components/ui/form";
 import { IconBadge } from "@/components/ui/stat";
@@ -48,7 +48,6 @@ const SECTIONS = [
   { id: "appearance", label: "מראה ועיצוב", icon: Palette, hint: "צבעים, רקע, גודל גופן" },
   { id: "dashboard", label: "לוח הבקרה", icon: LayoutDashboard, hint: "אילו חלקים להציג במסך הראשי" },
   { id: "data", label: "נתונים וגיבוי", icon: Database, hint: "גיבוי אוטומטי ומספר הגיבויים לשמור" },
-  { id: "updates", label: "עדכוני גרסה", icon: RefreshCw, hint: "בדיקה והתקנה של גרסה חדשה" },
   { id: "log", label: "יומן תקלות", icon: FileWarning, hint: "מה נכשל, אם משהו נכשל" },
 ] as const;
 
@@ -193,7 +192,6 @@ function SettingsPage() {
                     </>
                   )}
 
-                  {s.id === "updates" && <UpdateSettings />}
                   {s.id === "log" && <ProblemLog />}
                 </div>
               )}
@@ -243,83 +241,6 @@ function NotificationTester() {
         שלח התראת בדיקה
       </button>
     </div>
-  );
-}
-
-function UpdateSettings() {
-  const [repo, setRepo] = useState(getUpdateRepo());
-  const [busy, setBusy] = useState(false);
-  const [installing, setInstalling] = useState(false);
-  const [found, setFound] = useState<UpdateInfo | null>(null);
-  const lastCheck = getLastCheck();
-
-  const check = async () => {
-    setBusy(true);
-    setFound(null);
-    try {
-      const info = await checkForUpdate(repo);
-      if (!info) { toast.error("הזן מאגר בתבנית owner/repo"); return; }
-      setFound(info);
-      if (info.isNewer) { clearSkip(); toast.success(`נמצאה גרסה חדשה: ${info.latest}`); }
-      else toast.success("הגרסה שלך עדכנית");
-    } catch {
-      toast.error("הבדיקה נכשלה — אין חיבור לאינטרנט או שהמאגר לא נמצא");
-    } finally { setBusy(false); }
-  };
-
-  const install = async () => {
-    if (!found?.downloadUrl) return;
-    setInstalling(true);
-    try {
-      await installUpdate(found.downloadUrl);
-      toast.success("העדכון מותקן — התוכנה תיסגר ותיפתח מחדש");
-    } catch (err) {
-      setInstalling(false);
-      toast.error(err instanceof Error ? err.message : "ההתקנה נכשלה");
-    }
-  };
-
-  return (
-    <>
-      <Field label="מאגר GitHub לעדכונים" value={repo} onChange={setRepo}
-        placeholder="owner/repo — השאר ריק כדי לכבות" />
-      <p className="text-[11px] text-muted-foreground">
-        התוכנה בודקת פעמיים ביום אם פורסמה גרסה חדשה, ויכולה להתקין אותה בעצמה.
-        כשהשדה ריק — לא מתבצעת שום פנייה לאינטרנט.
-        {lastCheck && ` בדיקה אחרונה: ${new Date(lastCheck).toLocaleString("he-IL")}.`}
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => { setUpdateRepo(repo); toast.success(repo.trim() ? "המאגר נשמר" : "בדיקת עדכונים כובתה"); }}
-          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
-          שמור
-        </button>
-        <button onClick={check} disabled={busy || !repo.trim()}
-          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50">
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          בדוק עכשיו
-        </button>
-      </div>
-      {found?.isNewer && found.downloadUrl && (
-        <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-wrap items-center gap-3">
-          <div className="flex-1 min-w-[12rem] text-xs">
-            <b>גרסה {found.latest}</b> זמינה (מותקנת: {found.current}).
-          </div>
-          {found.canInstall ? (
-            <button onClick={install} disabled={installing}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
-              {installing ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-              {installing ? "מתקין..." : "התקן עכשיו"}
-            </button>
-          ) : (
-            <button onClick={() => openExternal(found.downloadUrl!)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
-              <Download className="size-3.5" /> פתח דף ההורדה
-            </button>
-          )}
-        </div>
-      )}
-    </>
   );
 }
 

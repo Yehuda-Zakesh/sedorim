@@ -15,7 +15,7 @@
 // lateness, and a seder missed. The bar at the bottom covers the two learning
 // frameworks and shows the month's figures, so the numbers are here too.
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Zap, Clock, LayoutDashboard, Check, FileText, UserX, Moon, BookOpen,
   BarChart3, X, Pencil, CalendarClock,
@@ -59,6 +59,7 @@ function yesterdayISO() {
 const sederLabel = (s: SederNum) => (s === 1 ? "סדר א׳" : "סדר ב׳");
 
 function QuickApp() {
+  const shell = useFitToWindow();
   useEffect(() => { applyAppearance(); }, []);
   useSettings(); // re-render when the hours change in the other window
   useReminderNotifications();
@@ -195,7 +196,8 @@ function QuickApp() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-background text-foreground flex flex-col">
+    <div ref={shell} className="bg-background">
+    <div dir="rtl" className="h-full bg-background text-foreground flex flex-col">
       <header className="border-b border-border bg-card">
         <div className="mx-auto max-w-md px-5 py-4 flex items-center gap-3">
           <div className="size-10 rounded-xl bg-primary grid place-items-center text-primary-foreground shadow-md">
@@ -218,7 +220,10 @@ function QuickApp() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto mx-auto w-full max-w-md px-5 py-6 space-y-4">
+      {/* overflow-hidden, not auto: useFitToWindow scales the screen down to
+          the window, so a scrollbar here could only ever be a rounding
+          artefact — and it would be the one thing this window must not have. */}
+      <main className="flex-1 overflow-hidden mx-auto w-full max-w-md px-5 py-6 space-y-4">
         {/* Today or yesterday. Anything older is a job for the attendance
             screen, which can reach any date at all. */}
         <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-card p-1">
@@ -389,7 +394,63 @@ function QuickApp() {
       <MonthStatsDialog open={dialog === "stats"} onClose={() => setDialog(null)} />
 
     </div>
+    </div>
   );
+}
+
+/**
+ * Everything at once, never a scrollbar — without touching the design.
+ *
+ * The whole screen is scaled down by however much it takes to fit the window,
+ * and only when it doesn't fit. Nothing is dropped, resized or rearranged; a
+ * short day stays at 100%.
+ *
+ * `100vh` inside a zoomed element still means the unzoomed window, so the
+ * shell's height is set in pixels rather than in vh.
+ *
+ * Written straight to the DOM, on every render, rather than through state: a
+ * layout that changes what it measures is exactly the shape that turns a
+ * ResizeObserver — or a setState — into a loop.
+ */
+function useFitToWindow() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const fit = () => {
+      const main = el.querySelector("main");
+      if (!main) return;
+
+      // Ask the layout, don't predict it: set a zoom, then read whether main
+      // is actually clipping anything, and step down until it isn't. A
+      // predicted height was wrong in both directions — the flex/overflow
+      // combination does not report an honest natural height, and a webfont
+      // arriving a moment later invalidates whatever was measured before it.
+      let zoom = 1;
+      const apply = () => {
+        el.style.zoom = String(zoom);
+        el.style.height = `${window.innerHeight / zoom}px`;
+      };
+      apply();
+      // The floor is well below what the smallest allowed window
+      // (min_inner_size in src-tauri/core/src/lib.rs) ever needs.
+      while (zoom > 0.5 && main.scrollHeight > main.clientHeight) {
+        zoom -= 0.01;
+        apply();
+      }
+    };
+
+    fit();
+    window.addEventListener("resize", fit);
+    // Hebrew text reflows when the real font replaces the fallback, which is
+    // after the first fit has already run and settled.
+    document.fonts?.ready.then(fit).catch(() => {});
+    return () => window.removeEventListener("resize", fit);
+  });
+
+  return ref;
 }
 
 function BarButton({ icon: Icon, label, onClick }: { icon: typeof Moon; label: string; onClick: () => void }) {

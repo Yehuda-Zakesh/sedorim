@@ -14,7 +14,7 @@ mod updater;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use serde_json::{Map, Value};
-use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
@@ -214,11 +214,30 @@ fn navigation_guard(app: &AppHandle) -> impl Fn(&Url) -> bool + Send + 'static {
     }
 }
 
+/// The sizes below are what the layouts want; the screen has the last word.
+///
+/// Window sizes are logical pixels, so the same 1920x1080 panel at 150%
+/// scaling is a 1280x720 desktop with only 1280x672 left over once the taskbar
+/// takes its share. An 820- or 760-pixel-tall window there hangs off the
+/// bottom of the screen, and its last row — in the quick window, the learning
+/// bar — cannot be reached at all.
+///
+/// prevent_overflow_with_margin caps the window at the work area, and does it
+/// on the whole window rather than on the webview inside it, so the title bar
+/// is counted too. The margin then leaves it looking like it sits on the
+/// desktop instead of wedged against the taskbar. center() places what comes
+/// out of that inside the work area, not the raw monitor.
+const WINDOW_MARGIN: LogicalSize<f64> = LogicalSize {
+    width: 16.0,
+    height: 16.0,
+};
+
 fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
     WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, WebviewUrl::App("index.html".into()))
         .title("סדר פלוס")
         .inner_size(1280.0, 820.0)
         .min_inner_size(900.0, 600.0)
+        .prevent_overflow_with_margin(WINDOW_MARGIN)
         .center()
         .resizable(true)
         .on_navigation(navigation_guard(app))
@@ -237,6 +256,7 @@ fn build_quick_window(app: &AppHandle) -> tauri::Result<()> {
     .title("כניסה מהירה — סדר פלוס")
     .inner_size(480.0, 760.0)
     .min_inner_size(380.0, 560.0)
+    .prevent_overflow_with_margin(WINDOW_MARGIN)
     .center()
     .resizable(true)
     .on_navigation(navigation_guard(app))

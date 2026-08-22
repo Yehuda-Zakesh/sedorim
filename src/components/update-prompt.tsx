@@ -1,9 +1,12 @@
+// The only visible part of the updater: one question, asked once a new version
+// exists. There is no "check for updates" button anywhere in the app and no
+// setting behind this — see src/lib/updater.ts.
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, ExternalLink, Loader2, Sparkles } from "lucide-react";
+import { Download, Loader2, Sparkles } from "lucide-react";
 import type { UpdateInfo } from "@/lib/updater";
-import { installUpdate, skipVersion } from "@/lib/updater";
+import { installUpdate } from "@/lib/updater";
 import { openExternal } from "@/lib/open-external";
 import { toast } from "sonner";
 
@@ -48,7 +51,7 @@ export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () 
           )}
           <p className="text-xs text-muted-foreground">
             {info.canInstall
-              ? "ההתקנה מתבצעת מתוך התוכנה: הקובץ יורד, התוכנה נסגרת ונפתחת מחדש בגרסה החדשה."
+              ? "לעדכן עכשיו? הקובץ יורד, התוכנה נסגרת ונפתחת מחדש בגרסה החדשה. אפשר גם לעדכן בפעם הבאה."
               : "לא נמצא קובץ התקנה בגרסה הזו — אפשר לפתוח את דף ההורדה בדפדפן."}
           </p>
         </div>
@@ -69,14 +72,6 @@ export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () 
               </Button>
             )
           )}
-          <Button variant="outline" disabled={installing} onClick={() => openExternal(info.release.html_url)}>
-            <ExternalLink className="size-4" />
-            פרטים
-          </Button>
-          <Button variant="ghost" disabled={installing}
-            onClick={() => { skipVersion(info.latest); onClose(); }}>
-            דלג על גרסה זו
-          </Button>
           <Button variant="ghost" disabled={installing} onClick={onClose}>מאוחר יותר</Button>
         </DialogFooter>
       </DialogContent>

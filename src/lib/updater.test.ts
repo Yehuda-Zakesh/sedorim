@@ -1,45 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
 // APP_VERSION lives in a .tsx component module; stubbed so this test does not
 // drag the whole app shell (and React) in behind it.
 vi.mock("@/components/app-shell", () => ({ APP_VERSION: "1.0.3" }));
 
-import {
-  isVersionNewer,
-  DEFAULT_REPO,
-  getUpdateRepo,
-  setUpdateRepo,
-  getSkippedVersion,
-  skipVersion,
-  clearSkip,
-  checkForUpdate,
-  getLastCheck,
-  type GithubRelease,
-} from "./updater";
-
-class MemoryStorage {
-  private map = new Map<string, string>();
-  get length() {
-    return this.map.size;
-  }
-  getItem(key: string) {
-    return this.map.has(key) ? this.map.get(key)! : null;
-  }
-  setItem(key: string, value: string) {
-    this.map.set(key, String(value));
-  }
-  removeItem(key: string) {
-    this.map.delete(key);
-  }
-  clear() {
-    this.map.clear();
-  }
-  key(i: number) {
-    return [...this.map.keys()][i] ?? null;
-  }
-}
-
-let storage: MemoryStorage;
+import { isVersionNewer, UPDATE_REPO, checkForUpdate, type GithubRelease } from "./updater";
 
 function release(over: Partial<GithubRelease> = {}): GithubRelease {
   return {
@@ -68,16 +33,10 @@ function mockFetch(body: unknown, init: { ok?: boolean; status?: number } = {}) 
   return fn;
 }
 
-beforeEach(() => {
-  storage = new MemoryStorage();
-  vi.stubGlobal("localStorage", storage);
-  // The module's getters short-circuit to "" without a window.
-  vi.stubGlobal("window", {} as Window & typeof globalThis);
-});
-
+// Nothing here is stored any more: the check happens once per launch and keeps
+// that fact in memory, so fetch is the only global these tests touch.
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.useRealTimers();
 });
 
 // ============================================================================
@@ -144,67 +103,14 @@ describe("isVersionNewer", () => {
 });
 
 // ============================================================================
-// Stored preferences
+// The update source
 // ============================================================================
 
-describe("getUpdateRepo / setUpdateRepo", () => {
-  it("defaults to the app's own repository, so update checks work out of the box", () => {
-    expect(getUpdateRepo()).toBe(DEFAULT_REPO);
-    expect(DEFAULT_REPO).toContain("/");
-  });
-
-  it("treats a stored empty string as an explicit off, not as unset", () => {
-    setUpdateRepo("");
-    expect(getUpdateRepo()).toBe("");
-  });
-
-  it("returns a stored repo", () => {
-    setUpdateRepo("acme/sedorim");
-    expect(getUpdateRepo()).toBe("acme/sedorim");
-  });
-
-  it("trims what it stores", () => {
-    setUpdateRepo("  acme/sedorim \n");
-    expect(getUpdateRepo()).toBe("acme/sedorim");
-  });
-
-  it("treats a stored empty string as an explicit off", () => {
-    setUpdateRepo("acme/sedorim");
-    setUpdateRepo("");
-    expect(getUpdateRepo()).toBe("");
-  });
-
-  it("keeps the setting across a fresh read", () => {
-    setUpdateRepo("acme/sedorim");
-    expect(getUpdateRepo()).toBe(getUpdateRepo());
-  });
-});
-
-describe("skipVersion / getSkippedVersion / clearSkip", () => {
-  it("starts with nothing skipped", () => {
-    expect(getSkippedVersion()).toBe("");
-  });
-
-  it("remembers a skipped version", () => {
-    skipVersion("v1.1.0");
-    expect(getSkippedVersion()).toBe("v1.1.0");
-  });
-
-  it("replaces the previous one", () => {
-    skipVersion("v1.1.0");
-    skipVersion("v1.2.0");
-    expect(getSkippedVersion()).toBe("v1.2.0");
-  });
-
-  it("clears back to nothing", () => {
-    skipVersion("v1.1.0");
-    clearSkip();
-    expect(getSkippedVersion()).toBe("");
-  });
-
-  it("is safe to clear when nothing was skipped", () => {
-    expect(() => clearSkip()).not.toThrow();
-    expect(getSkippedVersion()).toBe("");
+// There is no setting for this any more: the repository is fixed, so updates
+// cannot be switched off, cleared or mistyped from the UI.
+describe("UPDATE_REPO", () => {
+  it("is a fixed owner/name pair", () => {
+    expect(UPDATE_REPO).toMatch(/^[^/\s]+\/[^/\s]+$/);
   });
 });
 
@@ -213,82 +119,37 @@ describe("skipVersion / getSkippedVersion / clearSkip", () => {
 // ============================================================================
 
 describe("checkForUpdate", () => {
-  it("makes no request and returns null once the repo is cleared", async () => {
-    setUpdateRepo("");
+  it("queries the latest-release endpoint of the app's own repository", async () => {
     const fetchMock = mockFetch(release());
-    expect(await checkForUpdate()).toBe(null);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("returns null for a repo that is not owner/name", async () => {
-    const fetchMock = mockFetch(release());
-    expect(await checkForUpdate("just-a-name")).toBe(null);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("queries the latest-release endpoint for the configured repo", async () => {
-    const fetchMock = mockFetch(release());
-    setUpdateRepo("acme/sedorim");
     await checkForUpdate();
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.github.com/repos/acme/sedorim/releases/latest",
+      `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`,
       { headers: { Accept: "application/vnd.github+json" } },
-    );
-  });
-
-  it("lets an explicit repo override the stored one", async () => {
-    const fetchMock = mockFetch(release());
-    setUpdateRepo("acme/stored");
-    await checkForUpdate("other/explicit");
-    expect(String(fetchMock.mock.calls[0][0])).toContain("other/explicit");
-  });
-
-  it("trims the repo it was handed", async () => {
-    const fetchMock = mockFetch(release());
-    await checkForUpdate("  acme/sedorim  ");
-    expect(String(fetchMock.mock.calls[0][0])).toBe(
-      "https://api.github.com/repos/acme/sedorim/releases/latest",
     );
   });
 
   it("reports a newer release against the app's own version", async () => {
     mockFetch(release({ tag_name: "v1.1.0" }));
-    const info = await checkForUpdate("acme/sedorim");
-    expect(info).not.toBe(null);
-    expect(info!.current).toBe("1.0.3");
-    expect(info!.latest).toBe("v1.1.0");
-    expect(info!.isNewer).toBe(true);
+    const info = await checkForUpdate();
+    expect(info.current).toBe("1.0.3");
+    expect(info.latest).toBe("v1.1.0");
+    expect(info.isNewer).toBe(true);
   });
 
   it("reports the current release as not newer", async () => {
     mockFetch(release({ tag_name: "v1.0.3" }));
-    expect((await checkForUpdate("acme/sedorim"))!.isNewer).toBe(false);
+    expect((await checkForUpdate()).isNewer).toBe(false);
   });
 
   it("hands back the release itself", async () => {
     const body = release({ body: "תיקוני באגים" });
     mockFetch(body);
-    expect((await checkForUpdate("acme/sedorim"))!.release).toEqual(body);
+    expect((await checkForUpdate()).release).toEqual(body);
   });
 
   it("throws with the status when GitHub refuses", async () => {
     mockFetch({}, { ok: false, status: 403 });
-    await expect(checkForUpdate("acme/sedorim")).rejects.toThrow("GitHub API 403");
-  });
-
-  it("records when it last checked", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 6, 8, 12, 0));
-    mockFetch(release());
-    expect(getLastCheck()).toBe("");
-    await checkForUpdate("acme/sedorim");
-    expect(getLastCheck()).toBe(new Date().toISOString());
-  });
-
-  it("does not record a check that failed", async () => {
-    mockFetch({}, { ok: false, status: 500 });
-    await expect(checkForUpdate("acme/sedorim")).rejects.toThrow();
-    expect(getLastCheck()).toBe("");
+    await expect(checkForUpdate()).rejects.toThrow("GitHub API 403");
   });
 
   describe("picking a download", () => {
@@ -302,7 +163,7 @@ describe("checkForUpdate", () => {
           ],
         }),
       );
-      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe("https://x/SederPlus.exe");
+      expect((await checkForUpdate()).downloadUrl).toBe("https://x/SederPlus.exe");
     });
 
     // Anything that is not an installer is not worth downloading, so a
@@ -316,7 +177,7 @@ describe("checkForUpdate", () => {
         ],
       });
       mockFetch(body);
-      const info = (await checkForUpdate("acme/sedorim"))!;
+      const info = await checkForUpdate();
       expect(info.downloadUrl).toBe(body.html_url);
       expect(info.canInstall).toBe(false);
     });
@@ -330,13 +191,13 @@ describe("checkForUpdate", () => {
           ],
         }),
       );
-      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe("https://x/setup.exe");
+      expect((await checkForUpdate()).downloadUrl).toBe("https://x/setup.exe");
     });
 
     it("falls back to the release page when there are no assets", async () => {
       const body = release({ assets: [] });
       mockFetch(body);
-      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe(body.html_url);
+      expect((await checkForUpdate()).downloadUrl).toBe(body.html_url);
     });
 
     it("matches the extension case-insensitively", async () => {
@@ -345,7 +206,7 @@ describe("checkForUpdate", () => {
           assets: [{ name: "SederPlus.EXE", browser_download_url: "https://x/up.EXE", size: 2 }],
         }),
       );
-      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe("https://x/up.EXE");
+      expect((await checkForUpdate()).downloadUrl).toBe("https://x/up.EXE");
     });
 
     it("is not fooled by .exe inside the middle of a name", async () => {
@@ -356,7 +217,7 @@ describe("checkForUpdate", () => {
         ],
       });
       mockFetch(body);
-      expect((await checkForUpdate("acme/sedorim"))!.downloadUrl).toBe(body.html_url);
+      expect((await checkForUpdate()).downloadUrl).toBe(body.html_url);
     });
   });
 });
