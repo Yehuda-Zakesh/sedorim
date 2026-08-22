@@ -1,180 +1,167 @@
 # סדר פלוס — Seder Plus
 
-Kollel attendance and learning tracker. Two Windows programs, one codebase:
+מעקב נוכחות ולימוד לכולל. שתי תוכנות ל‑Windows, בסיס קוד אחד:
 
-| EXE                  | What it is                                     |
-| -------------------- | ---------------------------------------------- |
-| `SederPlus.exe`      | The full app                                   |
-| `SederPlusQuick.exe` | The small always-handy arrival window          |
+| קובץ EXE             | מה זה                              |
+| -------------------- | ---------------------------------- |
+| `SederPlus.exe`      | האפליקציה המלאה                    |
+| `SederPlusQuick.exe` | חלון ההגעה הקטן שתמיד בהישג יד     |
 
-Each is a **single self-contained file** of roughly 10MB. The UI renders
-through the WebView2 runtime that comes with Windows 11 (and is present on
-essentially every Windows 10 install).
+כל אחד מהם הוא **קובץ בודד עצמאי** במשקל כ‑10MB. הממשק מוצג דרך רכיב WebView2
+שמגיע עם Windows 11 (וקיים כמעט בכל התקנה של Windows 10).
 
-Both can be open at the same time. They share one data file and pick up each
-other's entries within a few seconds.
+אפשר להחזיק את שניהם פתוחים במקביל. הם חולקים קובץ נתונים אחד וקולטים את
+הרישומים אחד של השני תוך שניות ספורות.
 
-## Versions
+## גרסאות
 
-Versions are whole numbers. This is **גרסה 1**; the next release is 2. The
-manifests carry a semver string because npm, Tauri and Cargo all insist on one,
-but only the major part means anything — `scripts/set-version.mjs` stamps the
-number into all six of them, and the app displays the major alone.
+הגרסאות הן מספרים שלמים. זו **גרסה 1**, והשחרור הבא הוא 2. קבצי המניפסט מחזיקים
+מחרוזת semver מפני ש‑npm, Tauri ו‑Cargo כולם דורשים אחת, אבל רק החלק הראשי
+משמעותי — `scripts/set-version.mjs` חורט את המספר לתוך כל ששת המקומות,
+והאפליקציה מציגה רק את המספר הראשי.
 
-Nothing in the repository has to be edited to cut a release: pushing to `main`
-runs `.github/workflows/release.yml`, which takes the highest existing `vN` tag,
-publishes `N+1`, and attaches the installer and both EXEs. No version bump is
-ever committed, so a release cannot trigger another release.
+אין צורך לערוך שום דבר במאגר כדי לשחרר גרסה: דחיפה ל‑`main` מריצה את
+`.github/workflows/release.yml`, שלוקח את תגית ה‑`vN` הגבוהה ביותר הקיימת,
+מפרסם את `N+1`, ומצרף את המתקין ואת שני קבצי ה‑EXE. שום עדכון גרסה לא נכנס
+לקומיט, ולכן שחרור לא יכול לגרור שחרור נוסף.
 
-## How it fits together
+## איך הכל מתחבר
 
 ```
-src/          React app — 14 routes, entirely client-side
-public/fonts/ Heebo, shipped with the app: the UI and the PDFs use the same file
-index.html    the SPA shell; routing lives in the URL hash
-installer/    the Inno Setup script for SederPlusSetup.exe
+src/          אפליקציית React — 14 מסלולים, כולה בצד הלקוח
+public/fonts/ הגופן Heebo, נשלח עם האפליקציה: הממשק וקובצי ה‑PDF משתמשים באותו קובץ
+index.html    מעטפת ה‑SPA; הניתוב חי ב‑hash של הכתובת
+installer/    סקריפט Inno Setup עבור SederPlusSetup.exe
 src-tauri/
-  core/       the shared Rust shell: window setup, the data store, the log, updates
-  full/       SederPlus.exe        — ~10 lines + its own icon and config
-  quick/      SederPlusQuick.exe   — ~10 lines + its own icon and config
+  core/       מעטפת ה‑Rust המשותפת: הקמת חלונות, מאגר הנתונים, היומן, העדכונים
+  full/       SederPlus.exe        — כ‑10 שורות, עם אייקון וקונפיגורציה משלו
+  quick/      SederPlusQuick.exe   — כ‑10 שורות, עם אייקון וקונפיגורציה משלו
 ```
 
-The frontend is compiled to static files and embedded straight into each EXE.
-It reaches the outside world through the Rust commands in
-`src-tauri/core/src/lib.rs`: read/watch/write the store, save a generated file,
-open the full app from the quick window, open a link in the browser, raise a
-Windows notification, append to and read the log, and install an update.
+צד הלקוח נבנה לקבצים סטטיים ומוטמע היישר לתוך כל EXE. הוא מגיע אל העולם החיצון
+דרך פקודות ה‑Rust שב‑`src-tauri/core/src/lib.rs`: קריאה, מעקב וכתיבה למאגר,
+שמירת קובץ שנוצר, פתיחת האפליקציה המלאה מתוך החלון המהיר, פתיחת קישור בדפדפן,
+הצגת התראת Windows, כתיבה וקריאה של היומן, והתקנת עדכון.
 
-## The quick window
+## החלון המהיר
 
-One field: the time you arrived. Everything else is worked out —
+שדה אחד: שעת ההגעה. כל השאר מחושב —
 
-- which seder it belongs to (`detectSeder` in `src/lib/quick-entry.ts`),
-- whether אוהבי ה׳ is even possible (arrival at or before the start),
-- the departure, which is recorded as the end of the seder. The window has no
-  departure field on purpose; anyone who left early corrects it on the
-  attendance screen.
+- לאיזה סדר זה שייך (`detectSeder` ב‑`src/lib/quick-entry.ts`),
+- האם אוהבי ה׳ בכלל אפשרי (הגעה בזמן תחילת הסדר או לפניו),
+- שעת היציאה, שנרשמת כסוף הסדר. בחלון אין שדה יציאה בכוונה; מי שיצא מוקדם
+  מתקן זאת במסך הנוכחות.
 
-Beside it, a "מוצדק" dialog (all of the missing time, or how much of it) and a
-"היעדרות" dialog (which seder, and whether it was justified). The bar along the
-bottom logs כולל ערב and תורתו בידו minutes and shows the month's figures — so a
-normal day never needs the full app at all.
+לצדו יש דיאלוג "מוצדק" (כל הזמן החסר, או חלק ממנו) ודיאלוג "היעדרות" (איזה סדר,
+והאם הייתה מוצדקת). הסרגל בתחתית רושם דקות של כולל ערב ותורתו בידו ומציג את
+נתוני החודש — כך שיום רגיל לא מצריך את האפליקציה המלאה כלל.
 
-## Reports
+## דוחות
 
-PDFs are written as **real text** through `src/lib/pdf-doc.ts`: A4, right to
-left, with Heebo embedded, tables that break between rows rather than through
-them, and page numbers.
+קובצי ה‑PDF נכתבים כ**טקסט אמיתי** דרך `src/lib/pdf-doc.ts`: A4, מימין לשמאל,
+עם Heebo מוטמע, טבלאות שנשברות בין שורות ולא באמצען, ומספרי עמודים.
 
-This replaced a screenshot. The old exporter laid the report out as hidden HTML
-and rasterized it with html2canvas — which throws on any colour it cannot
-parse, and Tailwind 4 writes every colour in the app as `oklch(...)`. Every
-export failed. Even when it had worked it produced a picture of a report: no
-selectable text, no search, fuzzy at any zoom, page breaks wherever the pixels
-landed. See the header comment in `pdf-doc.ts`.
+זה החליף צילום מסך. המייצא הישן סידר את הדוח כ‑HTML נסתר והמיר אותו לתמונה עם
+html2canvas — שנכשל על כל צבע שאינו יודע לפענח, ו‑Tailwind 4 כותב כל צבע
+באפליקציה בתור `oklch(...)`. כל ייצוא נכשל. וגם אילו עבד, התוצאה הייתה תמונה של
+דוח: בלי טקסט לבחירה, בלי חיפוש, מטושטש בכל זום, ושבירת עמודים איפה שהפיקסלים
+נפלו. ראו את הערת הכותרת ב‑`pdf-doc.ts`.
 
-Hebrew in a PDF also has to be reordered by hand — a PDF paints glyphs in the
-order given — which is what `src/lib/rtl-text.ts` does.
+עברית ב‑PDF גם חייבת סידור מחדש ידני — קובץ PDF מצייר את הסימנים בסדר שנמסר לו —
+וזה בדיוק מה ש‑`src/lib/rtl-text.ts` עושה.
 
-## Reminders
+## תזכורות
 
-Under Settings → "יעדים והתראות" there are two channels and three rules. The
-channels are in-app pop-ups (on) and real Windows notifications (off until
-asked for); the rules are a nudge when nothing has been logged by the time
-seder א׳ starts, a warning once the month's lateness quota is used up, and a
-weekly digest. Both live in `src/lib/notifications.ts`.
+תחת הגדרות ← "יעדים והתראות" יש שני ערוצים ושלושה כללים. הערוצים הם חלוניות
+בתוך האפליקציה (פעיל) והתראות Windows אמיתיות (כבוי עד שמבקשים); הכללים הם
+דחיפה קלה כשלא נרשם דבר עד תחילת סדר א׳, אזהרה כשמכסת האיחורים החודשית נוצלה,
+וסיכום שבועי. שניהם חיים ב‑`src/lib/notifications.ts`.
 
-There is no background service, so a reminder can only appear while a window is
-open — the rules are written to ask "is this still worth saying now?" rather
-than to fire at a fixed time. Each one fires at most once per day/week/month,
-and that bookkeeping lives in the shared data file so two open EXEs never
-raise the same reminder twice.
+אין שירות רקע, ולכן תזכורת יכולה להופיע רק כשחלון פתוח — הכללים נכתבו כדי לשאול
+"האם זה עדיין שווה אמירה עכשיו?" ולא כדי לירות בשעה קבועה. כל אחד מהם פועל
+לכל היותר פעם ביום/שבוע/חודש, והניהול הזה שמור בקובץ הנתונים המשותף כך שגם אם
+שני קובצי EXE פתוחים, אותה תזכורת לא תוצג פעמיים.
 
-## Updates
+## עדכונים
 
-Settings → "עדכוני גרסה" checks `api.github.com` twice a day and can install
-what it finds: the installer is downloaded, run with `/SILENT`, and the app
-closes and comes back up on the new version (`install_update` in
-`src-tauri/core/src/updater.rs`). Clearing the repository field switches the
-whole thing off, and then the app makes no network requests at all.
+הגדרות ← "עדכוני גרסה" בודק את `api.github.com` פעמיים ביום ויכול להתקין את מה
+שמצא: המתקין יורד, מורץ עם `/SILENT`, והאפליקציה נסגרת וחוזרת בגרסה החדשה
+(`install_update` ב‑`src-tauri/core/src/updater.rs`). ניקוי שדה המאגר מכבה את
+כל המנגנון, ואז האפליקציה לא מבצעת שום פנייה לרשת.
 
-## When something goes wrong
+## כשמשהו משתבש
 
 ```
 %APPDATA%\SederPlus\logs\sederplus.log
 ```
 
-Every failure the app notices is appended here — a failed export, a write that
-did not go through, an unhandled error — and Settings → "יומן תקלות" shows the
-tail of it and opens the folder. Inside a packaged EXE there is no console, so
-without this a fault is invisible.
+כל תקלה שהאפליקציה מזהה נוספת לכאן — ייצוא שנכשל, כתיבה שלא עברה, שגיאה שלא
+טופלה — והגדרות ← "יומן תקלות" מציג את סופו ופותח את התיקייה. בתוך EXE ארוז אין
+מסוף, ובלי זה תקלה פשוט בלתי נראית.
 
-This replaced the audit log, which recorded every ordinary action the user took
-and showed it on a screen of its own: a lot of machinery for the one thing that
-never goes wrong.
+זה החליף את יומן הביקורת, שרשם כל פעולה רגילה של המשתמש והציג אותה במסך משלה:
+הרבה מכניקה עבור הדבר האחד שאף פעם לא משתבש.
 
-### Where the data lives
+### היכן הנתונים נמצאים
 
 ```
-%APPDATA%\SederPlus\sedorim-data.json     all seder / learning / timer entries
-%APPDATA%\SederPlus\backups\              rotating copies, one per 6h, 30 kept
-%APPDATA%\SederPlus\logs\                 the problem log
+%APPDATA%\SederPlus\sedorim-data.json     כל רישומי הסדרים, הלימוד והטיימר
+%APPDATA%\SederPlus\backups\              עותקים מתחלפים, אחד ל‑6 שעות, 30 נשמרים
+%APPDATA%\SederPlus\logs\                 יומן התקלות
 ```
 
-Not in the WebView's localStorage: the two EXEs are separate OS processes, and
-two processes cannot safely share one WebView storage partition — whichever
-opens second can come up blank. Writes are atomic (temp file + rename) and a
-write whose base data went stale underneath it is retried rather than allowed
-to clobber the other EXE. See `src-tauri/core/src/store.rs`.
+לא ב‑localStorage של ה‑WebView: שני קובצי ה‑EXE הם תהליכי מערכת נפרדים, ושני
+תהליכים לא יכולים לחלוק בבטחה מחיצת אחסון אחת של WebView — זה שנפתח שני עלול
+לעלות ריק. הכתיבות אטומיות (קובץ זמני ואז שינוי שם), וכתיבה שהנתונים שבבסיסה
+התיישנו תחתיה מנוסה מחדש במקום להרוס את מה שה‑EXE השני כתב. ראו
+`src-tauri/core/src/store.rs`.
 
-An uninstall never touches this folder.
+הסרת ההתקנה לעולם אינה נוגעת בתיקייה הזו.
 
-## Working on it
+## עבודה על הפרויקט
 
 ```bash
 npm install
-npm run dev          # the app in a browser at http://localhost:5173
+npm run dev          # האפליקציה בדפדפן בכתובת http://localhost:5173
 ```
 
-In a browser there is no Rust side, so the data store falls back to
-localStorage, file saving falls back to an ordinary download, and the log lives
-in memory. Everything else behaves identically, which makes this the fastest
-way to work on the UI — no Rust toolchain needed.
+בדפדפן אין צד Rust, ולכן מאגר הנתונים נופל חזרה ל‑localStorage, שמירת קבצים
+נופלת חזרה להורדה רגילה, והיומן חי בזיכרון. כל השאר מתנהג זהה, וזו הדרך המהירה
+ביותר לעבוד על הממשק — בלי צורך בסביבת Rust.
 
-Add `?mode=quick` to the URL to see the quick-entry window.
+הוסיפו `?mode=quick` לכתובת כדי לראות את חלון ההזנה המהירה.
 
 ```bash
-npm test             # frontend unit tests
-npm run test:rust    # the data store, the log and the updater
-npm run test:all     # both
+npm test             # בדיקות יחידה של צד הלקוח
+npm run test:rust    # מאגר הנתונים, היומן והעדכונים
+npm run test:all     # שניהם
 ```
 
-## Building
+## בנייה
 
 ```bash
 npm run exe          # -> release-win\SederPlus.exe, release-win\SederPlusQuick.exe
 npm run installer    # -> release-win\SederPlusSetup.exe
-npm run dist         # both, in order
+npm run dist         # שניהם, לפי הסדר
 ```
 
-`npm run exe` needs Node plus a [Rust toolchain](https://rustup.rs).
-`npm run installer` needs [Inno Setup 6](https://jrsoftware.org/isinfo.php)
-(`winget install JRSoftware.InnoSetup`); it is pre-installed on GitHub's
-Windows runners, so pushing to `main` builds everything without either.
+`npm run exe` דורש Node ובנוסף [סביבת Rust](https://rustup.rs).
+`npm run installer` דורש [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+(`winget install JRSoftware.InnoSetup`); הוא מותקן מראש על שרתי ה‑Windows של
+GitHub, כך שדחיפה ל‑`main` בונה הכל בלי אף אחד מהשניים.
 
-The installer puts both programs in `%LOCALAPPDATA%\SederPlus`, asks nothing,
-raises no administrator prompt, and leaves a desktop shortcut for each. That is
-also what makes the in-app update quiet: no UAC dialog in the way.
+המתקין שם את שתי התוכנות ב‑`%LOCALAPPDATA%\SederPlus`, לא שואל דבר, לא מעלה
+בקשת הרשאות מנהל, ומשאיר קיצור דרך לכל אחת על שולחן העבודה. זה גם מה שמאפשר
+לעדכון בתוך האפליקציה להיות שקט: אין חלונית UAC בדרך.
 
-The About screen shows the version and the exact commit each install was built
-from, so you can always tell which code is actually running.
+מסך "אודות" מציג את הגרסה ואת הקומיט המדויק שממנו נבנתה כל התקנה, כך שתמיד אפשר
+לדעת איזה קוד באמת רץ.
 
-## A note on `npm run lint`
+## הערה על `npm run lint`
 
-It currently reports thousands of `prettier/prettier` errors across the whole
-repository, including files nothing has touched in months. Two separate causes:
-the working tree is checked out with CRLF line endings (`core.autocrlf=true`)
-while Prettier wants LF, and the code's own hand-tuned JSX layout predates the
-Prettier rule being wired into ESLint. Running `npm run format` would fix both
-in one commit and reformat almost every file; that has deliberately been left
-as its own decision rather than mixed into a feature change.
+כרגע הוא מדווח על אלפי שגיאות `prettier/prettier` בכל המאגר, כולל קבצים שאיש לא
+נגע בהם חודשים. שתי סיבות נפרדות: עץ העבודה נמשך עם סופי שורה מסוג CRLF
+(`core.autocrlf=true`) בעוד ש‑Prettier רוצה LF, והפריסה הידנית של ה‑JSX בקוד
+קדמה לחיבור כלל Prettier ל‑ESLint. הרצת `npm run format` תתקן את שניהם בקומיט
+אחד ותעצב מחדש כמעט כל קובץ; זה הושאר בכוונה כהחלטה נפרדת ולא עורבב בתוך שינוי
+תוכן.
