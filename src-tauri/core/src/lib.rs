@@ -218,9 +218,9 @@ fn navigation_guard(app: &AppHandle) -> impl Fn(&Url) -> bool + Send + 'static {
 ///
 /// Window sizes are logical pixels, so the same 1920x1080 panel at 150%
 /// scaling is a 1280x720 desktop with only 1280x672 left over once the taskbar
-/// takes its share. An 820- or 760-pixel-tall window there hangs off the
-/// bottom of the screen, and its last row — in the quick window, the learning
-/// bar — cannot be reached at all.
+/// takes its share. An 820-pixel-tall window there hangs off the bottom of the
+/// screen, and its last row cannot be reached at all. The quick window is
+/// deliberately kept under that ceiling (660) so it never has to be capped.
 ///
 /// prevent_overflow_with_margin caps the window at the work area, and does it
 /// on the whole window rather than on the webview inside it, so the title bar
@@ -254,8 +254,21 @@ fn build_quick_window(app: &AppHandle) -> tauri::Result<()> {
         WebviewUrl::App("index.html?mode=quick".into()),
     )
     .title("כניסה מהירה — סדר פלוס")
-    .inner_size(480.0, 760.0)
-    .min_inner_size(380.0, 560.0)
+    // Wide and short, not narrow and tall.
+    //
+    // This used to be 480x760 — a phone-shaped column — and 760 logical pixels
+    // is taller than the work area of a 1280x720 screen, so the window was
+    // capped and the screen inside it scaled *down* to fit. The result was a
+    // window whose whole purpose is to be read at a glance, rendered smaller
+    // than everything around it.
+    //
+    // 940x660 fits inside a 1280x720 work area with the margin still on, so
+    // nothing is scaled at all, and the extra width pays for a second column
+    // (see src/routes/quick.tsx) instead of a longer scroll. The screen falls
+    // back to one column below 760 CSS pixels, which is what the 560 minimum
+    // leaves room for.
+    .inner_size(940.0, 660.0)
+    .min_inner_size(560.0, 560.0)
     .prevent_overflow_with_margin(WINDOW_MARGIN)
     .center()
     .resizable(true)
