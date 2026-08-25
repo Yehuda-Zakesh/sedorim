@@ -12,7 +12,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
-  TrendingUp, Flame, Award, Clock, CalendarClock,
+  TrendingUp,
   Lightbulb, CheckCircle2, AlertTriangle, Target, BarChart3, ChevronDown,
 } from "lucide-react";
 import {
@@ -35,10 +35,10 @@ export const Route = createFileRoute("/statistics")({
 const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 
 const VERDICT_STYLES: Record<Insight["tone"], { border: string; badge: Tone; icon: typeof CheckCircle2 }> = {
-  success:     { border: "border-r-success",     badge: "success",     icon: CheckCircle2 },
-  info:        { border: "border-r-info",        badge: "info",        icon: Lightbulb },
-  warning:     { border: "border-r-warning",     badge: "warning",     icon: AlertTriangle },
-  destructive: { border: "border-r-destructive", badge: "destructive", icon: AlertTriangle },
+  success:     { border: "border-s-success",     badge: "success",     icon: CheckCircle2 },
+  info:        { border: "border-s-info",        badge: "info",        icon: Lightbulb },
+  warning:     { border: "border-s-warning",     badge: "warning",     icon: AlertTriangle },
+  destructive: { border: "border-s-destructive", badge: "destructive", icon: AlertTriangle },
 };
 
 /** The three insight buckets, in the order they are worth reading. */
@@ -90,7 +90,7 @@ function StatisticsPage() {
   return (
     <AppShell title="סטטיסטיקות ותובנות" subtitle="איך נראה החודש, ומה כדאי לעשות">
       {/* 1 — the answer, in a sentence. */}
-      <section className={`card-surface p-5 border-r-4 ${style.border}`}>
+      <section className={`card-surface p-5 border-s-4 ${style.border}`}>
         <div className="flex items-start gap-4">
           <IconBadge icon={style.icon} tone={style.badge} size="lg" />
           <div className="min-w-0 flex-1">
@@ -175,23 +175,43 @@ function StatisticsPage() {
 function ScoreRing({ score, target }: { score: number; target: number }) {
   const ok = score >= target;
   const size = 78, stroke = 7, r = (size - stroke) / 2;
+  const c = size / 2;
   const circumference = 2 * Math.PI * r;
+
+  // The target, marked *on* the ring rather than only spelled out underneath
+  // it. The ring's whole job is to answer "am I there yet" without reading a
+  // number, and it couldn't do that while the thing being aimed at was absent
+  // from the picture. Angle measured clockwise from twelve o'clock, matching
+  // the -90° rotation the arc is drawn under.
+  const theta = (Math.min(100, Math.max(0, target)) / 100) * 2 * Math.PI;
+  const tick = (radius: number) => ({
+    x: c + radius * Math.sin(theta),
+    y: c - radius * Math.cos(theta),
+  });
+  const inner = tick(r - stroke / 2 - 1);
+  const outer = tick(r + stroke / 2 + 1);
+
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}
       title={`ציון ${score} מתוך 100 · יעד ${target}`}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke}
-          className="stroke-muted" />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke}
-          strokeLinecap="round"
-          className={ok ? "stroke-success" : "stroke-primary"}
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - Math.max(0, Math.min(100, score)) / 100)} />
+      <svg width={size} height={size} aria-hidden="true">
+        <g transform={`rotate(-90 ${c} ${c})`}>
+          <circle cx={c} cy={c} r={r} fill="none" strokeWidth={stroke} className="stroke-muted" />
+          <circle cx={c} cy={c} r={r} fill="none" strokeWidth={stroke}
+            strokeLinecap="round"
+            className={ok ? "stroke-success" : "stroke-primary"}
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - Math.max(0, Math.min(100, score)) / 100)} />
+        </g>
+        <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y}
+          strokeWidth={2} strokeLinecap="round" className="stroke-foreground/45" />
       </svg>
       <div className="absolute inset-0 grid place-items-center">
         <div className="text-center leading-none">
-          <div className="text-xl font-bold tabular-nums">{score}</div>
-          <div className="text-[9px] text-muted-foreground mt-0.5">יעד {target}</div>
+          {/* No `tabular-nums` here: equal-width digits make a two-digit
+              number look gappy at display size. */}
+          <div className="text-xl font-bold">{score}</div>
+          <div className="text-2xs text-muted-foreground mt-0.5">יעד {target}</div>
         </div>
       </div>
     </div>
@@ -233,14 +253,21 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
     weekday[wd].net += calcSeder(e).netMissingMin;
     weekday[wd].count++;
   }
-  const weekdayMax = Math.max(1, ...weekday.map((w) => (w.count ? w.net / w.count : 0)));
+  // A fixed floor under the scale, and the scale is named in the caption.
+  // Normalising purely to the observed maximum meant the worst day was drawn
+  // full-width whatever the number was — a month where the very worst day
+  // averaged three missing minutes looked exactly like a catastrophe.
+  const weekdayScaleMax = Math.max(
+    30,
+    Math.ceil(Math.max(0, ...weekday.map((w) => (w.count ? w.net / w.count : 0))) / 10) * 10,
+  );
 
   const totalLearnHours = (lessons.reduce((s, l) => s + effectiveLearningMin(l), 0) / 60).toFixed(1);
 
   return (
     <div className="mt-5 card-surface overflow-hidden">
       <button onClick={() => setOpen((v) => !v)} aria-expanded={open}
-        className="w-full flex items-center gap-3 px-5 py-4 text-right hover:bg-accent/40 transition">
+        className="w-full flex items-center gap-3 px-5 py-4 text-start hover:bg-accent/40 pressable transition">
         <IconBadge icon={BarChart3} size="md" />
         <span className="flex-1">
           <span className="block text-sm font-semibold">גרפים ומגמות</span>
@@ -265,22 +292,45 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
           <section>
             <h3 className="text-sm font-semibold">ציון נוכחות, 12 החודשים האחרונים</h3>
             <p className="text-xs text-muted-foreground mb-4">עמודה גבוהה = חודש טוב יותר</p>
-            <div className="flex items-end gap-2 h-44">
-              {months.map((mo, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1.5" title={`${mo.hebLabel} · ציון ${mo.score} · ${fmtMin(mo.net)} חסרות`}>
-                  <div className="text-[10px] tabular-nums text-muted-foreground">{mo.entries ? mo.score : ""}</div>
-                  <div className="w-full rounded-t-md bg-gradient-to-t from-primary to-primary/60"
-                    style={{ height: `${Math.max(mo.score, 2)}%`, opacity: mo.entries ? 1 : 0.2 }} />
-                  <div className="text-[11px] text-muted-foreground">{mo.label}</div>
-                </div>
-              ))}
+            {/* Twelve bars with a number over every one of them is a wall of
+                digits nobody reads. Only the best month and the current one
+                are labelled; the tooltip carries the rest, and the tiles above
+                carry the same two figures in full. */}
+            <div className="flex items-end gap-1.5 h-40">
+              {months.map((mo, i) => {
+                const isCurrent = i === months.length - 1;
+                const isBest = best && mo.hebLabel === best.hebLabel;
+                const labelled = mo.entries > 0 && (isCurrent || isBest);
+                return (
+                  <div key={i} className="flex-1 h-full flex flex-col justify-end gap-1.5"
+                    title={`${mo.hebLabel} · ${mo.entries ? `ציון ${mo.score} · ${fmtMin(mo.net)} דק׳ חסרות` : "אין רישומים"}`}>
+                    <div className="text-2xs tabular-nums text-center text-muted-foreground h-4">
+                      {labelled ? mo.score : ""}
+                    </div>
+                    {/* A track behind each bar, so a month scored at zero is
+                        still visibly a month that was measured. The old chart
+                        floored every bar at 2% and faded empty months to 20%
+                        opacity, which made "no data" and "very bad" the same
+                        picture. */}
+                    <div className="flex-1 flex items-end rounded-md bg-muted/50">
+                      {mo.entries > 0 && (
+                        <div className={`w-full rounded-md ${isBest ? "bg-primary" : "bg-primary/70"}`}
+                          style={{ height: `${mo.score}%`, minHeight: mo.score > 0 ? 2 : 0 }} />
+                      )}
+                    </div>
+                    <div className="text-2xs text-center text-muted-foreground">{mo.label}</div>
+                  </div>
+                );
+              })}
             </div>
           </section>
 
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div>
               <h3 className="text-sm font-semibold">באילו ימים אתה מפסיד הכי הרבה</h3>
-              <p className="text-xs text-muted-foreground mb-3">ממוצע דקות חסרות לסדר</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                ממוצע דקות חסרות לסדר · הסולם: 0–{weekdayScaleMax} דק׳
+              </p>
               <ul className="space-y-2.5">
                 {weekday.map((w) => {
                   const avg = w.count ? Math.round(w.net / w.count) : 0;
@@ -292,7 +342,7 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
                       </div>
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
                         <div className="h-full rounded-full bg-primary"
-                          style={{ width: `${(avg / weekdayMax) * 100}%` }} />
+                          style={{ width: `${Math.min(100, (avg / weekdayScaleMax) * 100)}%` }} />
                       </div>
                     </li>
                   );
@@ -314,37 +364,58 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
   const start = new Date(today);
   start.setDate(today.getDate() - 6 * 7 + 1);
 
-  const cells: { iso: string; level: number }[] = [];
+  // The five bands the cells are painted in, named. The chart used to use these
+  // levels without ever saying what they meant.
+  const LEVELS = [
+    { label: "60 דק׳ ומעלה" },
+    { label: "30–59 דק׳" },
+    { label: "15–29 דק׳" },
+    { label: "עד 15 דק׳" },
+    { label: "סדר שלם" },
+  ];
+  const levelFill = (level: number) =>
+    `color-mix(in oklch, var(--color-status-present) ${(level + 1) * 18}%, var(--color-muted))`;
+
+  const cells: { iso: string; level: number; net: number }[] = [];
   for (let i = 0; i < 42; i++) {
     const dt = new Date(start);
     dt.setDate(start.getDate() + i);
     const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
     const list = entries.filter((e) => e.date === iso);
-    if (!list.length) { cells.push({ iso, level: -1 }); continue; }
+    if (!list.length) { cells.push({ iso, level: -1, net: 0 }); continue; }
     const net = list.reduce((s, e) => s + calcSeder(e).netMissingMin, 0);
-    cells.push({ iso, level: net === 0 ? 4 : net < 15 ? 3 : net < 30 ? 2 : net < 60 ? 1 : 0 });
+    cells.push({ iso, net, level: net === 0 ? 4 : net < 15 ? 3 : net < 30 ? 2 : net < 60 ? 1 : 0 });
   }
 
   return (
     <div>
       <h3 className="text-sm font-semibold">ששת השבועות האחרונים</h3>
-      <p className="text-xs text-muted-foreground mb-3">ירוק מלא = סדר שלם · אפור = לא נרשם דבר</p>
+      <p className="text-xs text-muted-foreground mb-3">ככל שהריבוע ירוק יותר — נשמט פחות באותו יום</p>
       <div className="grid grid-cols-7 gap-1.5 max-w-xs">
         {cells.map((c) => (
-          <div key={c.iso} title={c.level < 0 ? `${c.iso} — אין רישום` : c.iso}
+          <div key={c.iso}
+            title={c.level < 0 ? `${c.iso} — אין רישום` : `${c.iso} · ${c.net} דק׳ חסרות`}
             className="aspect-square rounded"
-            style={{
-              backgroundColor: c.level < 0
-                ? "var(--color-muted)"
-                : `color-mix(in oklch, var(--color-status-present) ${(c.level + 1) * 18}%, var(--color-muted))`,
-            }} />
+            style={{ backgroundColor: c.level < 0 ? "var(--color-muted)" : levelFill(c.level) }} />
         ))}
       </div>
-      <div className="mt-3 flex items-center gap-3 text-[11px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1"><Flame className="size-3" /> רצף</span>
-        <span className="inline-flex items-center gap-1"><Award className="size-3" /> סדר שלם</span>
-        <span className="inline-flex items-center gap-1"><Clock className="size-3" /> חסר</span>
-        <span className="inline-flex items-center gap-1"><CalendarClock className="size-3" /> לא נרשם</span>
+
+      {/* A scale legend, reading from "most missed" to "a full seder", plus the
+          grey that means nothing was recorded at all.
+          What stood here before was four icons — a flame, a medal, a clock and
+          a calendar — that mapped to none of the five colours on the grid and
+          so explained nothing about it. */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-3 rounded" style={{ backgroundColor: "var(--color-muted)" }} />
+          לא נרשם
+        </span>
+        <span className="inline-flex items-center gap-1">
+          {LEVELS.map((l, i) => (
+            <span key={i} title={l.label} className="size-3 rounded" style={{ backgroundColor: levelFill(i) }} />
+          ))}
+        </span>
+        <span>הרבה חסר ← סדר שלם</span>
       </div>
     </div>
   );

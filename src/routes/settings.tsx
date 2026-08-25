@@ -60,9 +60,9 @@ function SettingsPage() {
   return (
     <AppShell title="הגדרות" subtitle="כל שינוי נשמר מיד">
       <div className="card-surface p-3 mb-4 relative">
-        <Search className="absolute right-5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <Search className="absolute start-5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש בהגדרות..."
-          className="w-full rounded-md bg-transparent pr-9 pl-3 py-1.5 text-sm focus:outline-none" />
+          className="w-full rounded-md bg-transparent ps-9 pe-3 py-1.5 text-sm focus:outline-none" />
       </div>
 
       <div className="space-y-3">
@@ -72,7 +72,7 @@ function SettingsPage() {
             <div key={s.id} className="card-surface overflow-hidden">
               <button onClick={() => setOpen(isOpen ? null : s.id)}
                 aria-expanded={isOpen}
-                className="w-full flex items-center gap-3 px-5 py-4 text-right hover:bg-accent/40 transition">
+                className="w-full flex items-center gap-3 px-5 py-4 text-start hover:bg-accent/40 pressable transition">
                 <IconBadge icon={s.icon} size="md" />
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-semibold">{s.label}</span>
@@ -88,7 +88,7 @@ function SettingsPage() {
                       <SederHoursManager />
                       <NumberField label="סף בונוס להגעה מוקדמת (דק׳)" min={0} max={60} value={settings.seder.bonusThresholdMin}
                         onChange={(v) => update({ seder: { ...settings.seder, bonusThresholdMin: v } })} />
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-2xs text-muted-foreground">
                         הגעה לפני תחילת הסדר נצברת כבונוס שמקטין את החסר — עד למספר הדקות הזה בכל סדר.
                       </p>
                     </>
@@ -110,7 +110,7 @@ function SettingsPage() {
                         label={
                           <span>
                             התראות בשולחן העבודה
-                            <span className="block text-[11px] text-muted-foreground">
+                            <span className="block text-2xs text-muted-foreground">
                               הודעות Windows — מופיעות גם כשהתוכנה מוסתרת מאחורי חלון אחר
                             </span>
                           </span>
@@ -135,7 +135,7 @@ function SettingsPage() {
                         onChange={(v) => update({ profile: { ...settings.profile, name: v } })} />
                       <Field label="כולל / קבוצה" value={settings.profile.classroom}
                         onChange={(v) => update({ profile: { ...settings.profile, classroom: v } })} />
-                      <p className="text-[11px] text-muted-foreground">שני השדות האלה מופיעים בכותרת כל דוח שמופק.</p>
+                      <p className="text-2xs text-muted-foreground">שני השדות האלה מופיעים בכותרת כל דוח שמופק.</p>
                     </>
                   )}
 
@@ -181,7 +181,7 @@ function SettingsPage() {
                       <Toggle label="גיבוי לפני פעולות גדולות" on={settings.data.autoBackupBeforeOps}
                         onChange={(v) => update({ data: { ...settings.data, autoBackupBeforeOps: v } })} />
                       <Link to="/backup"
-                        className="mt-1 flex items-center gap-3 rounded-lg border border-border p-3 hover:border-primary transition">
+                        className="mt-1 flex items-center gap-3 rounded-lg border border-border p-3 hover:border-primary pressable transition">
                         <IconBadge icon={DatabaseBackup} size="md" />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold">גיבוי ושחזור</div>
@@ -221,7 +221,7 @@ function NotificationTester() {
   return (
     <div className="rounded-lg border border-border p-4">
       <div className="text-sm font-semibold">בדיקת התראות</div>
-      <p className="mt-1 text-[11px] text-muted-foreground">
+      <p className="mt-1 text-2xs text-muted-foreground">
         נשלחת התראה לדוגמה בכל הערוצים שסימנת. אם התראת שולחן העבודה לא מופיעה,
         בדוק ב"הגדרות Windows ← מערכת ← התראות" שההתראות עבור סדר פלוס מופעלות.
       </p>
@@ -263,7 +263,7 @@ function ProblemLog() {
 
   return (
     <>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-2xs text-muted-foreground">
         התוכנה כותבת לכאן כל תקלה — ייצוא שנכשל, שמירה שלא עברה, שגיאה לא צפויה.
         {isDesktop
           ? " הקובץ נמצא בתיקיית הנתונים, תחת logs\\sederplus.log."
@@ -278,10 +278,10 @@ function ProblemLog() {
         ) : lines.length === 0 ? (
           <div dir="rtl" className="text-xs text-muted-foreground">לא נרשמו תקלות. זה המצב הרצוי.</div>
         ) : (
-          <ol className="space-y-1 font-mono text-[11px] leading-relaxed">
+          <ol className="space-y-1 font-mono text-2xs leading-relaxed">
             {/* Newest first — a log is read from the end. */}
             {[...lines].reverse().map((line, i) => (
-              <li key={i} className={line.includes(" ERROR ") ? "text-destructive" : line.includes(" WARN ") ? "text-warning" : "text-muted-foreground"}>
+              <li key={i} className={line.includes(" ERROR ") ? "text-destructive" : line.includes(" WARN ") ? "text-warning-fg" : "text-muted-foreground"}>
                 {line}
               </li>
             ))}
@@ -306,7 +306,7 @@ function ProblemLog() {
             <Trash2 className="size-3.5" /> מחק את היומן
           </button>
         )}
-        <span className="text-[11px] text-muted-foreground">{lines.length} רשומות</span>
+        <span className="text-2xs text-muted-foreground">{lines.length} רשומות</span>
       </div>
     </>
   );
@@ -353,7 +353,7 @@ function SederHoursManager() {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
             <div className="text-sm font-semibold">שעות הסדרים הנוכחיות</div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-2xs text-muted-foreground">
               שינוי יחול מהתאריך שנבחר ואילך בלבד — רישומים קודמים ממשיכים להיחשב לפי השעות שהיו אז.
             </div>
           </div>
@@ -405,7 +405,7 @@ function SederHoursManager() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold">שינוי זמני לטווח תאריכים</div>
-            <div className="text-[11px] text-muted-foreground">בתום הטווח השעות חוזרות אוטומטית להגדרה השמורה.</div>
+            <div className="text-2xs text-muted-foreground">בתום הטווח השעות חוזרות אוטומטית להגדרה השמורה.</div>
           </div>
           <button onClick={() => setOvOpen((v) => !v)}
             className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent/40">
@@ -471,21 +471,30 @@ function ColorThemePicker({ value, onChange }: { value: ColorTheme; onChange: (v
   return (
     <div>
       <div className="text-xs text-muted-foreground mb-2">ערכת צבעים</div>
-      <div className="grid grid-cols-6 sm:grid-cols-11 gap-2">
+      {/* Selection is a ring set off from the swatch, not a scale-up and a tick
+          drawn on top of it: the tick was white on every swatch, so on the
+          amber and lime ones it was invisible, and growing one cell of a tight
+          grid pushed it over its neighbours. A ring reads on any colour and
+          stays inside its own cell. */}
+      <div role="radiogroup" aria-label="ערכת צבעים" className="grid grid-cols-6 sm:grid-cols-11 gap-2.5">
         {COLOR_THEMES.map((t) => {
           const active = value === t.id;
           return (
             <button
               key={t.id}
               type="button"
+              role="radio"
+              aria-checked={active}
               onClick={() => onChange(t.id)}
               title={t.label}
               aria-label={t.label}
-              className={`relative aspect-square rounded-lg border-2 transition ${active ? "border-foreground scale-105" : "border-transparent hover:scale-105"}`}
+              className={`aspect-square rounded-lg pressable ${
+                active
+                  ? "ring-2 ring-foreground ring-offset-2 ring-offset-card"
+                  : "ring-1 ring-black/10 hover:ring-2 hover:ring-foreground/40"
+              }`}
               style={{ backgroundColor: t.hex }}
-            >
-              {active && <span className="absolute inset-0 grid place-items-center text-white text-xs font-bold">✓</span>}
-            </button>
+            />
           );
         })}
       </div>
@@ -497,21 +506,25 @@ function BackgroundPicker({ value, onChange }: { value: BgTheme; onChange: (v: B
   return (
     <div>
       <div className="text-xs text-muted-foreground mb-2">רקע מסך (פעיל במצב בהיר)</div>
-      <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+      <div role="radiogroup" aria-label="רקע מסך" className="grid grid-cols-5 sm:grid-cols-10 gap-2.5">
         {BG_THEMES.map((t) => {
           const active = value === t.id;
           return (
             <button
               key={t.id}
               type="button"
+              role="radio"
+              aria-checked={active}
               onClick={() => onChange(t.id)}
               title={t.label}
               aria-label={t.label}
-              className={`relative aspect-square rounded-lg border-2 transition ${active ? "border-foreground scale-105" : "border-border hover:scale-105"}`}
+              className={`aspect-square rounded-lg pressable ${
+                active
+                  ? "ring-2 ring-foreground ring-offset-2 ring-offset-card"
+                  : "ring-1 ring-black/10 hover:ring-2 hover:ring-foreground/40"
+              }`}
               style={{ backgroundColor: t.hex }}
-            >
-              {active && <span className="absolute inset-0 grid place-items-center text-foreground text-xs font-bold">✓</span>}
-            </button>
+            />
           );
         })}
       </div>

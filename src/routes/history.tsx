@@ -87,11 +87,11 @@ function HistoryPage() {
 
       <div className="mt-4 mb-4 inline-flex rounded-lg border border-border bg-card p-1">
         <button onClick={() => setTab("list")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium pressable transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
           <HistoryIcon className="size-3.5" /> נוכחות ({monthEntries.length})
         </button>
         <button onClick={() => setTab("learning")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium pressable transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
           <BookOpen className="size-3.5" /> לימוד נוסף ({monthLessons.length})
         </button>
       </div>
@@ -141,26 +141,26 @@ function MonthPicker({
       <div className="flex items-center gap-2">
         {/* Right arrow steps back in time: in an RTL layout, back is to the right. */}
         <button onClick={() => onChange(shiftMonth(value, -1))} title="החודש הקודם"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent transition">
+          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition">
           <ChevronRight className="size-4" />
         </button>
 
         <button onClick={() => setListOpen((v) => !v)}
-          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 transition">
+          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 pressable transition">
           <div className="flex items-center justify-center gap-2">
             {closing.closed
               ? <Lock className="size-3.5 text-muted-foreground" />
               : <LockOpen className="size-3.5 text-primary" />}
             <span className="text-base font-semibold">{closing.gregorianLabel}</span>
           </div>
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-2xs text-muted-foreground">
             {closing.hebrewLabel}
             {!closing.closed && " · חודש פתוח"}
           </div>
         </button>
 
         <button onClick={() => onChange(shiftMonth(value, 1))} disabled={isCurrent} title="החודש הבא"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent transition disabled:opacity-30">
+          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition disabled:opacity-30">
           <ChevronLeft className="size-4" />
         </button>
       </div>
@@ -177,7 +177,7 @@ function MonthPicker({
             {months.map((key) => (
               <button key={key}
                 onClick={() => { onChange(key); setListOpen(false); }}
-                className={`rounded-md border px-2.5 py-2 text-xs transition ${
+                className={`rounded-md border px-2.5 py-2 text-xs pressable transition ${
                   key === value ? "border-primary bg-primary/10 text-primary font-medium" : "border-border hover:bg-accent"
                 }`}>
                 {monthKeyLabel(key)}
@@ -189,7 +189,7 @@ function MonthPicker({
 
       {!isCurrent && (
         <button onClick={() => onChange(currentMonthKey())}
-          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-[11px] text-muted-foreground hover:bg-accent transition">
+          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-2xs text-muted-foreground hover:bg-accent pressable transition">
           חזור לחודש הנוכחי
         </button>
       )}
@@ -228,10 +228,10 @@ function AttendanceHistory({
     <>
       <div className="card-surface p-4 mb-4 space-y-3">
         <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <input value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="חיפוש לפי תאריך, הערה, סיבה או תגית..."
-            className="w-full rounded-md border border-input bg-card pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            className="w-full rounded-md border border-input bg-card ps-9 pe-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
           <select value={sederFilter} onChange={(e) => setSederFilter(e.target.value as "all" | "1" | "2")}
@@ -257,7 +257,7 @@ function AttendanceHistory({
           </select>
         </div>
         {filtersOn && (
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <div className="flex items-center justify-between text-2xs text-muted-foreground">
             <span>{filtered.length} מתוך {entries.length} רישומי החודש</span>
             <button onClick={() => { setQ(""); setSederFilter("all"); setTypeFilter("all"); setExcusedFilter("all"); }}
               className="hover:text-foreground">נקה סינון</button>
@@ -269,14 +269,14 @@ function AttendanceHistory({
         <table className="w-full text-sm min-w-[760px]">
           <thead className="bg-muted/50 text-xs text-muted-foreground">
             <tr>
-              <th className="text-right px-3 py-3 font-medium">תאריך</th>
-              <th className="text-right px-3 py-3 font-medium">סדר</th>
-              <th className="text-right px-3 py-3 font-medium">הגעה</th>
-              <th className="text-right px-3 py-3 font-medium">יציאה</th>
-              <th className="text-right px-3 py-3 font-medium">חסר נטו</th>
-              <th className="text-right px-3 py-3 font-medium">בונוס</th>
-              <th className="text-right px-3 py-3 font-medium">מוצדק</th>
-              <th className="text-right px-3 py-3 font-medium">סטטוס</th>
+              <th className="text-start px-3 py-3 font-medium">תאריך</th>
+              <th className="text-start px-3 py-3 font-medium">סדר</th>
+              <th className="text-start px-3 py-3 font-medium">הגעה</th>
+              <th className="text-start px-3 py-3 font-medium">יציאה</th>
+              <th className="text-start px-3 py-3 font-medium">חסר נטו</th>
+              <th className="text-start px-3 py-3 font-medium">בונוס</th>
+              <th className="text-start px-3 py-3 font-medium">מוצדק</th>
+              <th className="text-start px-3 py-3 font-medium">סטטוס</th>
               <th className="px-3 py-3 w-12"></th>
             </tr>
           </thead>
@@ -340,7 +340,7 @@ function MonthClosingCard({
           <h3 className="text-sm font-semibold">
             {closing.closed ? "סיכום החודש" : "סיכום עד כה"} — {closing.gregorianLabel}
           </h3>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             {closing.hebrewLabel} · {seder.entries} רישומי סדר
             {!closing.closed && " · החודש טרם הסתיים"}
           </p>
@@ -374,7 +374,7 @@ function MonthClosingCard({
 function ClosingStat({ label, value, title }: { label: string; value: number; title?: string }) {
   return (
     <div className="rounded-lg border border-border p-3" title={title}>
-      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="text-2xs text-muted-foreground">{label}</div>
       <div className="mt-1 text-xl font-bold tabular-nums">{value}</div>
     </div>
   );
@@ -396,10 +396,10 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
     <>
       <div className="card-surface p-4 mb-4 space-y-3">
         <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <input value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="חיפוש לפי תאריך, מסגרת או הערה..."
-            className="w-full rounded-md border border-input bg-card pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            className="w-full rounded-md border border-input bg-card ps-9 pe-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
           <select value={framework} onChange={(e) => setFramework(e.target.value)}
@@ -419,12 +419,12 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
         <table className="w-full text-sm min-w-[600px]">
           <thead className="bg-muted/50 text-xs text-muted-foreground">
             <tr>
-              <th className="text-right px-3 py-3 font-medium">תאריך</th>
-              <th className="text-right px-3 py-3 font-medium">מסגרת</th>
-              <th className="text-right px-3 py-3 font-medium">דקות</th>
-              <th className="text-right px-3 py-3 font-medium">נחשב</th>
-              <th className="text-right px-3 py-3 font-medium">מקור</th>
-              <th className="text-right px-3 py-3 font-medium">הערה</th>
+              <th className="text-start px-3 py-3 font-medium">תאריך</th>
+              <th className="text-start px-3 py-3 font-medium">מסגרת</th>
+              <th className="text-start px-3 py-3 font-medium">דקות</th>
+              <th className="text-start px-3 py-3 font-medium">נחשב</th>
+              <th className="text-start px-3 py-3 font-medium">מקור</th>
+              <th className="text-start px-3 py-3 font-medium">הערה</th>
               <th className="px-3 py-3 w-12"></th>
             </tr>
           </thead>

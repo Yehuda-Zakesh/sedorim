@@ -108,7 +108,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                 label={
                   <span>
                     התראות בשולחן העבודה
-                    <span className="block text-[11px] text-muted-foreground">
+                    <span className="block text-2xs text-muted-foreground">
                       הודעות Windows — מופיעות גם כשהתוכנה מוסתרת
                     </span>
                   </span>

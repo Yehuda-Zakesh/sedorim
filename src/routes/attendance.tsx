@@ -83,8 +83,19 @@ function SederCard({
   const startStr = num === 1 ? times.s1Start : times.s2Start;
   const endStr = num === 1 ? times.s1End : times.s2End;
 
-  const tryOhevei = () => {
-    if (!calc.isOhevei && form.ohevei) {
+  /**
+   * Ticking אוהבי ה׳ when the hours don't support it should say so.
+   *
+   * It used to `setTimeout(…, 0)` after `setForm`, and read `calc` and
+   * `form.ohevei` out of the closure — both of which are this render's values,
+   * i.e. the ones from *before* the click. So the warning fired when the box
+   * was cleared and stayed silent when it was ticked: exactly backwards. The
+   * next state is right here, so ask it directly instead.
+   */
+  const toggleOhevei = () => {
+    const next = !form.ohevei;
+    setForm({ ...form, ohevei: next });
+    if (next && !calcSeder({ ...preview, ohevei: true }).isOhevei) {
       toast.warning("לא ניתן לסמן אוהבי ה׳ — הסדר לא נכח מתחילתו ועד סופו");
     }
   };
@@ -101,21 +112,21 @@ function SederCard({
                 toastUndo("הרישום נמחק", () => upsert(existing));
                 onSaved();
               }}
-              className="text-xs text-muted-foreground hover:text-destructive">מחק</button>
+              className="pressable rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive">מחק</button>
           )}
           <button onClick={save}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90">
+            className="pressable inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90">
             <Save className="size-3.5" /> שמור
           </button>
         </div>
       </div>
 
       {skipSederB && (
-        <div className="mb-3 rounded-md border-2 border-warning bg-warning/5 p-3 text-xs text-warning flex items-start gap-2">
+        <div className="mb-3 rounded-md border-2 border-warning bg-warning/5 p-3 text-xs text-warning-fg flex items-start gap-2">
           <AlertTriangle className="size-4 shrink-0 mt-0.5" />
           <div>
             <div className="font-semibold">היום {fastName} — אין סדר ב׳</div>
-            <div className="text-warning/80">אין צורך לרשום נוכחות לסדר ב׳ ביום זה.</div>
+            <div className="text-warning-fg/80">אין צורך לרשום נוכחות לסדר ב׳ ביום זה.</div>
           </div>
         </div>
       )}
@@ -135,17 +146,18 @@ function SederCard({
 
       <div className="mt-3 grid grid-cols-3 gap-2">
         <button onClick={() => setForm({ ...form, absent: !form.absent, ohevei: false })}
-          className={`rounded-md border-2 px-3 py-2 text-xs font-medium transition ${form.absent ? "bg-status-absent/15 border-status-absent text-status-absent" : "border-border hover:border-status-absent"}`}>
-          <X className="size-3.5 inline ml-1" /> היעדרות
+          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition ${form.absent ? "bg-status-absent/15 border-status-absent text-status-absent-fg" : "border-border hover:border-status-absent"}`}>
+          <X className="size-3.5 inline me-1" /> היעדרות
         </button>
         <button onClick={() => setForm({ ...form, excusedAll: !form.excusedAll })}
-          className={`rounded-md border-2 px-3 py-2 text-xs font-medium transition ${form.excusedAll ? "bg-status-excused/15 border-status-excused text-status-excused" : "border-border hover:border-status-excused"}`}>
-          <FileText className="size-3.5 inline ml-1" /> כל המוצדק
+          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition ${form.excusedAll ? "bg-status-excused/15 border-status-excused text-status-excused-fg" : "border-border hover:border-status-excused"}`}>
+          <FileText className="size-3.5 inline me-1" /> כל המוצדק
         </button>
-        <button onClick={() => { const v = !form.ohevei; setForm({ ...form, ohevei: v }); setTimeout(tryOhevei, 0); }}
+        <button onClick={toggleOhevei}
+          aria-pressed={form.ohevei}
           disabled={form.absent}
-          className={`rounded-md border-2 px-3 py-2 text-xs font-medium transition disabled:opacity-50 ${form.ohevei ? "bg-status-present/15 border-status-present text-status-present" : "border-border hover:border-status-present"}`}>
-          <Check className="size-3.5 inline ml-1" /> אוהבי ה׳
+          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition disabled:opacity-50 ${form.ohevei ? "bg-status-present/15 border-status-present text-status-present-fg" : "border-border hover:border-status-present"}`}>
+          <Check className="size-3.5 inline me-1" /> אוהבי ה׳
         </button>
       </div>
 
@@ -185,7 +197,7 @@ function SederCard({
       </div>
 
       {form.ohevei && !calc.isOhevei && !form.absent && (
-        <div className="mt-3 text-xs text-warning flex items-center gap-1">
+        <div className="mt-3 text-xs text-warning-fg flex items-center gap-1">
           <AlertTriangle className="size-3.5" /> אוהבי ה׳ לא יוחל — שעת ההגעה/יציאה לא תואמות את גבולות הסדר.
         </div>
       )}
@@ -196,7 +208,7 @@ function SederCard({
 function Mini({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <div className="rounded-md border border-border p-2">
-      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-2xs text-muted-foreground">{label}</div>
       <div className={`text-base font-bold tabular-nums ${tone}`}>{value}</div>
     </div>
   );
@@ -219,7 +231,7 @@ function AttendancePage() {
           className="field-input" />
         <span className="text-xs text-muted-foreground">{heDate}</span>
         {fastName && (
-          <span className="mr-auto inline-flex items-center gap-1 rounded-full bg-warning/10 border border-warning/30 px-2.5 py-1 text-[11px] text-warning font-medium">
+          <span className="ms-auto inline-flex items-center gap-1 rounded-full bg-warning/10 border border-warning/30 px-2.5 py-1 text-2xs text-warning-fg font-medium">
             <AlertTriangle className="size-3" /> {fastName}
           </span>
         )}

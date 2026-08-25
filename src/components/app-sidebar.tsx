@@ -71,7 +71,7 @@ export function AppSidebar() {
   const width = collapsed ? "w-[64px]" : "w-[220px]";
 
   return (
-    <aside className={`fixed inset-y-0 right-0 z-30 flex ${width} flex-col bg-sidebar text-sidebar-foreground border-l border-sidebar-border transition-[width] duration-200`}>
+    <aside className={`fixed inset-y-0 start-0 z-30 flex ${width} flex-col bg-sidebar text-sidebar-foreground border-e border-sidebar-border transition-[width] duration-200 ease-[var(--ease-out-soft)]`}>
       <div className={`px-2 py-3 border-b border-sidebar-border flex items-center ${collapsed ? "justify-center" : "justify-between gap-2"}`}>
         {!collapsed && (
           <div className="flex items-center gap-2 px-1 min-w-0">
@@ -86,7 +86,7 @@ export function AppSidebar() {
           onClick={toggle}
           title={collapsed ? "הרחב סרגל" : "כווץ סרגל"}
           aria-label={collapsed ? "הרחב סרגל" : "כווץ סרגל"}
-          className={`${collapsed ? "mt-2" : ""} rounded-md p-1.5 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground`}
+          className={`${collapsed ? "mt-2" : ""} pressable rounded-md p-1.5 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground`}
         >
           {collapsed ? <PanelRightOpen className="size-4" /> : <PanelRightClose className="size-4" />}
         </button>
@@ -98,7 +98,7 @@ export function AppSidebar() {
             {collapsed
               ? gi > 0 && <div className="mx-2 mb-2 border-t border-sidebar-border" />
               : (
-                <div className="px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/45">
+                <div className="px-2.5 pb-1.5 text-2xs font-semibold text-sidebar-foreground/60">
                   {group.label}
                 </div>
               )}
@@ -113,7 +113,7 @@ export function AppSidebar() {
                       aria-label={label}
                       aria-current={active ? "page" : undefined}
                       className={[
-                        "group relative flex items-center rounded-md p-2.5 text-sm transition-colors",
+                        "pressable group relative flex items-center rounded-md p-2.5 text-sm",
                         collapsed ? "justify-center" : "gap-3",
                         active
                           ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
@@ -124,7 +124,7 @@ export function AppSidebar() {
                       {!collapsed ? (
                         <span className="truncate">{label}</span>
                       ) : (
-                        <span className="pointer-events-none absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-popover text-popover-foreground border border-border px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition shadow-md z-50">
+                        <span className="pointer-events-none absolute end-full me-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-popover text-popover-foreground border border-border px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-md z-50">
                           {label}
                         </span>
                       )}

@@ -123,7 +123,7 @@ function ReportsPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold">{p.title}</h3>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{p.format}</span>
+                <span className="text-2xs font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{p.format}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">{p.desc}</p>
               <button onClick={() => runPreset(p.key, p.run)} disabled={busy !== null}

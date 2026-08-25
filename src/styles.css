@@ -82,11 +82,98 @@
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
 
+  /* The vivid marks — dots, fills, chart cells. Never text. */
   --color-status-present: var(--status-present);
   --color-status-late: var(--status-late);
   --color-status-absent: var(--status-absent);
   --color-status-excused: var(--status-excused);
   --color-status-none: var(--status-none);
+
+  /* The same four states, dark enough to be *read*. Every one of these clears
+     4.5:1 on the card surface in both themes; the vivid pair above does not
+     (the yellow was 1.7:1). Rule: `bg-status-x` / a dot uses the mark,
+     `text-status-x-fg` uses these. */
+  --color-status-present-fg: var(--status-present-fg);
+  --color-status-late-fg: var(--status-late-fg);
+  --color-status-absent-fg: var(--status-absent-fg);
+  --color-status-excused-fg: var(--status-excused-fg);
+  --color-status-none-fg: var(--status-none-fg);
+  --color-warning-fg: var(--warning-fg);
+
+  /* Translucent chrome. Weight encodes hierarchy: a bigger surface reads as
+     thicker (§ materials — heavier blur, deeper shadow). */
+  --color-material-thin: var(--material-thin);
+  --color-material-regular: var(--material-regular);
+  --color-material-thick: var(--material-thick);
+}
+
+/* Type scale — size, leading and tracking as one set.
+ *
+ * Tracking is size-specific on purpose: large text reads too loose at 0 and
+ * wants negative tracking, small text wants a touch of positive. One global
+ * `letter-spacing` is wrong at one end of the scale or the other.
+ *
+ * All of it is in rem, so the "גודל טקסט" setting in Settings (which scales the
+ * root font-size) actually moves it. The 61 hard-coded `text-[10px]`/`[11px]`
+ * labels this replaces were pixels, and so were frozen at every setting.
+ */
+@theme {
+  --text-2xs: 0.6875rem; /* 11px — the smallest size the app is allowed */
+  --text-2xs--line-height: 1.45;
+  --text-2xs--letter-spacing: 0.012em;
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.5;
+  --text-xs--letter-spacing: 0.006em;
+
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.55;
+  --text-sm--letter-spacing: 0.002em;
+
+  --text-base: 1rem;
+  --text-base--line-height: 1.6;
+  --text-base--letter-spacing: 0;
+
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.4;
+  --text-lg--letter-spacing: -0.008em;
+
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.3;
+  --text-xl--letter-spacing: -0.014em;
+
+  --text-2xl: 1.625rem;
+  --text-2xl--line-height: 1.22;
+  --text-2xl--letter-spacing: -0.018em;
+
+  --text-3xl: 2rem;
+  --text-3xl--line-height: 1.1;
+  --text-3xl--letter-spacing: -0.022em;
+
+  --text-4xl: 2.5rem;
+  --text-4xl--line-height: 1.05;
+  --text-4xl--letter-spacing: -0.026em;
+
+  --text-5xl: 3.25rem;
+  --text-5xl--line-height: 1;
+  --text-5xl--letter-spacing: -0.028em;
+
+  --text-6xl: 4rem;
+  --text-6xl--line-height: 1;
+  --text-6xl--letter-spacing: -0.03em;
+
+  --text-7xl: 4.5rem;
+  --text-7xl--line-height: 1;
+  --text-7xl--letter-spacing: -0.032em;
+
+  /* Motion. One place, so a change of feel lands everywhere at once.
+     `--ease-out-soft` is the standard outward curve; `--ease-spring` overshoots
+     a little and is only for things that were pushed (a toggle knob, a chip
+     committing) — never for something that merely appeared. */
+  --ease-out-soft: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
 }
 
 :root {
@@ -130,12 +217,26 @@
   --info: oklch(0.5 0.14 235);                /* #01579B */
   --info-foreground: oklch(0.99 0 0);
 
-  /* Attendance */
+  /* Attendance — the marks (dots, fills, heatmap cells) */
   --status-present: oklch(0.68 0.17 145);     /* #4CAF50 */
   --status-late: oklch(0.83 0.17 85);         /* #FFC107 */
   --status-absent: oklch(0.65 0.22 27);       /* #F44336 */
   --status-excused: oklch(0.65 0.16 235);     /* #2196F3 */
   --status-none: oklch(0.68 0 0);             /* #9E9E9E */
+
+  /* …and the readable text alongside them. Measured against the white card:
+     4.63, 4.65, 4.86, 4.64, 4.84 — all clear of AA. The marks above measured
+     2.70, 1.71, 3.59, 3.08 and 2.88, which is why they may not carry text. */
+  --status-present-fg: oklch(0.545 0.16 145);
+  --status-late-fg: oklch(0.565 0.12 75);
+  --status-absent-fg: oklch(0.575 0.21 27);
+  --status-excused-fg: oklch(0.555 0.105 235);
+  --status-none-fg: oklch(0.55 0.02 250);
+  --warning-fg: oklch(0.57 0.14 55);          /* --warning itself is 3.44:1 */
+
+  --material-thin: color-mix(in oklch, var(--card) 62%, transparent);
+  --material-regular: color-mix(in oklch, var(--card) 80%, transparent);
+  --material-thick: color-mix(in oklch, var(--card) 93%, transparent);
 
   --border: oklch(0.9 0.005 250);
   --input: oklch(0.9 0.005 250);
@@ -183,6 +284,19 @@
   --status-excused: oklch(0.68 0.16 235);
   --status-none: oklch(0.6 0 0);
 
+  /* Re-picked against the dark card, not flipped from the light values:
+     8.33, 8.85, 6.33, 7.76, 6.82 : 1. */
+  --status-present-fg: oklch(0.76 0.16 145);
+  --status-late-fg: oklch(0.8 0.15 75);
+  --status-absent-fg: oklch(0.72 0.17 27);
+  --status-excused-fg: oklch(0.75 0.14 235);
+  --status-none-fg: oklch(0.72 0.02 250);
+  --warning-fg: oklch(0.78 0.135 55);
+
+  --material-thin: color-mix(in oklch, var(--card) 66%, transparent);
+  --material-regular: color-mix(in oklch, var(--card) 82%, transparent);
+  --material-thick: color-mix(in oklch, var(--card) 94%, transparent);
+
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.65 0.16 252);
@@ -195,6 +309,9 @@
 
   html {
     direction: rtl;
+    /* Heebo ships optical sizing; let the browser use it. */
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
   }
 
   body {
@@ -202,6 +319,85 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings: "kern";
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Anything clickable says so. Sixty-odd hand-rolled buttons in this app used
+     to show the plain arrow cursor while the ten <Button>s showed a hand. */
+  :where(button, [role="switch"], [role="tab"], summary):not(:disabled) {
+    cursor: pointer;
+  }
+  :where(button):disabled {
+    cursor: not-allowed;
+  }
+
+  /* One keyboard-focus ring for the whole app. `:where()` carries no
+     specificity, so any component that wants its own still wins. */
+  :where(a, button, [role="switch"], [role="tab"], summary, input, select, textarea):focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────────
+   Feedback belongs on the press, not on the release, and it has to be
+   instant — the moment a control answers only after the click completes it
+   stops feeling connected to the finger. */
+@utility pressable {
+  transition:
+    transform var(--duration-fast) var(--ease-out-soft),
+    background-color var(--duration-fast) var(--ease-out-soft),
+    border-color var(--duration-fast) var(--ease-out-soft),
+    color var(--duration-fast) var(--ease-out-soft),
+    box-shadow var(--duration-fast) var(--ease-out-soft);
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* Same idea for a large surface — a full-width bar scaled to 0.97 reads as a
+   glitch, so it barely moves. */
+@utility pressable-lg {
+  transition:
+    transform var(--duration-fast) var(--ease-out-soft),
+    background-color var(--duration-fast) var(--ease-out-soft),
+    border-color var(--duration-fast) var(--ease-out-soft);
+
+  &:active:not(:disabled) {
+    transform: scale(0.99);
+  }
+}
+
+/* ── Materials ───────────────────────────────────────────────────────────
+   Translucent chrome with content passing underneath, rather than an opaque
+   strip that eats a fixed band of the window. Weight goes with size: the
+   bigger the surface, the thicker it reads. */
+@utility glass-thin {
+  background-color: var(--color-material-thin);
+  backdrop-filter: blur(12px) saturate(160%);
+}
+@utility glass-regular {
+  background-color: var(--color-material-regular);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+@utility glass-thick {
+  background-color: var(--color-material-thick);
+  backdrop-filter: blur(30px) saturate(180%);
+}
+
+/* A floating header separates itself from the content by *shading* the seam
+   once something has scrolled under it — not by a permanent 1px rule sitting
+   there over blank space. `data-scrolled` is set by AppShell. */
+@utility scroll-edge {
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--duration-base) var(--ease-out-soft),
+    box-shadow var(--duration-base) var(--ease-out-soft);
+
+  &[data-scrolled="true"] {
+    border-bottom-color: var(--color-border);
+    box-shadow: 0 6px 16px -12px oklch(0 0 0 / 0.5);
   }
 }
 
@@ -309,3 +505,62 @@ html:not(.dark)[data-bg="blush"]    { --background: oklch(0.965 0.025 15); }
 html:not(.dark)[data-bg="sand"]     { --background: oklch(0.95 0.02 75); }
 html:not(.dark)[data-bg="gray"]     { --background: oklch(0.94 0 0); }
 html:not(.dark)[data-bg="paper"]    { --background: oklch(0.98 0.005 90); }
+
+/* ── Accessibility signals ───────────────────────────────────────────────
+   Three independent OS preferences, honoured independently. Reduced motion is
+   not "no feedback" — the press response, the colour changes and the fades all
+   stay; what goes is anything that travels or overshoots. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Movement out, opacity and colour kept. */
+  .pressable:active:not(:disabled),
+  .pressable-lg:active:not(:disabled) {
+    transform: none;
+    background-color: var(--color-accent);
+  }
+
+  aside,
+  main,
+  [class*="transition-[width]"],
+  [class*="transition-[margin]"] {
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Frostier, not blurrier: raise the opacity of every material and drop the
+   blur, so nothing is read through anything. */
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  .dark {
+    --material-thin: var(--card);
+    --material-regular: var(--card);
+    --material-thick: var(--card);
+  }
+  .glass-thin,
+  .glass-regular,
+  .glass-thick {
+    backdrop-filter: none;
+  }
+}
+
+/* Near-solid surfaces with a defined edge. */
+@media (prefers-contrast: more) {
+  :root {
+    --border: oklch(0.42 0.02 250);
+    --muted-foreground: oklch(0.36 0.02 250);
+  }
+  .dark {
+    --border: oklch(0.78 0.02 250);
+    --muted-foreground: oklch(0.85 0.01 250);
+  }
+  .card-surface {
+    border-width: 2px;
+  }
+}

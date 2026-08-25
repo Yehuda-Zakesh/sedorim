@@ -1,16 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import {
-  Clock, TrendingUp, AlertTriangle, CalendarCheck, BookOpen, ChevronLeft,
+  Clock, TrendingUp, CalendarCheck, BookOpen, ChevronLeft,
   Sparkles, Bell, Flame, Target, FileDown, DatabaseBackup, Award,
 } from "lucide-react";
 import {
   useSeder, useLearning, monthlySummary, attendanceScore, currentDayStreak, todayISO, calcSeder,
+  entriesInMonth, scoreEntries,
   FRAMEWORK_LABELS, type LearningFramework,
 } from "@/lib/kollel-store";
+import { forecastMonthlyNetMissing } from "@/lib/insights";
 import { formatHebrewDate, isBeinHazmanim } from "@/lib/hebrew-calendar";
 import { useSettings } from "@/lib/settings-store";
 import { KpiCard, StatTile, IconBadge } from "@/components/ui/stat";
+
+const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -49,20 +53,61 @@ function Dashboard() {
   const learningByFw = (["kollel-erev", "torato-beyado", "bein-hazmanim"] as LearningFramework[])
     .map((fw) => ({ fw, minutes: monthLessons.filter((l) => l.framework === fw).reduce((s, l) => s + l.minutes, 0) }));
 
-  // weekly attendance score 0–100 per week (exact calcSeder)
-  const weekBars = [1, 2, 3, 4, 5].map((w) => {
-    let expected = 0, netMissing = 0;
+  // Weekly attendance score, over the month's real calendar weeks.
+  //
+  // It used to bucket by `Math.ceil(day / 7)`, which is not a week: it puts the
+  // 1st–7th together whatever weekdays those are, and always leaves a fifth
+  // "week" holding the two or three days past the 28th — a permanently stunted
+  // last bar that read as a collapse in attendance every single month. Weeks
+  // here start on Sunday and the month spans however many of them it spans.
+  const leadingBlanks = new Date(y, m, 1).getDay(); // 0 = Sunday
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const weekCount = Math.ceil((leadingBlanks + daysInMonth) / 7);
+
+  const weekBars = Array.from({ length: weekCount }, (_, w) => {
+    let expected = 0, netMissing = 0, count = 0;
+    const firstDay = Math.max(1, w * 7 - leadingBlanks + 1);
+    const lastDay = Math.min(daysInMonth, (w + 1) * 7 - leadingBlanks);
     for (const e of entries) {
-      if (!e.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`)) continue;
+      if (!e.date.startsWith(monthPrefix)) continue;
       const day = parseInt(e.date.slice(8, 10), 10);
-      if (Math.ceil(day / 7) !== w) continue;
+      if (day < firstDay || day > lastDay) continue;
       const c = calcSeder(e);
       expected += c.sederLengthMin;
       netMissing += c.netMissingMin;
+      count++;
     }
-    if (expected === 0) return 0;
-    return Math.max(0, 100 - Math.round((netMissing / expected) * 100));
+    return {
+      firstDay, lastDay, count,
+      // null, not 0 — "nothing was recorded" and "recorded, scored zero" are
+      // different answers and the chart has to be able to tell them apart.
+      score: expected === 0 ? null : Math.max(0, 100 - Math.round((netMissing / expected) * 100)),
+    };
   });
+
+  // The three facts the quick-summary card carries. Each one is something no
+  // other card on this screen states.
+  const prev = new Date(y, m - 1, 1);
+  const prevEntries = entriesInMonth(entries, prev.getFullYear(), prev.getMonth());
+  const vsLastMonth = prevEntries.length === 0 ? null : score - scoreEntries(prevEntries);
+
+  const forecast = forecastMonthlyNetMissing();
+
+  const worstWeekday = (() => {
+    const acc = WEEKDAYS.map((day) => ({ day, net: 0, count: 0 }));
+    for (const e of entries) {
+      const wd = new Date(e.date).getDay();
+      if (Number.isNaN(wd)) continue;
+      acc[wd].net += calcSeder(e).netMissingMin;
+      acc[wd].count++;
+    }
+    // Two sedarim is not a pattern; don't name a day off one bad morning.
+    const ranked = acc
+      .filter((d) => d.count >= 3)
+      .map((d) => ({ day: d.day, avg: Math.round(d.net / d.count) }))
+      .sort((a, b) => b.avg - a.avg);
+    return ranked[0]?.avg ? ranked[0] : null;
+  })();
 
   const kpis = [
     { label: "ציון נוכחות החודש", value: `${score}`, hint: `יעד ${settings.goals.monthlyTarget}`, icon: Target, tone: "primary" as const },
@@ -78,7 +123,7 @@ function Dashboard() {
   return (
     <AppShell title="לוח בקרה" subtitle={hebrewDate} actions={
       <div className="flex gap-2">
-        <Link to="/attendance" className="inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+        <Link to="/attendance" className="pressable inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
           <CalendarCheck className="size-4" /> רישום סדר
         </Link>
       </div>
@@ -90,7 +135,7 @@ function Dashboard() {
       </section>
 
       {beinHazmanim && (
-        <div className="mt-5 card-surface p-4 flex items-center gap-3 border-r-4 border-r-info">
+        <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-info">
           <IconBadge icon={BookOpen} tone="info" size="md" />
           <div className="flex-1">
             <div className="text-sm font-semibold">בין הזמנים</div>
@@ -103,13 +148,13 @@ function Dashboard() {
       )}
 
       {!hasToday && showReminders && (
-        <div className="mt-5 card-surface p-4 flex items-center gap-3 border-r-4 border-r-warning">
+        <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-warning">
           <IconBadge icon={Bell} tone="warning" size="md" />
           <div className="flex-1">
             <div className="text-sm font-semibold">לא רשמת סדר היום</div>
             <p className="text-xs text-muted-foreground mt-0.5">סמן הגעה/יציאה כדי לעקוב אחר הנוכחות.</p>
           </div>
-          <Link to="/attendance" className="text-xs text-warning hover:underline inline-flex items-center gap-1">
+          <Link to="/attendance" className="text-xs text-warning-fg hover:underline inline-flex items-center gap-1">
             לרישום <ChevronLeft className="size-3" />
           </Link>
         </div>
@@ -126,12 +171,50 @@ function Dashboard() {
           </div>
 
           <div className="mt-5">
-            <div className="text-xs text-muted-foreground mb-2">ציון נוכחות לפי שבוע</div>
-            <div className="flex items-end gap-2 h-28">
-              {weekBars.map((v, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full rounded-t-md bg-primary/80" style={{ height: `${Math.max(v, 4)}%`, opacity: v ? 1 : 0.25 }} />
-                  <span className="text-[10px] text-muted-foreground">שבוע {i + 1}</span>
+            <div className="flex items-baseline justify-between gap-2 mb-2">
+              <div className="text-xs text-muted-foreground">ציון נוכחות לפי שבוע</div>
+              <div className="text-2xs text-muted-foreground">היעד: {settings.goals.monthlyTarget}</div>
+            </div>
+            {/* The values, on their own row, so nothing sits on top of the
+                target line. */}
+            <div className="flex gap-2">
+              {weekBars.map((w, i) => (
+                <div key={i} className="flex-1 text-center text-2xs tabular-nums text-muted-foreground">
+                  {w.score === null ? "" : w.score}
+                </div>
+              ))}
+            </div>
+
+            {/* Each bar sits in its own track, so a week that scored zero still
+                shows as a measured week rather than vanishing. The old chart
+                gave every bar a 4% floor, which made a score of 0 and a score
+                of 4 exactly the same height. */}
+            <div className="relative h-24 flex items-end gap-2">
+              {/* The target, drawn where it actually falls on the scale — a
+                  solid hairline, not a dashed one: dashes read as a projection
+                  when this is a fixed threshold. */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 border-t border-foreground/25"
+                style={{ bottom: `${settings.goals.monthlyTarget}%` }}
+              />
+              {weekBars.map((w, i) => (
+                <div key={i} className="flex-1 h-full flex items-end rounded-md bg-muted/50"
+                  title={`${w.firstDay}–${w.lastDay} בחודש · ${w.score === null ? "אין רישומים" : `ציון ${w.score} מתוך 100`}`}>
+                  {w.score !== null && (
+                    <div
+                      className="w-full rounded-md bg-primary"
+                      style={{ height: `${w.score}%`, minHeight: w.score > 0 ? 2 : 0 }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-1.5 flex gap-2">
+              {weekBars.map((w, i) => (
+                <div key={i} className="flex-1 text-center text-2xs tabular-nums text-muted-foreground">
+                  {w.firstDay}–{w.lastDay}
                 </div>
               ))}
             </div>
@@ -142,15 +225,11 @@ function Dashboard() {
           <div className="card-surface p-5">
             <h2 className="text-sm font-semibold mb-3">תזכורות</h2>
             <ul className="space-y-3">
-              {!hasToday && (
-                <li className="flex gap-3">
-                  <IconBadge icon={AlertTriangle} tone="warning" size="sm" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">חסר רישום להיום</div>
-                    <div className="text-xs text-muted-foreground">סמן הגעה לסדר הנוכחי</div>
-                  </div>
-                </li>
-              )}
+              {/* "חסר רישום להיום" is deliberately not repeated here — the
+                  banner higher up this same screen already says it, with a
+                  link. The same sentence twice, three inches apart, doesn't
+                  make it twice as noticeable; it makes the list look like
+                  filler. */}
               {summary.lateCount >= settings.goals.maxLatePerMonth && (
                 <li className="flex gap-3">
                   <IconBadge icon={Clock} tone="destructive" size="sm" />
@@ -169,7 +248,7 @@ function Dashboard() {
                   </div>
                 </li>
               )}
-              {hasToday && summary.lateCount < settings.goals.maxLatePerMonth && streak < 5 && (
+              {summary.lateCount < settings.goals.maxLatePerMonth && streak < 5 && (
                 <li className="text-xs text-muted-foreground">אין תזכורות פתוחות.</li>
               )}
             </ul>
@@ -208,18 +287,37 @@ function Dashboard() {
                   לסטטיסטיקות <ChevronLeft className="size-3" />
                 </Link>
               </div>
+              {/* This card used to restate the score, the אוהבי ה׳ count and
+                  the learning minutes — all three of which are already on this
+                  screen, two of them in the KPI row at the top. A summary that
+                  summarises what is visible two inches above it is noise. It
+                  now carries the three things the screen does *not* otherwise
+                  say: where the month is heading, how it compares with the one
+                  before it, and where the time is actually being lost. */}
               <ul className="space-y-2 text-sm">
                 <li className="flex items-start gap-2">
-                  <TrendingUp className="size-4 text-success mt-0.5 shrink-0" />
-                  <span>ציון הנוכחות החודש: <b className="tabular-nums">{score}</b> מתוך 100.</span>
+                  <TrendingUp className={`size-4 mt-0.5 shrink-0 ${vsLastMonth === null || vsLastMonth >= 0 ? "text-success" : "text-destructive"}`} />
+                  <span>
+                    {vsLastMonth === null
+                      ? "אין נתונים מהחודש שעבר להשוואה."
+                      : <>מול החודש שעבר: <b className="tabular-nums">{vsLastMonth >= 0 ? "+" : ""}{vsLastMonth}</b> נקודות ציון.</>}
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Award className="size-4 text-warning mt-0.5 shrink-0" />
-                  <span>סדרים מלאים (אוהבי ה׳) החודש: <b className="tabular-nums">{summary.oheveiCount}</b>.</span>
+                  <Target className="size-4 text-info mt-0.5 shrink-0" />
+                  <span>
+                    {forecast === null
+                      ? "עוד מעט רישומים ואפשר יהיה לחזות את סוף החודש."
+                      : <>בקצב הזה החודש ייסגר על <b className="tabular-nums">{fmtMin(forecast)}</b> דקות חסרות.</>}
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <BookOpen className="size-4 text-info mt-0.5 shrink-0" />
-                  <span>לימוד נוסף החודש: <b className="tabular-nums">{learningTotalMin}</b> דקות.</span>
+                  <Clock className="size-4 text-warning-fg mt-0.5 shrink-0" />
+                  <span>
+                    {worstWeekday === null
+                      ? "אין עדיין מספיק רישומים כדי לזהות יום חלש."
+                      : <>הכי הרבה נשמט בימי <b>{worstWeekday.day}</b> — {worstWeekday.avg} דק׳ לסדר בממוצע.</>}
+                  </span>
                 </li>
               </ul>
             </div>
@@ -235,7 +333,7 @@ function Dashboard() {
                   { label: "ייצוא דוח", icon: FileDown, to: "/reports" as const },
                   { label: "גיבוי ושחזור", icon: DatabaseBackup, to: "/backup" as const },
                 ].map((a) => (
-                  <Link key={a.label} to={a.to} className="rounded-lg border border-border bg-card hover:bg-accent transition p-3 text-right">
+                  <Link key={a.label} to={a.to} className="rounded-lg border border-border bg-card hover:bg-accent pressable-lg p-3 text-start">
                     <a.icon className="size-4 text-primary mb-2" />
                     <div className="text-xs font-medium">{a.label}</div>
                   </Link>

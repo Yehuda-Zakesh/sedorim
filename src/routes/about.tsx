@@ -44,7 +44,7 @@ function AboutPage() {
               <Info className="size-7" />
             </div>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold tracking-tight">סדר פלוס</h2>
+              <h2 className="text-2xl font-bold">סדר פלוס</h2>
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                 תוכנה אישית ומקצועית לניהול הנוכחות והלימוד היומי בכולל. כל המידע נשמר מקומית במחשב שלך —
                 שקוף, פרטי ותמיד זמין. מותאמת במיוחד לאברכי כולל כתר תורה, לוח עברי ודוחות מוכנים לשליחה.
@@ -67,7 +67,7 @@ function AboutPage() {
 
         {/* Features grid */}
         <section>
-          <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <h3 className="mb-3 text-xs font-semibold text-muted-foreground">
             מה התוכנה עושה
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

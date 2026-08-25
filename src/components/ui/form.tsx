@@ -102,6 +102,19 @@ export function TimeField({
   );
 }
 
+/**
+ * The whole row is the switch, not just the 44px track beside it.
+ *
+ * Two things came out of that: the label and the control are one hit target
+ * (so a mis-aimed tap toggles rather than doing nothing), and the label is the
+ * accessible name of the switch without an id/`aria-labelledby` pair to keep in
+ * step.
+ *
+ * The knob travels on `transform`, not on `right`. Animating `right` re-lays
+ * out the row on every frame; a transform is handed to the compositor. The
+ * curve overshoots very slightly — this is a control that was *pushed*, and a
+ * physical thing that was pushed settles rather than stopping dead.
+ */
 export function Toggle({
   label, on, onChange,
 }: {
@@ -110,17 +123,29 @@ export function Toggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className="pressable-lg group flex w-full items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 text-start hover:bg-accent/40"
+    >
       <span className="text-sm">{label}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        onClick={() => onChange(!on)}
-        className={`relative h-6 w-11 rounded-full transition shrink-0 ${on ? "bg-primary" : "bg-muted"}`}
+      <span
+        aria-hidden="true"
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${on ? "bg-primary" : "bg-muted"}`}
       >
-        <span className={`absolute top-0.5 size-5 rounded-full bg-card shadow transition-all ${on ? "right-0.5" : "right-[22px]"}`} />
-      </button>
-    </div>
+        {/* The track is RTL like the rest of the app: the knob rests at the
+            inline-start edge when on, and travels 20px towards the end (which
+            is leftwards here) when off. */}
+        <span
+          className="absolute top-0.5 start-0.5 size-5 rounded-full bg-card shadow-sm"
+          style={{
+            transform: on ? "translateX(0)" : "translateX(-20px)",
+            transition: "transform 240ms var(--ease-spring)",
+          }}
+        />
+      </span>
+    </button>
   );
 }

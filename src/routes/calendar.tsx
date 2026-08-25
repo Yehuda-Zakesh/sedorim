@@ -109,7 +109,7 @@ function CalendarView() {
 
           <div className="grid grid-cols-7 gap-1.5 mb-2">
             {weekdays.map((d) => (
-              <div key={d} className="text-center text-[11px] font-medium text-muted-foreground py-1">{d}</div>
+              <div key={d} className="text-center text-2xs font-medium text-muted-foreground py-1">{d}</div>
             ))}
           </div>
 
@@ -127,7 +127,7 @@ function CalendarView() {
                   key={i}
                   onClick={() => setSelectedDate(dateStr)}
                   className={[
-                    "aspect-square rounded-lg border p-1.5 flex flex-col items-stretch text-right transition",
+                    "aspect-square rounded-lg border p-1.5 flex flex-col items-stretch text-start pressable transition",
                     isSelected ? "ring-2 ring-primary border-primary" : "border-border hover:border-primary",
                   ].join(" ")}
                   style={list.length ? {
@@ -136,7 +136,7 @@ function CalendarView() {
                   } : undefined}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-muted-foreground">{heDay}</span>
+                    <span className="text-2xs text-muted-foreground">{heDay}</span>
                     <span className={`text-xs font-semibold tabular-nums ${isToday ? "text-primary" : ""}`}>{day}</span>
                   </div>
                   {list.length > 0 && (
@@ -168,12 +168,12 @@ function CalendarView() {
                               remove(e.id);
                               toastUndo(`הרישום מ-${e.date} נמחק`, () => upsert(e));
                             }}
-                            className="text-[10px] text-destructive hover:underline">מחק</button>
+                            className="text-2xs text-destructive hover:underline">מחק</button>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
                           {e.absent ? "היעדרות" : `${e.arrival || "—"} → ${e.departure || "—"}`}
                         </div>
-                        <div className="text-[11px] text-muted-foreground mt-1">
+                        <div className="text-2xs text-muted-foreground mt-1">
                           חסר {c.netMissingMin} · בונוס {c.bonusMin}{c.isOhevei && " · אוהבי ה׳"}
                         </div>
                       </li>

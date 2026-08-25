@@ -28,7 +28,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center" dir="rtl">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">הדף הזה לא נטען</h1>
+        <h1 className="text-xl font-semibold text-foreground">הדף הזה לא נטען</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           משהו נכשל. אפשר לנסות שוב או לחזור לדף הבית.
         </p>

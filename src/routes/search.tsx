@@ -92,10 +92,10 @@ function SearchPage() {
   return (
     <AppShell title="חיפוש מתקדם" subtitle="חיפוש בכל הנתונים האישיים שלך">
       <div className="card-surface p-4 relative mb-4">
-        <SearchIcon className="absolute right-7 top-7 size-5 text-muted-foreground" />
+        <SearchIcon className="absolute start-7 top-7 size-5 text-muted-foreground" />
         <input autoFocus value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })}
           placeholder="חיפוש לפי מילה, תאריך, סיבה, הערה..."
-          className="w-full rounded-md bg-transparent pr-10 pl-3 py-2 text-base focus:outline-none border-b border-border" />
+          className="w-full rounded-md bg-transparent ps-10 pe-3 py-2 text-base focus:outline-none border-b border-border" />
 
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as Filter["type"] })}
@@ -120,7 +120,7 @@ function SearchPage() {
         </div>
 
         {f.tag && f.type === "all" && (
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="mt-2 text-2xs text-muted-foreground">
             סינון לפי תגית חל על רישומי סדרים בלבד — רישומי לימוד אינם נושאים תגיות ולכן אינם מוצגים.
           </p>
         )}
@@ -154,7 +154,7 @@ function SearchPage() {
       <div className="card-surface divide-y divide-border">
         {results.map((r) => (
           <Link key={r.key} to={r.kind === "seder" ? "/history" : "/learning"}
-            className="flex items-center gap-3 p-4 hover:bg-accent/40 transition">
+            className="flex items-center gap-3 p-4 hover:bg-accent/40 pressable transition">
             <div className="size-10 rounded-lg bg-primary/10 text-primary grid place-items-center">
               {r.kind === "seder" ? <Calendar className="size-5" /> : <BookOpen className="size-5" />}
             </div>

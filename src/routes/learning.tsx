@@ -106,7 +106,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
   if (!enabled) {
     return (
       <div className="card-surface p-6 text-center text-sm text-muted-foreground">
-        <AlertTriangle className="size-5 mx-auto mb-2 text-warning" />
+        <AlertTriangle className="size-5 mx-auto mb-2 text-warning-fg" />
         מסגרת זו זמינה רק בתקופת בין הזמנים (אב מי׳ ואילך, תשרי מי״א ואילך, ניסן).
       </div>
     );
@@ -117,7 +117,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
       <div className="card-surface p-5 lg:col-span-2 space-y-4">
         {isMine && (
           <div className="rounded-lg border-2 border-warning bg-warning/5 p-4">
-            <div className="flex items-center gap-2 text-warning text-xs font-medium mb-2">
+            <div className="flex items-center gap-2 text-warning-fg text-xs font-medium mb-2">
               <AlertTriangle className="size-4" />
               אל תסגור את האפליקציה — סגירה תעצור את הטיימר
             </div>
@@ -125,12 +125,12 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
               {String(elapsedMin).padStart(2, "0")}:{String(elapsedSec).padStart(2, "0")}
             </div>
             {timer!.limitMinutes !== undefined && (
-              <div className="mt-1 text-[11px] text-muted-foreground">
+              <div className="mt-1 text-2xs text-muted-foreground">
                 מוגבל ל־{timer!.limitMinutes} דק׳ · נותרו {Math.max(0, timer!.limitMinutes - elapsedMin)} דק׳
               </div>
             )}
             {timer!.tanitDibur && (
-              <div className="mt-1 text-[11px] text-primary font-medium flex items-center gap-1">
+              <div className="mt-1 text-2xs text-primary font-medium flex items-center gap-1">
                 <MicOff className="size-3" /> תענית דיבור — הזמן ייספר כפול בסיכום
               </div>
             )}
@@ -182,7 +182,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
                 הגבל את הטיימר לפרק זמן
               </label>
               {limitOn && (
-                <div className="flex items-center gap-2 pr-6">
+                <div className="flex items-center gap-2 pe-6">
                   <input type="number" min={1} value={limitMin}
                     onChange={(e) => setLimitMin(Math.max(1, +e.target.value || 1))}
                     className="field-input w-24" />
@@ -210,7 +210,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
         <div className="text-3xl font-bold tabular-nums mt-1">{(effectiveTotalMin / 60).toFixed(1)} <span className="text-sm text-muted-foreground">שע׳</span></div>
         <div className="text-xs text-muted-foreground mt-1">{effectiveTotalMin} דקות · {fwItems.length} רישומים</div>
         {tanitMin > 0 && (
-          <div className="mt-2 rounded-md bg-primary/5 border border-primary/20 p-2 text-[11px] text-primary flex items-start gap-1.5">
+          <div className="mt-2 rounded-md bg-primary/5 border border-primary/20 p-2 text-2xs text-primary flex items-start gap-1.5">
             <MicOff className="size-3 mt-0.5 shrink-0" />
             <span>נלמדו {tanitMin} דק׳ בתענית דיבור · נחשב כ־{tanitMin * 2} דק׳</span>
           </div>
@@ -247,9 +247,9 @@ function LearningPage() {
       <div className="card-surface p-1 mb-4 inline-flex gap-1">
         {FRAMEWORKS.map((fw) => (
           <button key={fw} onClick={() => setActive(fw)}
-            className={`px-4 py-2 rounded-md text-sm transition ${active === fw ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"}`}>
+            className={`px-4 py-2 rounded-md text-sm pressable transition ${active === fw ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground"}`}>
             {FRAMEWORK_LABELS[fw]}
-            {fw === "bein-hazmanim" && !beinHaz && <span className="mr-1 text-[10px] opacity-60">(לא בעונה)</span>}
+            {fw === "bein-hazmanim" && !beinHaz && <span className="ms-1 text-2xs opacity-60">(לא בעונה)</span>}
           </button>
         ))}
       </div>
@@ -260,7 +260,7 @@ function LearningPage() {
           — lives in History. This screen is for *logging* time, so it links
           there rather than carrying a second, weaker copy of the same table. */}
       <Link to="/history"
-        className="card-surface mt-4 p-4 flex items-center gap-3 hover:border-primary transition">
+        className="card-surface mt-4 p-4 flex items-center gap-3 hover:border-primary pressable-lg">
         <IconBadge icon={BookOpen} size="md" />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold">כל רישומי הלימוד</div>

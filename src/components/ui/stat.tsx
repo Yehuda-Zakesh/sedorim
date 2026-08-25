@@ -10,7 +10,7 @@ export type Tone = "primary" | "success" | "warning" | "info" | "destructive";
 const TONE_CLASSES: Record<Tone, string> = {
   primary: "bg-primary/10 text-primary",
   success: "bg-success/10 text-success",
-  warning: "bg-warning/10 text-warning",
+  warning: "bg-warning/10 text-warning-fg",
   info: "bg-info/10 text-info",
   destructive: "bg-destructive/10 text-destructive",
 };
@@ -72,16 +72,19 @@ export function KpiCard({
         <div className="min-w-0">
           <div className="text-xs font-medium text-muted-foreground">{label}</div>
           {/* Long values (a Hebrew month name, say) would otherwise blow the
-              card open at the 3xl size. */}
+              card open at the 3xl size — so they step down a rung of the type
+              scale rather than to a one-off pixel value, and keep the tracking
+              and leading that belong to the size they land on.
+              No `tabular-nums`: equal-width digits read loose at display size,
+              and nothing here lines up in a column. */}
           <div
-            className="mt-2 text-3xl font-bold tracking-tight tabular-nums leading-tight break-words"
-            style={value.length > 8 ? { fontSize: "1.25rem" } : undefined}
+            className={`mt-2 font-bold break-words ${value.length > 8 ? "text-xl" : "text-3xl"}`}
           >
             {value}
           </div>
-          {hint && <div className="mt-1 text-[11px] text-muted-foreground">{hint}</div>}
+          {hint && <div className="mt-1 text-2xs text-muted-foreground">{hint}</div>}
           {trend && (
-            <div className={`mt-1 text-[11px] inline-flex items-center gap-1 ${trend.up ? "text-success" : "text-destructive"}`}>
+            <div className={`mt-1 text-2xs inline-flex items-center gap-1 ${trend.up ? "text-success" : "text-destructive"}`}>
               {trend.up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />} {trend.text}
             </div>
           )}
@@ -108,8 +111,8 @@ export function StatTile({
         {dot && <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />}
         <span className="text-xs text-muted-foreground truncate">{label}</span>
       </div>
-      <div className="mt-2 text-2xl font-bold tabular-nums">{value}</div>
-      {hint && <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>}
+      <div className="mt-2 text-2xl font-bold">{value}</div>
+      {hint && <div className="text-2xs text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }

@@ -104,19 +104,19 @@ function BackupView() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-        <button onClick={exportData} className="card-surface p-6 text-right hover:border-primary transition">
+        <button onClick={exportData} className="card-surface p-6 text-start hover:border-primary pressable-lg">
           <Download className="size-6 text-primary mb-3" />
           <div className="text-sm font-semibold">ייצוא גיבוי</div>
           <div className="text-xs text-muted-foreground mt-1">הורדת קובץ JSON</div>
         </button>
-        <button onClick={() => fileRef.current?.click()} className="card-surface p-6 text-right hover:border-primary transition">
+        <button onClick={() => fileRef.current?.click()} className="card-surface p-6 text-start hover:border-primary pressable-lg">
           <Upload className="size-6 text-primary mb-3" />
           <div className="text-sm font-semibold">שחזור מקובץ</div>
           <div className="text-xs text-muted-foreground mt-1">העלאת קובץ גיבוי</div>
           <input ref={fileRef} type="file" accept="application/json" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImport(f); e.target.value = ""; }} />
         </button>
-        <button onClick={snapshotNow} className="card-surface p-6 text-right hover:border-primary transition">
+        <button onClick={snapshotNow} className="card-surface p-6 text-start hover:border-primary pressable-lg">
           <RotateCcw className="size-6 text-primary mb-3" />
           <div className="text-sm font-semibold">תמונת מצב</div>
           <div className="text-xs text-muted-foreground mt-1">שמירה מקומית מהירה</div>
@@ -139,7 +139,7 @@ function BackupView() {
                   <IconBadge icon={valid ? CheckCircle2 : ShieldAlert} tone={valid ? "success" : "destructive"} size="md" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium tabular-nums">{formatTs(s.ts)}</div>
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="text-2xs text-muted-foreground">
                       {s.trigger === "auto" ? "אוטומטי" : s.trigger === "before-op" ? "לפני פעולה" : "ידני"} · {formatSize(s.size)}
                     </div>
                   </div>
@@ -155,7 +155,7 @@ function BackupView() {
         ) : <div className="py-8 text-center text-sm text-muted-foreground">אין עדיין תמונות מצב</div>}
       </div>
 
-      <div className="card-surface p-5 border-r-4 border-r-destructive">
+      <div className="card-surface p-5 border-s-4 border-s-destructive">
         <div className="flex items-center gap-2 mb-3">
           <AlertTriangle className="size-4 text-destructive" />
           <h2 className="text-sm font-semibold">פעולות הרסניות</h2>
@@ -172,7 +172,7 @@ function BackupView() {
               <button onClick={() => setConfirmDelete(false)} className="rounded-md border border-border px-3 py-1.5 text-xs">בטל</button>
             </div>
           )}
-          <p className="mt-3 text-[11px] text-muted-foreground">
+          <p className="mt-3 text-2xs text-muted-foreground">
             לאיפוס ההגדרות (שעות סדרים, יעדים והעדפות) — מסך ההגדרות.
           </p>
         </div>
