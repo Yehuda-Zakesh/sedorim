@@ -429,7 +429,7 @@ describe("exportPdfReport", () => {
   });
 
   it("names the report after the profile it was saved under", async () => {
-    updateSettings({ profile: { name: "יהודה", classroom: "כתר תורה" } });
+    updateSettings({ profile: { name: "אברהם", classroom: "כתר תורה" } });
     expect(await exportPdfReport(base)).toBe(true);
     expect(asLatin1(lastSaved().bytes.subarray(0, 5))).toBe("%PDF-");
   });

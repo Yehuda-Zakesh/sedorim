@@ -124,7 +124,7 @@ export function AppShell({ title, subtitle, actions, children }: {
         </header>
         <main className="flex-1 p-6">{children}</main>
         <footer className="border-t border-border glass-thin px-6 py-3 text-center text-2xs text-muted-foreground">
-          התוכנה נוצרה ע"י יהודה זקש · כל הזכויות לא שמורות · גרסה {APP_VERSION}
+          סדר פלוס · כל הזכויות לא שמורות · גרסה {APP_VERSION}
         </footer>
       </div>
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />

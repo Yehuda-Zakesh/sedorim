@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn a_github_release_asset_is_accepted() {
         for url in [
-            "https://github.com/Yehuda-Zakesh/sedorim/releases/download/v2/SederPlusSetup.exe",
+            "https://github.com/seder-plus/sedorim/releases/download/v2/SederPlusSetup.exe",
             "https://objects.githubusercontent.com/github-production-release-asset/1/2/SederPlusSetup.exe?token=abc",
         ] {
             assert!(validate_installer_url(url).is_ok(), "{url} should be accepted");

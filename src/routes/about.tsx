@@ -97,17 +97,17 @@ function AboutPage() {
           </p>
         </section>
 
-        {/* Credit */}
+        {/* License */}
         <section className="rounded-2xl border border-border bg-card p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2 text-primary">
             <HeartHandshake className="size-5" />
-            <h3 className="text-base font-semibold">קרדיט</h3>
+            <h3 className="text-base font-semibold">שימוש חופשי</h3>
           </div>
           <p className="text-sm text-muted-foreground">
-            התוכנה נוצרה ע"י <span className="font-semibold text-foreground">יהודה זקש</span>
+            כל הזכויות לא שמורות — מותר להעביר, להתקין ולהשתמש בחופשיות.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            כל הזכויות לא שמורות · שימוש חופשי · גרסה {APP_VERSION}
+            גרסה {APP_VERSION}
           </p>
         </section>
       </div>

@@ -97,8 +97,8 @@ describe("DEFAULT_SETTINGS", () => {
 
 describe("updateSettings", () => {
   it("applies a nested patch", () => {
-    updateSettings({ profile: { name: "יהודה", classroom: "ג׳" } });
-    expect(getSettings().profile).toEqual({ name: "יהודה", classroom: "ג׳" });
+    updateSettings({ profile: { name: "אברהם", classroom: "ג׳" } });
+    expect(getSettings().profile).toEqual({ name: "אברהם", classroom: "ג׳" });
   });
 
   it("leaves the siblings of a partially-patched branch alone", () => {

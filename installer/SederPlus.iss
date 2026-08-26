@@ -23,7 +23,7 @@
 #define AppName "סדר פלוס"
 #define AppExe "SederPlus.exe"
 #define QuickExe "SederPlusQuick.exe"
-#define Publisher "יהודה זקש"
+#define Publisher "סדר פלוס"
 
 #ifndef AppVersion
   #define AppVersion "1.0.0"

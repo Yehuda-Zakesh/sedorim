@@ -415,7 +415,7 @@ function QuickApp() {
       </main>
 
       <footer className="border-t border-border bg-card px-6 py-2 text-center text-2xs text-muted-foreground">
-        התוכנה נוצרה ע"י יהודה זקש · כניסה מהירה
+        סדר פלוס · כניסה מהירה
       </footer>
 
       <ExcusedDialog
