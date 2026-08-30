@@ -45,11 +45,16 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
   // src/lib/kollel-store.ts), so it keeps running with the app shut and is
   // still there, still counting, when it is opened again.
 
+  const tanitOn = fw === "kollel-erev" && tanitDibur;
+
   const addManual = () => {
     if (!enabled) return;
     try {
-      add({ id: newId(), framework: fw, date: todayISO(), minutes, source: "manual" });
-      toast.success("נוסף");
+      add({
+        id: newId(), framework: fw, date: todayISO(), minutes, source: "manual",
+        ...(tanitOn ? { tanitDibur: true } : {}),
+      });
+      toast.success(tanitOn ? `נוסף (בתענית דיבור — נחשב ${minutes * 2} דק׳)` : "נוסף");
     } catch (e) { toast.error(e instanceof Error ? e.message : "שגיאה"); }
   };
 
@@ -58,8 +63,11 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
     const a = hhmmToMin(fromT), b = hhmmToMin(toT);
     if (a === null || b === null || b <= a) { toast.error("טווח שעות לא תקין"); return; }
     try {
-      add({ id: newId(), framework: fw, date: todayISO(), minutes: b - a, source: "range" });
-      toast.success("נוסף");
+      add({
+        id: newId(), framework: fw, date: todayISO(), minutes: b - a, source: "range",
+        ...(tanitOn ? { tanitDibur: true } : {}),
+      });
+      toast.success(tanitOn ? `נוסף (בתענית דיבור — נחשב ${(b - a) * 2} דק׳)` : "נוסף");
     } catch (e) { toast.error(e instanceof Error ? e.message : "שגיאה"); }
   };
 
@@ -181,6 +189,14 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
           </div>
         )}
 
+        {fw === "kollel-erev" && (
+          <label className="flex items-center gap-2 text-xs cursor-pointer rounded-lg border border-border p-3">
+            <input type="checkbox" checked={tanitDibur} onChange={(e) => setTanitDibur(e.target.checked)} />
+            <MicOff className="size-3.5" />
+            לימוד בבית בתענית דיבור <span className="text-muted-foreground">(כל דקה נחשבת כפול בסיכום — חל על הוספה ידנית, לפי טווח שעות וטיימר)</span>
+          </label>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="rounded-lg border border-border p-3">
             <div className="text-xs text-muted-foreground mb-2">הוספה ידנית</div>
@@ -224,13 +240,6 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
                     className="field-input w-24" />
                   <span className="text-xs text-muted-foreground">דקות · הטיימר ייעצר וישמר אוטומטית</span>
                 </div>
-              )}
-              {fw === "kollel-erev" && (
-                <label className="flex items-center gap-2 text-xs cursor-pointer pt-1 border-t border-border/50">
-                  <input type="checkbox" checked={tanitDibur} onChange={(e) => setTanitDibur(e.target.checked)} />
-                  <MicOff className="size-3.5" />
-                  לימוד בבית בתענית דיבור <span className="text-muted-foreground">(כל דקה נחשבת כפול בסיכום)</span>
-                </label>
               )}
             </div>
             <button onClick={onStartTimer} disabled={!!timer}
