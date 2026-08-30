@@ -277,6 +277,15 @@ describe("calcStipend — §1/§2, the 500-minute line", () => {
     expect(r.missing.net).toBe(0);
     expect(r.shortfallBonusNis).toBe(0);
   });
+
+  it("prorates the 150 ₪ bonus itself in a partial month", () => {
+    const r = run({
+      entries: [late(july(1), 30)],
+      sessionDays: 11,
+      fullMonthDays: 22,
+    });
+    expect(r.shortfallBonusNis).toBe(75);   // round(150 × 11/22)
+  });
 });
 
 describe("calcStipend — §3, excused minutes", () => {

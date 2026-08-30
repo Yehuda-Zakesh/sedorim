@@ -16,8 +16,9 @@
 //
 // One thing runs through all of it — see `proportionalRatio` below: the
 // thresholds and the tier boundaries are written for a full month, so a month
-// the kollel sat fewer days scales every one of them down. The stipend itself
-// never scales; it always starts from 2000 ₪.
+// the kollel sat fewer days scales every one of them down, and the same goes
+// for the 150 ₪ bonus itself. The base of 2000 ₪ is the one figure that never
+// scales.
 import {
   effectiveLearningMin, summarizeEntries,
   type LearningEntry, type SederEntry,
@@ -252,8 +253,12 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
   const deductionNis = Math.round(charges.reduce((sum, c) => sum + c.nis, 0));
 
   // §2 — measured against everything that was missed, excused included, and
-  // against the same scaled threshold as §1.
-  const shortfallBonusNis = s.totalMissing < scaled.freeMissingMin ? p.shortfallBonusNis : 0;
+  // against the same scaled threshold as §1. Unlike the base, the bonus
+  // itself is prorated too: a partial month gets its proportional share of
+  // the 150 ₪, not the full sum.
+  const shortfallBonusNis = s.totalMissing < scaled.freeMissingMin
+    ? Math.round(p.shortfallBonusNis * ratio)
+    : 0;
 
   const oheveiNis = s.oheveiCount * p.oheveiNisPerSeder;
   const shasCount = shasChavura ? s.shasCount : 0;
