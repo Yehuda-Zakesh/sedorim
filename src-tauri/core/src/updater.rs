@@ -91,7 +91,10 @@ pub fn download_and_start(url: &str) -> Result<PathBuf, String> {
         return Err("קובץ ההתקנה שהתקבל אינו תקין".to_string());
     }
 
-    logfile::append("info", &format!("מתקין עדכון מתוך {url}"));
+    // What the log says is that an update is being installed, and no more:
+    // Settings shows this file on screen (יומן תקלות), and the address the
+    // installer came from is an implementation detail with no reader.
+    logfile::append("info", "מתקין עדכון");
 
     // Inno Setup switches: a progress window and nothing to answer,
     // /CLOSEAPPLICATIONS so files in use are handled, and no reboot prompt.

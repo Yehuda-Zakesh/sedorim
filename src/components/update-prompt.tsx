@@ -43,12 +43,10 @@ export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () 
               חדשה: {info.latest}
             </span>
           </div>
-          {info.release.name && <div className="font-medium">{info.release.name}</div>}
-          {info.release.body && (
-            <div className="max-h-48 overflow-auto rounded-md border border-border bg-muted/40 p-3 text-xs whitespace-pre-wrap text-muted-foreground">
-              {info.release.body}
-            </div>
-          )}
+          {/* The release notes used to be printed here verbatim. They are
+              written for a repository, not for this dialog, and they carry
+              links — so the dialog says the one thing it exists to say: there
+              is a new version, and here is the button that installs it. */}
           <p className="text-xs text-muted-foreground">
             {info.canInstall
               ? "לעדכן עכשיו? הקובץ יורד, התוכנה נסגרת ונפתחת מחדש בגרסה החדשה. אפשר גם לעדכן בפעם הבאה."
