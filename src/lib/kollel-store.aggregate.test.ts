@@ -188,6 +188,7 @@ describe("summarizeEntries", () => {
     absenceCount: 0,
     earlyDepCount: 0,
     oheveiCount: 0,
+    shasCount: 0,
     entries: 0,
     netMissing: 0,
   };
@@ -736,5 +737,33 @@ describe("currentDayStreak", () => {
     // window are skipped rather than counted.
     expect(streak).toBeGreaterThan(200);
     expect(streak).toBeLessThanOrEqual(366);
+  });
+});
+
+// ============================================================================
+// summarizeEntries — חבורת ש"ס
+// ============================================================================
+
+describe("summarizeEntries — shasCount", () => {
+  const shasSeder = (id: string, date: string, arrival: string) =>
+    entry({ id, date, seder: 2, arrival, departure: s2End });
+
+  it("counts every seder ב׳ arrived at by the deadline", () => {
+    const s = summarizeEntries([
+      shasSeder("a", "2026-07-06", "14:40"),
+      shasSeder("b", "2026-07-07", "15:00"),
+      shasSeder("c", "2026-07-08", "15:20"),
+    ]);
+    expect(s.shasCount).toBe(2);
+  });
+
+  it("is zero for a month of seder א׳ only", () => {
+    expect(summarizeEntries([late("2026-07-01", 30), perfect("2026-07-02")]).shasCount).toBe(0);
+  });
+
+  it("counts independently of אוהבי ה׳", () => {
+    const s = summarizeEntries([shasSeder("a", "2026-07-06", "14:00")]);
+    expect(s.shasCount).toBe(1);
+    expect(s.oheveiCount).toBe(0);
   });
 });

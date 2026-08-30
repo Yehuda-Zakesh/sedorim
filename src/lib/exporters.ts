@@ -11,7 +11,7 @@ import {
   calcSeder, summarizeEntries, scoreEntries, effectiveLearningMin, FRAMEWORK_LABELS,
 } from "./kollel-store";
 import { formatHebrewDate, hebrewDayLetters, hebrewFromGregorian, hebrewMonthName } from "./hebrew-calendar";
-import { getSettings } from "./settings-store";
+import { getSettings, SHAS_ARRIVAL_DEADLINE } from "./settings-store";
 import { colorThemeHex } from "./theme-colors";
 import { RtlPdf } from "./pdf-doc";
 import { logProblem } from "./diagnostics";
@@ -33,6 +33,17 @@ export const DEFAULT_SECTIONS: ReportSections = {
 
 /** How many rows of each detail table a report will carry. */
 const ROW_CAPS = { seder: 400, excused: 120, ohevei: 120, learning: 200 };
+
+/**
+ * Whether to carry the חבורת ש"ס figures into a report at all.
+ *
+ * To someone not in the חבורה the count is a column of numbers that mean
+ * nothing, so it is left out of the document entirely rather than printed and
+ * ignored.
+ */
+function shasEnabled(): boolean {
+  return getSettings().seder.shasChavura === true;
+}
 
 const GREGORIAN_MONTHS_HE = [
   "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
@@ -132,6 +143,7 @@ function writeKpis(pdf: RtlPdf, s: MonthlySummary, learn: LearningTotals, score:
     { label: "מספר איחורים", value: s.lateCount },
     { label: "מספר היעדרויות", value: s.absenceCount },
     { label: "סדרי אוהבי ה׳", value: s.oheveiCount },
+    ...(shasEnabled() ? [{ label: `חבורת ש״ס — הגעות עד ${SHAS_ARRIVAL_DEADLINE}`, value: s.shasCount }] : []),
   ]);
   pdf.note(
     `${s.entries} רישומי סדר · יציאה מוקדמת ${s.earlyDepCount} · ` +
@@ -151,8 +163,9 @@ function writeBars(pdf: RtlPdf, s: MonthlySummary) {
 
 function writeMonthlyBreakdown(pdf: RtlPdf, byMonth: Map<string, SederEntry[]>, lessons: LearningEntry[]) {
   pdf.section("סיכום לפי חודש");
+  const shas = shasEnabled();
   const rows: (string | number)[][] = [];
-  const totals = { entries: 0, late: 0, absent: 0, net: 0, bonus: 0, ohevei: 0, learn: 0 };
+  const totals = { entries: 0, late: 0, absent: 0, net: 0, bonus: 0, ohevei: 0, shas: 0, learn: 0 };
 
   for (const [monthKey, entries] of byMonth) {
     const s = summarizeEntries(entries);
@@ -160,10 +173,13 @@ function writeMonthlyBreakdown(pdf: RtlPdf, byMonth: Map<string, SederEntry[]>, 
       .reduce((sum, l) => sum + effectiveLearningMin(l), 0);
     rows.push([
       monthLabel(monthKey), s.entries, s.lateCount, s.absenceCount,
-      s.netMissing, s.bonus, s.oheveiCount, learn, scoreEntries(entries),
+      s.netMissing, s.bonus, s.oheveiCount,
+      ...(shas ? [s.shasCount] : []),
+      learn, scoreEntries(entries),
     ]);
     totals.entries += s.entries; totals.late += s.lateCount; totals.absent += s.absenceCount;
-    totals.net += s.netMissing; totals.bonus += s.bonus; totals.ohevei += s.oheveiCount; totals.learn += learn;
+    totals.net += s.netMissing; totals.bonus += s.bonus; totals.ohevei += s.oheveiCount;
+    totals.shas += s.shasCount; totals.learn += learn;
   }
 
   pdf.table({
@@ -175,13 +191,16 @@ function writeMonthlyBreakdown(pdf: RtlPdf, byMonth: Map<string, SederEntry[]>, 
       { header: "חסר נטו (דק׳)", width: 1.05 },
       { header: "בונוס (דק׳)", width: 1 },
       { header: "אוהבי ה׳", width: 1 },
+      ...(shas ? [{ header: "חבורת ש״ס", width: 1 }] : []),
       { header: "לימוד נוסף (דק׳)", width: 1.15 },
       { header: "ציון", width: 0.8 },
     ],
     rows,
     total: rows.length > 1
       ? [`סה״כ (${rows.length} חודשים)`, totals.entries, totals.late, totals.absent,
-         totals.net, totals.bonus, totals.ohevei, totals.learn, ""]
+         totals.net, totals.bonus, totals.ohevei,
+         ...(shas ? [totals.shas] : []),
+         totals.learn, ""]
       : undefined,
     emptyText: "אין רישומים בטווח שנבחר",
   });
@@ -360,7 +379,7 @@ export async function exportPdfReport(opts: {
 
 // ---- monthly closing lines --------------------------------------------------
 
-function closingRow(c: MonthClosing): (string | number)[] {
+function closingRow(c: MonthClosing, shas: boolean): (string | number)[] {
   return [
     `${c.gregorianLabel}${c.closed ? "" : " (פתוח)"}`,
     c.hebrewLabel,
@@ -370,6 +389,7 @@ function closingRow(c: MonthClosing): (string | number)[] {
     c.seder.bonus,
     c.seder.netMissing,
     c.seder.oheveiCount,
+    ...(shas ? [c.seder.shasCount] : []),
     c.seder.lateCount,
     c.seder.absenceCount,
     c.learning.kollelErev,
@@ -415,6 +435,7 @@ export async function exportMonthClosingsPdf(opts: {
         { label: "מספר איחורים", value: c.seder.lateCount },
         { label: "מספר היעדרויות", value: c.seder.absenceCount },
         { label: "סדרי אוהבי ה׳", value: c.seder.oheveiCount },
+        ...(shasEnabled() ? [{ label: `חבורת ש״ס — הגעות עד ${SHAS_ARRIVAL_DEADLINE}`, value: c.seder.shasCount }] : []),
         { label: "רישומי סדר", value: c.seder.entries },
       ]);
       pdf.section("לימוד נוסף בחודש");
@@ -428,6 +449,7 @@ export async function exportMonthClosingsPdf(opts: {
         pdf.note("לימוד בבית בתענית דיבור נספר כפול בסיכום.");
       }
     } else {
+      const shas = shasEnabled();
       const t = closings.reduce((a, c) => ({
         entries: a.entries + c.seder.entries,
         totalMissing: a.totalMissing + c.seder.totalMissing,
@@ -435,11 +457,12 @@ export async function exportMonthClosingsPdf(opts: {
         bonus: a.bonus + c.seder.bonus,
         net: a.net + c.seder.netMissing,
         ohevei: a.ohevei + c.seder.oheveiCount,
+        shas: a.shas + c.seder.shasCount,
         late: a.late + c.seder.lateCount,
         absent: a.absent + c.seder.absenceCount,
         erev: a.erev + c.learning.kollelErev,
         torato: a.torato + c.learning.toratoBeyado,
-      }), { entries: 0, totalMissing: 0, excused: 0, bonus: 0, net: 0, ohevei: 0, late: 0, absent: 0, erev: 0, torato: 0 });
+      }), { entries: 0, totalMissing: 0, excused: 0, bonus: 0, net: 0, ohevei: 0, shas: 0, late: 0, absent: 0, erev: 0, torato: 0 });
 
       pdf.table({
         compact: true,
@@ -452,14 +475,16 @@ export async function exportMonthClosingsPdf(opts: {
           { header: "בונוס", width: 0.85 },
           { header: "חסר נטו", width: 0.95 },
           { header: "אוהבי ה׳", width: 0.95 },
+          ...(shas ? [{ header: "חבורת ש״ס", width: 1 }] : []),
           { header: "איחורים", width: 0.95 },
           { header: "היעדרויות", width: 1 },
           { header: "כולל ערב", width: 1 },
           { header: "תורתו בידו", width: 1.05 },
         ],
-        rows: closings.map(closingRow),
+        rows: closings.map((c) => closingRow(c, shas)),
         total: [`סה״כ (${closings.length} חודשים)`, "", t.entries, t.totalMissing, t.excused,
-                t.bonus, t.net, t.ohevei, t.late, t.absent, t.erev, t.torato],
+                t.bonus, t.net, t.ohevei, ...(shas ? [t.shas] : []),
+                t.late, t.absent, t.erev, t.torato],
       });
       pdf.note("דקות כולל ערב ותורתו בידו — דקות אפקטיביות, כאשר לימוד בתענית דיבור נספר כפול.");
     }
@@ -483,6 +508,7 @@ export async function exportXlsxWorkbook(opts: {
   try {
     const wb = XLSX.utils.book_new();
     wb.Workbook = { Views: [{ RTL: true }] };
+    const shas = shasEnabled();
 
     const sederRows = entries.map((e) => {
       const c = calcSeder(e);
@@ -499,15 +525,20 @@ export async function exportXlsxWorkbook(opts: {
         "מוצדק": c.excusedMin,
         "חסר נטו": c.netMissingMin,
         "אוהבי ה׳": c.isOhevei ? "כן" : "",
+        ...(shas ? { "חבורת ש״ס": c.isShasArrival ? "כן" : "" } : {}),
         "סיבה": e.excusedReason || "",
         "תגיות": (e.tags || []).join(", "),
         "הערה": e.note || "",
       };
     });
     const wsSed = XLSX.utils.json_to_sheet(sederRows);
+    // Positional — must track the key order of `sederRows` above, including
+    // the optional חבורת ש"ס column.
     wsSed["!cols"] = [
       { wch: 12 }, { wch: 5 }, { wch: 16 }, { wch: 6 }, { wch: 7 }, { wch: 7 }, { wch: 8 },
-      { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 9 }, { wch: 18 }, { wch: 16 }, { wch: 24 },
+      { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 9 },
+      ...(shas ? [{ wch: 11 }] : []),
+      { wch: 18 }, { wch: 16 }, { wch: 24 },
     ];
     XLSX.utils.book_append_sheet(wb, wsSed, "סדרים");
 
@@ -541,6 +572,7 @@ export async function exportXlsxWorkbook(opts: {
         "בונוס": s.bonus,
         "חסר נטו": s.netMissing,
         "אוהבי ה׳": s.oheveiCount,
+        ...(shas ? { "חבורת ש״ס": s.shasCount } : {}),
         "לימוד נוסף": learn,
         "ציון": scoreEntries(list),
       };

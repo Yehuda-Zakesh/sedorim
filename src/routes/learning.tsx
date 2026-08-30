@@ -1,13 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { Plus, Play, Square, AlertTriangle, BookOpen, Timer, MicOff, ChevronLeft } from "lucide-react";
+import { Plus, Play, Pause, Square, AlertTriangle, BookOpen, Timer, MicOff, ChevronLeft, Info } from "lucide-react";
 import {
   useLearning, todayISO, newId, FRAMEWORK_LABELS, hhmmToMin, effectiveLearningMin,
-  useTimer, startTimer, stopTimer, cancelTimer,
+  useTimer, startTimer, stopTimer, cancelTimer, pauseTimer, resumeTimer,
+  timerElapsedMs, isTimerPaused,
   type LearningFramework,
 } from "@/lib/kollel-store";
 import { isBeinHazmanim } from "@/lib/hebrew-calendar";
+import { currentMonthKey, monthKeyLabel } from "@/lib/month-nav";
 import { IconBadge } from "@/components/ui/stat";
 import { toast } from "sonner";
 
@@ -29,18 +31,19 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
   const timer = useTimer();
   const [now, setNow] = useState(Date.now());
 
+  // Nothing to tick while the timer is paused — the reading is frozen.
   useEffect(() => {
-    if (!timer) return;
+    if (!timer || isTimerPaused(timer)) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [timer]);
 
-  useEffect(() => {
-    if (!timer) return;
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [timer]);
+  // There is deliberately no `beforeunload` guard here any more. It existed to
+  // stop the user closing the window mid-session, on the belief that closing
+  // the app would lose the timer — which was never true. The session is a pair
+  // of timestamps in the shared data file (see startTimer/timerElapsedMs in
+  // src/lib/kollel-store.ts), so it keeps running with the app shut and is
+  // still there, still counting, when it is opened again.
 
   const addManual = () => {
     if (!enabled) return;
@@ -85,17 +88,29 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
     }
   };
   const onCancelTimer = () => { cancelTimer(); toast("הטיימר בוטל ללא שמירה"); };
+  const onPauseTimer = () => { pauseTimer(); toast("הטיימר הושהה"); };
+  const onResumeTimer = () => { resumeTimer(); setNow(Date.now()); toast("הטיימר ממשיך"); };
 
-  const myItems = items.filter((i) => i.framework === fw).slice(0, 8);
-  const fwItems = items.filter((i) => i.framework === fw);
-  const totalMin = fwItems.reduce((s, i) => s + i.minutes, 0);
+  // The month, not everything ever recorded. This panel is read while logging
+  // today's learning, and the question it is being asked is "how am I doing
+  // this month" — a running total since the app was installed answers a
+  // question nobody asked and grows past the point of meaning anything.
+  const monthKey = currentMonthKey();
+  const fwItems = items.filter((i) => i.framework === fw && i.date.startsWith(monthKey));
+  const myItems = fwItems.slice(0, 8);
   const effectiveTotalMin = fwItems.reduce((s, i) => s + effectiveLearningMin(i), 0);
   const tanitMin = fwItems.filter((i) => i.tanitDibur).reduce((s, i) => s + i.minutes, 0);
+  const allTimeMin = items
+    .filter((i) => i.framework === fw)
+    .reduce((s, i) => s + effectiveLearningMin(i), 0);
+
   const isMine = timer?.framework === fw;
-  const elapsedMin = isMine ? Math.floor((now - timer!.startedAt) / 60000) : 0;
-  const elapsedSec = isMine ? Math.floor(((now - timer!.startedAt) % 60000) / 1000) : 0;
+  const paused = isMine && isTimerPaused(timer!);
+  const elapsedMs = isMine ? timerElapsedMs(timer!, now) : 0;
+  const elapsedMin = Math.floor(elapsedMs / 60000);
+  const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
   const limitReached = isMine && timer!.limitMinutes !== undefined
-    && (now - timer!.startedAt) / 60000 >= timer!.limitMinutes;
+    && elapsedMs / 60000 >= timer!.limitMinutes;
 
   // Auto-stop when the configured limit is reached.
   useEffect(() => {
@@ -116,14 +131,24 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="card-surface p-5 lg:col-span-2 space-y-4">
         {isMine && (
-          <div className="rounded-lg border-2 border-warning bg-warning/5 p-4">
-            <div className="flex items-center gap-2 text-warning-fg text-xs font-medium mb-2">
-              <AlertTriangle className="size-4" />
-              אל תסגור את האפליקציה — סגירה תעצור את הטיימר
+          <div className={`rounded-lg border-2 p-4 ${paused ? "border-border bg-muted/40" : "border-primary/40 bg-primary/5"}`}>
+            {/* What this used to say — "אל תסגור את האפליקציה, סגירה תעצור את
+                הטיימר" — was simply not true, and it warned people away from
+                closing a window they were free to close. The session lives in
+                the shared data file as a start timestamp, so the clock keeps
+                running with the app shut. */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+              <Info className="size-4 shrink-0" />
+              אפשר לסגור את התוכנה — הטיימר ממשיך לרוץ וימתין לך פתוח בפתיחה הבאה
             </div>
-            <div className="text-3xl font-bold tabular-nums">
+            <div className={`text-3xl font-bold tabular-nums ${paused ? "text-muted-foreground" : ""}`}>
               {String(elapsedMin).padStart(2, "0")}:{String(elapsedSec).padStart(2, "0")}
             </div>
+            {paused && (
+              <div className="mt-1 text-2xs font-medium text-warning-fg flex items-center gap-1">
+                <Pause className="size-3" /> מושהה — הזמן אינו נצבר כרגע
+              </div>
+            )}
             {timer!.limitMinutes !== undefined && (
               <div className="mt-1 text-2xs text-muted-foreground">
                 מוגבל ל־{timer!.limitMinutes} דק׳ · נותרו {Math.max(0, timer!.limitMinutes - elapsedMin)} דק׳
@@ -134,11 +159,22 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
                 <MicOff className="size-3" /> תענית דיבור — הזמן ייספר כפול בסיכום
               </div>
             )}
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button onClick={onStopTimer}
                 className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-xs font-medium text-success-foreground">
                 <Square className="size-3.5" /> עצור ושמור
               </button>
+              {paused ? (
+                <button onClick={onResumeTimer}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">
+                  <Play className="size-3.5" /> המשך
+                </button>
+              ) : (
+                <button onClick={onPauseTimer}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent">
+                  <Pause className="size-3.5" /> השהה
+                </button>
+              )}
               <button onClick={onCancelTimer}
                 className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">בטל</button>
             </div>
@@ -206,17 +242,22 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
       </div>
 
       <div className="card-surface p-5">
-        <div className="text-xs text-muted-foreground">סה״כ במסגרת זו</div>
+        <div className="text-xs text-muted-foreground">סה״כ ב{monthKeyLabel(monthKey)}</div>
         <div className="text-3xl font-bold tabular-nums mt-1">{(effectiveTotalMin / 60).toFixed(1)} <span className="text-sm text-muted-foreground">שע׳</span></div>
-        <div className="text-xs text-muted-foreground mt-1">{effectiveTotalMin} דקות · {fwItems.length} רישומים</div>
+        <div className="text-xs text-muted-foreground mt-1">{effectiveTotalMin} דקות · {fwItems.length} רישומים החודש</div>
         {tanitMin > 0 && (
           <div className="mt-2 rounded-md bg-primary/5 border border-primary/20 p-2 text-2xs text-primary flex items-start gap-1.5">
             <MicOff className="size-3 mt-0.5 shrink-0" />
             <span>נלמדו {tanitMin} דק׳ בתענית דיבור · נחשב כ־{tanitMin * 2} דק׳</span>
           </div>
         )}
+        {allTimeMin > effectiveTotalMin && (
+          <div className="mt-2 text-2xs text-muted-foreground">
+            מאז תחילת השימוש: {(allTimeMin / 60).toFixed(1)} שע׳ במסגרת זו
+          </div>
+        )}
 
-        <h3 className="text-sm font-semibold mt-5 mb-2">רישומים אחרונים</h3>
+        <h3 className="text-sm font-semibold mt-5 mb-2">רישומי החודש</h3>
         {myItems.length ? (
           <ul className="space-y-2">
             {myItems.map((i) => (
@@ -231,7 +272,7 @@ function FrameworkPanel({ fw, enabled }: { fw: LearningFramework; enabled: boole
               </li>
             ))}
           </ul>
-        ) : <div className="text-xs text-muted-foreground">אין רישומים</div>}
+        ) : <div className="text-xs text-muted-foreground">אין רישומים החודש</div>}
       </div>
     </div>
   );

@@ -10,11 +10,12 @@ import {
   FRAMEWORK_LABELS, type LearningFramework,
 } from "@/lib/kollel-store";
 import { forecastMonthlyNetMissing } from "@/lib/insights";
-import { formatHebrewDate, isBeinHazmanim } from "@/lib/hebrew-calendar";
-import { useSettings } from "@/lib/settings-store";
+import { formatHebrewDate, isBeinHazmanim, isLearningDay } from "@/lib/hebrew-calendar";
+import { useSettings, SHAS_ARRIVAL_DEADLINE } from "@/lib/settings-store";
 import { KpiCard, StatTile, IconBadge } from "@/components/ui/stat";
 
-const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+// א׳–ה׳ בלבד, לפי getDay(). שישי ושבת אינם ימי לימוד ואינם נכנסים לחישוב.
+const LEARNING_WEEKDAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי"];
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -45,6 +46,9 @@ function Dashboard() {
   const hasToday = entries.some((e) => e.date === todayISO());
   const hebrewDate = formatHebrewDate(today);
   const beinHazmanim = isBeinHazmanim(today);
+  // Nothing is owed on a day the kollel does not sit, so nothing is chased on
+  // one either — the same rule the reminder notifications already follow.
+  const learningDay = isLearningDay(today);
 
   // Additional-learning totals for the current month, grouped by framework
   const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
@@ -94,10 +98,10 @@ function Dashboard() {
   const forecast = forecastMonthlyNetMissing();
 
   const worstWeekday = (() => {
-    const acc = WEEKDAYS.map((day) => ({ day, net: 0, count: 0 }));
+    const acc = LEARNING_WEEKDAY_NAMES.map((day) => ({ day, net: 0, count: 0 }));
     for (const e of entries) {
       const wd = new Date(e.date).getDay();
-      if (Number.isNaN(wd)) continue;
+      if (Number.isNaN(wd) || wd > 4) continue;   // שישי־שבת אינם ימי לימוד
       acc[wd].net += calcSeder(e).netMissingMin;
       acc[wd].count++;
     }
@@ -147,7 +151,7 @@ function Dashboard() {
         </div>
       )}
 
-      {!hasToday && showReminders && (
+      {!hasToday && showReminders && learningDay && (
         <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-warning">
           <IconBadge icon={Bell} tone="warning" size="md" />
           <div className="flex-1">
@@ -163,11 +167,17 @@ function Dashboard() {
       <div className={`mt-5 grid grid-cols-1 gap-4 ${showReminders ? "lg:grid-cols-3" : ""}`}>
         <div className={`card-surface p-5 ${showReminders ? "lg:col-span-2" : ""}`}>
           <h2 className="text-sm font-semibold mb-3">פירוט החודש</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Five across when the חבורה is on, so the extra figure joins the
+              row instead of dropping onto one of its own. */}
+          <div className={`grid grid-cols-2 gap-3 ${settings.seder.shasChavura ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
             <StatTile label="איחורים" value={summary.lateCount} dot="var(--status-late)" />
             <StatTile label="היעדרויות" value={summary.absenceCount} dot="var(--status-absent)" />
             <StatTile label="יציאה מוקדמת" value={summary.earlyDepCount} dot="var(--status-late)" />
             <StatTile label="בונוס (דק׳)" value={summary.bonus} dot="var(--status-present)" />
+            {settings.seder.shasChavura && (
+              <StatTile label="חבורת ש״ס" value={summary.shasCount} dot="var(--status-present)"
+                hint={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`} />
+            )}
           </div>
 
           <div className="mt-5">

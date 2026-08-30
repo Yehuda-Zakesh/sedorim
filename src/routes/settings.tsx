@@ -25,7 +25,7 @@ import {
 import {
   useSettings, DEFAULT_SETTINGS, resetOnboarding, type FontSize, type ColorTheme, type BgTheme, updateSettings,
   getSederTimesFor, setSederTimesFromToday, removeSederScheduleEntry, addSederOverride, removeSederOverride,
-  sederTimesError, type SederTimes,
+  sederTimesError, SHAS_ARRIVAL_DEADLINE, type SederTimes,
 } from "@/lib/settings-store";
 import { COLOR_THEMES, BG_THEMES } from "@/lib/theme-colors";
 import { announce } from "@/lib/notifications";
@@ -42,7 +42,7 @@ export const Route = createFileRoute("/settings")({
 });
 
 const SECTIONS = [
-  { id: "seder", label: "שעות הסדרים", icon: Clock, hint: "מתי מתחיל ומסתיים כל סדר, כולל שינויים לתקופה" },
+  { id: "seder", label: "שעות הסדרים", icon: Clock, hint: "מתי מתחיל ומסתיים כל סדר, שינויים לתקופה, וחבורת ש״ס" },
   { id: "goals", label: "יעדים והתראות", icon: Target, hint: "יעד חודשי, מכסת איחורים ואיזה תזכורות להציג" },
   { id: "profile", label: "פרופיל אישי", icon: User, hint: "השם שמופיע בדוחות" },
   { id: "appearance", label: "מראה ועיצוב", icon: Palette, hint: "צבעים, רקע, גודל גופן" },
@@ -90,6 +90,24 @@ function SettingsPage() {
                         onChange={(v) => update({ seder: { ...settings.seder, bonusThresholdMin: v } })} />
                       <p className="text-2xs text-muted-foreground">
                         הגעה לפני תחילת הסדר נצברת כבונוס שמקטין את החסר — עד למספר הדקות הזה בכל סדר.
+                      </p>
+
+                      <div className="pt-2 text-xs font-semibold text-muted-foreground">חבורת ש״ס</div>
+                      <Toggle
+                        label={
+                          <span>
+                            אני נמנה על חבורת ש״ס
+                            <span className="block text-2xs text-muted-foreground">
+                              המערכת תספור כל הגעה לסדר ב׳ עד {SHAS_ARRIVAL_DEADLINE}, ותציג את המספר
+                              בכל מסכי הסיכום, בדוחות ובמחשבון המלגה.
+                            </span>
+                          </span>
+                        }
+                        on={settings.seder.shasChavura}
+                        onChange={(v) => update({ seder: { ...settings.seder, shasChavura: v } })} />
+                      <p className="text-2xs text-muted-foreground">
+                        הספירה נעשית מהרישומים הקיימים — סימון החבורה עכשיו מציג גם את כל ההגעות שכבר
+                        נרשמו, בלי להזין דבר מחדש.
                       </p>
                     </>
                   )}

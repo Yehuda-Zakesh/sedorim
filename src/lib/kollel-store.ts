@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { logWarn } from "./diagnostics";
-import { getSettings, getSederTimesFor } from "./settings-store";
+import { getSettings, getSederTimesFor, SHAS_ARRIVAL_DEADLINE } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
 import { isLearningDay, hebrewFromGregorian, hebrewMonthName, hebrewYearLetters, formatHebrewMonthYear } from "./hebrew-calendar";
 import { loadStore, saveStoreKey, saveStoreKeys, storeStamp } from "./store-bridge";
@@ -35,9 +35,14 @@ export type LearningEntry = {
 
 export type TimerSession = {
   framework: LearningFramework;
+  /** תחילת הקטע הרץ הנוכחי — לא תחילת הלימוד, כשהטיימר הושהה וחזר. */
   startedAt: number;
   limitMinutes?: number;   // הגבלת זמן אופציונלית — בסיום עוצר ושומר אוטומטית
   tanitDibur?: boolean;    // רק לכולל ערב — סימון תענית דיבור
+  /** מילישניות שנצברו בקטעים שכבר הסתיימו (לפני ההשהיה האחרונה). */
+  accumulatedMs?: number;
+  /** מתי הושהה. כל עוד הוא קיים — הטיימר עומד ואינו צובר זמן. */
+  pausedAt?: number;
 };
 
 const MIGRATED_FLAG = "kollel.serverStoreMigrated.v1";
@@ -199,6 +204,13 @@ export type SederCalc = {
   isLate: boolean;
   isEarlyDeparture: boolean;
   isOhevei: boolean;         // whether ohevei is actually valid
+  /**
+   * A seder ב׳ the user was already sitting at by SHAS_ARRIVAL_DEADLINE —
+   * what חבורת ש"ס counts. Computed for every row regardless of the setting;
+   * whether it is *shown* is what the setting decides, so switching the
+   * חבורה on does not require re-entering a single past record.
+   */
+  isShasArrival: boolean;
 };
 
 export function calcSeder(entry: SederEntry): SederCalc {
@@ -243,10 +255,15 @@ export function calcSeder(entry: SederEntry): SederCalc {
   const isOhevei = entry.ohevei && !entry.absent &&
     arr !== null && dep !== null && arr <= startMin && dep >= endMin;
 
+  // חבורת ש"ס — סדר ב׳ בלבד, נוכח בפועל, והגיע עד השעה הקבועה.
+  const shasDeadline = hhmmToMin(SHAS_ARRIVAL_DEADLINE);
+  const isShasArrival = entry.seder === 2 && !entry.absent &&
+    arr !== null && shasDeadline !== null && arr <= shasDeadline;
+
   return {
     sederLengthMin, missingMin: missing, bonusMin: bonus,
     excusedMin: excused, nonExcusedMin: nonExcused, netMissingMin,
-    isLate, isEarlyDeparture: isEarly, isOhevei,
+    isLate, isEarlyDeparture: isEarly, isOhevei, isShasArrival,
   };
 }
 
@@ -394,6 +411,23 @@ export function useTimer(): TimerSession | null {
   }, []);
   return timerSession;
 }
+/**
+ * How long the session has actually been running, in milliseconds.
+ *
+ * The clock is derived from timestamps in the shared data file rather than
+ * kept by a `setInterval` in the window, which is why closing the app does
+ * not stop it: whatever reopens the app — this EXE or the other one — reads
+ * the same `startedAt` and carries on from it.
+ */
+export function timerElapsedMs(t: TimerSession, now = Date.now()): number {
+  const banked = t.accumulatedMs ?? 0;
+  return t.pausedAt !== undefined ? banked : banked + Math.max(0, now - t.startedAt);
+}
+
+export function isTimerPaused(t: TimerSession): boolean {
+  return t.pausedAt !== undefined;
+}
+
 export function startTimer(framework: LearningFramework, opts?: { limitMinutes?: number; tanitDibur?: boolean }): TimerSession {
   const t: TimerSession = {
     framework,
@@ -406,10 +440,38 @@ export function startTimer(framework: LearningFramework, opts?: { limitMinutes?:
   emit();
   return t;
 }
+
+/** Stops the clock, banking the time run so far. No-op if already paused. */
+export function pauseTimer(now = Date.now()): TimerSession | null {
+  const t = getTimer();
+  if (!t || t.pausedAt !== undefined) return t;
+  const next: TimerSession = {
+    ...t,
+    accumulatedMs: timerElapsedMs(t, now),
+    pausedAt: now,
+  };
+  timerSession = next;
+  persistKey("timer", next);
+  emit();
+  return next;
+}
+
+/** Restarts the clock from where it stopped. No-op if not paused. */
+export function resumeTimer(now = Date.now()): TimerSession | null {
+  const t = getTimer();
+  if (!t || t.pausedAt === undefined) return t;
+  const next: TimerSession = { ...t, startedAt: now };
+  delete next.pausedAt;
+  timerSession = next;
+  persistKey("timer", next);
+  emit();
+  return next;
+}
+
 export function stopTimer(): { framework: LearningFramework; minutes: number; tanitDibur?: boolean } | null {
   const t = getTimer();
   if (!t) return null;
-  let minutes = Math.max(1, Math.round((Date.now() - t.startedAt) / 60000));
+  let minutes = Math.max(1, Math.round(timerElapsedMs(t) / 60000));
   if (t.limitMinutes && minutes > t.limitMinutes) minutes = t.limitMinutes;
   timerSession = null;
   persistKey("timer", null);
@@ -443,6 +505,8 @@ export type MonthlySummary = {
   absenceCount: number;
   earlyDepCount: number;
   oheveiCount: number;
+  /** סדרי ב׳ שהגיע אליהם עד SHAS_ARRIVAL_DEADLINE — מונה חבורת ש"ס. */
+  shasCount: number;
   entries: number;
   netMissing: number;
 };
@@ -450,7 +514,7 @@ export type MonthlySummary = {
 export function summarizeEntries(list: SederEntry[]): MonthlySummary {
   const out: MonthlySummary = {
     totalMissing: 0, excused: 0, nonExcused: 0, bonus: 0,
-    lateCount: 0, absenceCount: 0, earlyDepCount: 0, oheveiCount: 0,
+    lateCount: 0, absenceCount: 0, earlyDepCount: 0, oheveiCount: 0, shasCount: 0,
     entries: list.length, netMissing: 0,
   };
   for (const e of list) {
@@ -464,6 +528,7 @@ export function summarizeEntries(list: SederEntry[]): MonthlySummary {
     if (c.isLate) out.lateCount++;
     if (c.isEarlyDeparture) out.earlyDepCount++;
     if (c.isOhevei) out.oheveiCount++;
+    if (c.isShasArrival) out.shasCount++;
   }
   return out;
 }

@@ -243,3 +243,44 @@ export function isFastDay(date: Date = new Date()): boolean {
 export function hasNoSederB(date: Date = new Date()): boolean {
   return isFastDay(date);
 }
+
+// ============ Learning-day counts for a calendar month ============
+// Both feed the proportional part of the stipend calculation (see
+// src/lib/stipend.ts): the thresholds that are expressed in minutes are
+// written for a normal month, so a month the kollel sat fewer days scales
+// them down.
+
+/**
+ * Days in the month the kollel is actually in session: a learning day (not
+ * Friday/Shabbat, not Yom Tov, not Erev Yom Tov) that is also outside Bein
+ * HaZmanim, when there is no seder at all.
+ */
+export function kollelSessionDaysInMonth(year: number, monthIdx: number): number {
+  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+  let count = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(year, monthIdx, d);
+    if (isLearningDay(dt) && !isBeinHazmanim(dt)) count++;
+  }
+  return count;
+}
+
+/**
+ * What a full month of this month would have been: every Sunday–Thursday in
+ * it, nothing removed. Depends on nothing but how the dates fall — 20 for
+ * February, 23 for a 31-day month that opens on a Sunday, and 21 or 22 for
+ * almost all the rest.
+ *
+ * This is the fixed reference the proportional stipend calculation is
+ * measured against. Fixed in the sense that matters: a month with a Yom Tov
+ * in it comes out short *against this*, while an ordinary month divides out
+ * to exactly 1 whichever of the counts it happens to have.
+ */
+export function fullMonthLearningDays(year: number, monthIdx: number): number {
+  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+  let count = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (!isWeekend(new Date(year, monthIdx, d))) count++;
+  }
+  return count;
+}

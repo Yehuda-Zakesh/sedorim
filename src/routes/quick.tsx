@@ -34,7 +34,7 @@ import {
   useSeder, useLearning, newId, hhmmToMin, calcSeder, summarizeEntries, entriesInMonth,
   effectiveLearningMin, type SederEntry, type SederNum, type LearningFramework,
 } from "@/lib/kollel-store";
-import { applyAppearance, getSederTimesFor, useSettings } from "@/lib/settings-store";
+import { applyAppearance, getSederTimesFor, useSettings, SHAS_ARRIVAL_DEADLINE } from "@/lib/settings-store";
 import {
   detectSeder, canBeOhevei, sederBounds, arrivalEntry, absenceEntry, withExcused,
   hhmmOf, parseLooseTime, type ExcusedChoice,
@@ -806,6 +806,7 @@ function MinutesDialog({
 function MonthStatsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { entries } = useSeder();
   const { items: lessons } = useLearning();
+  const { settings } = useSettings();
   const now = new Date();
   const monthEntries = entriesInMonth(entries, now.getFullYear(), now.getMonth());
   const s = summarizeEntries(monthEntries);
@@ -821,6 +822,9 @@ function MonthStatsDialog({ open, onClose }: { open: boolean; onClose: () => voi
     { label: "מספר איחורים", value: s.lateCount },
     { label: "מספר חיסורים", value: s.absenceCount },
     ...(s.oheveiCount > 0 ? [{ label: "סדרי אוהבי ה׳", value: s.oheveiCount }] : []),
+    ...(settings.seder.shasChavura
+      ? [{ label: "חבורת ש״ס", value: s.shasCount, hint: `הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}` }]
+      : []),
     { label: "דקות כולל ערב", value: learnFor("kollel-erev") },
     { label: "דקות תורתו בידו", value: learnFor("torato-beyado") },
   ];

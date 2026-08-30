@@ -4,7 +4,24 @@ import {
   currentDayStreak, hhmmToMin, FRAMEWORK_LABELS,
 } from "./kollel-store";
 import { getSederTimesFor, getSettings } from "./settings-store";
-import { isLearningDay } from "./hebrew-calendar";
+import { isLearningDay, isWeekend } from "./hebrew-calendar";
+
+/**
+ * The days of the week the kollel sits, Sunday(0) to Thursday(4).
+ *
+ * Friday and Shabbat are not short learning days, they are not learning days
+ * at all — so they are left out of every weekday breakdown here rather than
+ * being scored as days with nothing recorded on them. A stray record on one
+ * (a make-up seder, a typo) still counts towards the month's minutes; it just
+ * never becomes "your weakest day is Shabbat".
+ */
+export const LEARNING_WEEKDAYS = [0, 1, 2, 3, 4] as const;
+
+/** Whether a date's weekday is one the kollel sits on. */
+export function isLearningWeekday(dateISO: string): boolean {
+  const d = new Date(dateISO);
+  return !Number.isNaN(d.getTime()) && !isWeekend(d);
+}
 
 export type Insight = {
   id: string;
@@ -281,6 +298,7 @@ export function generateInsights(
   if (recent.length >= 20) {
     const dayStats: { good: number; total: number }[] = Array.from({ length: 7 }, () => ({ good: 0, total: 0 }));
     for (const e of recent) {
+      if (!isLearningWeekday(e.date)) continue;   // שישי־שבת אינם ימי לימוד
       const d = new Date(e.date).getDay();
       const c = calcSeder(e);
       dayStats[d].total++;
@@ -288,7 +306,7 @@ export function generateInsights(
     }
     const dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
     let worst = -1, worstRate = 1;
-    for (let i = 0; i < 7; i++) {
+    for (const i of LEARNING_WEEKDAYS) {
       if (dayStats[i].total < 3) continue;
       const rate = dayStats[i].good / dayStats[i].total;
       if (rate < worstRate) { worstRate = rate; worst = i; }

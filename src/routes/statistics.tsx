@@ -13,18 +13,18 @@ import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   TrendingUp,
-  Lightbulb, CheckCircle2, AlertTriangle, Target, BarChart3, ChevronDown,
+  Lightbulb, CheckCircle2, AlertTriangle, Target, BarChart3, ChevronDown, Users,
 } from "lucide-react";
 import {
   useSeder, useLearning, summarizeEntries, entriesInMonth, scoreEntries,
   attendanceScore, calcSeder, currentDayStreak, effectiveLearningMin,
 } from "@/lib/kollel-store";
-import { useSettings } from "@/lib/settings-store";
+import { useSettings, SHAS_ARRIVAL_DEADLINE } from "@/lib/settings-store";
 import {
   generateInsights, forecastMonthlyNetMissing, consistencyScore, monthVerdict,
   averageArrivalOffsetMin, fmtMin, type Insight,
 } from "@/lib/insights";
-import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
+import { hebrewFromGregorian, formatHebrewMonthYear, isWeekend } from "@/lib/hebrew-calendar";
 import { StatTile, IconBadge, type Tone } from "@/components/ui/stat";
 
 export const Route = createFileRoute("/statistics")({
@@ -32,7 +32,10 @@ export const Route = createFileRoute("/statistics")({
   component: StatisticsPage,
 });
 
-const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+// Sunday to Thursday, indexed by getDay(). Friday and Shabbat are absent on
+// purpose: the kollel does not sit on them, so they are not weak days with
+// nothing recorded — they are not days the breakdown has anything to say about.
+const LEARNING_WEEKDAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי"];
 
 const VERDICT_STYLES: Record<Insight["tone"], { border: string; badge: Tone; icon: typeof CheckCircle2 }> = {
   success:     { border: "border-s-success",     badge: "success",     icon: CheckCircle2 },
@@ -112,6 +115,19 @@ function StatisticsPage() {
         <StatTile label="סדרי אוהבי ה׳" value={summary.oheveiCount}
           dot="var(--status-present)" hint="סדר מתחילתו ועד סופו" />
       </section>
+
+      {/* One figure, so a row rather than a lone tile marooned in a
+          four-column grid with three empty cells beside it. */}
+      {settings.seder.shasChavura && (
+        <section className="mt-3 card-surface p-4 flex items-center gap-3">
+          <IconBadge icon={Users} tone="success" size="md" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">חבורת ש״ס</div>
+            <div className="text-2xs text-muted-foreground">הגעות לסדר ב׳ עד {SHAS_ARRIVAL_DEADLINE}, החודש</div>
+          </div>
+          <div className="text-2xl font-bold tabular-nums">{summary.shasCount}</div>
+        </section>
+      )}
 
       <section className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatTile label="רצף ימים" value={streak} hint={streak > 0 ? "ימים ללא חיסור" : "מתחילים היום"} />
@@ -245,11 +261,11 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
   const yoyScore = attendanceScore(y - 1, m);
   const curScore = attendanceScore(y, m);
 
-  // Average net missing per weekday.
-  const weekday = WEEKDAYS.map((d) => ({ d, net: 0, count: 0 }));
+  // Average net missing per weekday, over the days the kollel sits.
+  const weekday = LEARNING_WEEKDAY_NAMES.map((d) => ({ d, net: 0, count: 0 }));
   for (const e of entries) {
     const wd = new Date(e.date).getDay();
-    if (Number.isNaN(wd)) continue;
+    if (Number.isNaN(wd) || wd > 4) continue;   // שישי־שבת אינם ימי לימוד
     weekday[wd].net += calcSeder(e).netMissingMin;
     weekday[wd].count++;
   }
@@ -329,7 +345,7 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
             <div>
               <h3 className="text-sm font-semibold">באילו ימים אתה מפסיד הכי הרבה</h3>
               <p className="text-xs text-muted-foreground mb-3">
-                ממוצע דקות חסרות לסדר · הסולם: 0–{weekdayScaleMax} דק׳
+                ממוצע דקות חסרות לסדר, בימי א׳–ה׳ · הסולם: 0–{weekdayScaleMax} דק׳
               </p>
               <ul className="space-y-2.5">
                 {weekday.map((w) => {
@@ -376,15 +392,19 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
   const levelFill = (level: number) =>
     `color-mix(in oklch, var(--color-status-present) ${(level + 1) * 18}%, var(--color-muted))`;
 
-  const cells: { iso: string; level: number; net: number }[] = [];
+  // A Friday or Shabbat with nothing on it is not a gap in the record, so it
+  // is drawn as what it is — a day off — rather than sharing the grey that
+  // means "a learning day nobody filled in".
+  const cells: { iso: string; level: number; net: number; offDay: boolean }[] = [];
   for (let i = 0; i < 42; i++) {
     const dt = new Date(start);
     dt.setDate(start.getDate() + i);
     const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    const offDay = isWeekend(dt);
     const list = entries.filter((e) => e.date === iso);
-    if (!list.length) { cells.push({ iso, level: -1, net: 0 }); continue; }
+    if (!list.length) { cells.push({ iso, level: -1, net: 0, offDay }); continue; }
     const net = list.reduce((s, e) => s + calcSeder(e).netMissingMin, 0);
-    cells.push({ iso, net, level: net === 0 ? 4 : net < 15 ? 3 : net < 30 ? 2 : net < 60 ? 1 : 0 });
+    cells.push({ iso, net, offDay, level: net === 0 ? 4 : net < 15 ? 3 : net < 30 ? 2 : net < 60 ? 1 : 0 });
   }
 
   return (
@@ -394,9 +414,17 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
       <div className="grid grid-cols-7 gap-1.5 max-w-xs">
         {cells.map((c) => (
           <div key={c.iso}
-            title={c.level < 0 ? `${c.iso} — אין רישום` : `${c.iso} · ${c.net} דק׳ חסרות`}
-            className="aspect-square rounded"
-            style={{ backgroundColor: c.level < 0 ? "var(--color-muted)" : levelFill(c.level) }} />
+            title={
+              c.offDay ? `${c.iso} — שישי/שבת, אינו יום לימודים`
+              : c.level < 0 ? `${c.iso} — אין רישום`
+              : `${c.iso} · ${c.net} דק׳ חסרות`
+            }
+            className={`aspect-square rounded ${c.offDay && c.level < 0 ? "border border-dashed border-border" : ""}`}
+            style={{
+              backgroundColor: c.offDay && c.level < 0 ? "transparent"
+                : c.level < 0 ? "var(--color-muted)"
+                : levelFill(c.level),
+            }} />
         ))}
       </div>
 
@@ -406,6 +434,10 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
           a calendar — that mapped to none of the five colours on the grid and
           so explained nothing about it. */}
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-3 rounded border border-dashed border-border" />
+          שישי־שבת
+        </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="size-3 rounded" style={{ backgroundColor: "var(--color-muted)" }} />
           לא נרשם

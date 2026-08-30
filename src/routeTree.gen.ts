@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as StipendRouteImport } from './routes/stipend'
 import { Route as StatisticsRouteImport } from './routes/statistics'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SearchRouteImport } from './routes/search'
@@ -22,6 +23,11 @@ import { Route as AttendanceRouteImport } from './routes/attendance'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 
+const StipendRoute = StipendRouteImport.update({
+  id: '/stipend',
+  path: '/stipend',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StatisticsRoute = StatisticsRouteImport.update({
   id: '/statistics',
   path: '/statistics',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/statistics': typeof StatisticsRoute
+  '/stipend': typeof StipendRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/statistics': typeof StatisticsRoute
+  '/stipend': typeof StipendRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/statistics': typeof StatisticsRoute
+  '/stipend': typeof StipendRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -141,6 +150,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/statistics'
+    | '/stipend'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/statistics'
+    | '/stipend'
   id:
     | '__root__'
     | '/'
@@ -169,6 +180,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/statistics'
+    | '/stipend'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,10 +196,18 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
   StatisticsRoute: typeof StatisticsRoute
+  StipendRoute: typeof StipendRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/stipend': {
+      id: '/stipend'
+      path: '/stipend'
+      fullPath: '/stipend'
+      preLoaderRoute: typeof StipendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/statistics': {
       id: '/statistics'
       path: '/statistics'
@@ -288,6 +308,7 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
   StatisticsRoute: StatisticsRoute,
+  StipendRoute: StipendRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -13,7 +13,17 @@ export type SederConfig = {
   s2Start: string; s2End: string;
   bonusThresholdMin: number;
   alertMissingMinPerMonth: number;
+  /** Whether the user is counted among חבורת ש"ס — see SHAS_ARRIVAL_DEADLINE. */
+  shasChavura: boolean;
 };
+
+/**
+ * חבורת ש"ס: a member is credited for every seder ב׳ he was already there
+ * for by this hour. Fixed by the kollel rather than chosen by the user, and
+ * deliberately earlier than seder ב׳ itself (15:45 by default) — it marks an
+ * early arrival, not merely a punctual one.
+ */
+export const SHAS_ARRIVAL_DEADLINE = "15:00";
 
 export type SederTimes = { s1Start: string; s1End: string; s2Start: string; s2End: string };
 /** A permanent change of seder hours, valid from `effectiveFrom` (ISO date) onwards. */
@@ -65,6 +75,7 @@ export const DEFAULT_SETTINGS: Settings = {
     s2Start: "15:45", s2End: "19:30",
     bonusThresholdMin: 15,
     alertMissingMinPerMonth: 180,
+    shasChavura: false,
   },
   // Desktop notifications start off: a Windows toast is the app talking over
   // whatever the user is doing, and that has to be asked for. In-app pop-ups

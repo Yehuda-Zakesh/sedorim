@@ -13,6 +13,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "g h", label: "היסטוריה",       to: "/history" },
   { keys: "g l", label: "לימוד נוסף",     to: "/learning" },
   { keys: "g s", label: "סטטיסטיקות ותובנות", to: "/statistics" },
+  { keys: "g m", label: "מחשבון מלגה",    to: "/stipend" },
   { keys: "g r", label: "דוחות",          to: "/reports" },
   { keys: "g b", label: "גיבוי ושחזור",   to: "/backup" },
   { keys: "g ,", label: "הגדרות",         to: "/settings" },
@@ -39,7 +40,7 @@ export function useGlobalShortcuts(toggleHelp: () => void) {
       if (chord === "g") {
         const map: Record<string, string> = {
           d: "/", a: "/attendance", c: "/calendar", h: "/history",
-          l: "/learning", s: "/statistics",
+          l: "/learning", s: "/statistics", m: "/stipend",
           r: "/reports", b: "/backup", ",": "/settings",
         };
         if (map[k]) { e.preventDefault(); navigate({ to: map[k] }); }

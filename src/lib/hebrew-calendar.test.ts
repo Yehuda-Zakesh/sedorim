@@ -17,6 +17,8 @@ import {
   fastDayName,
   isFastDay,
   hasNoSederB,
+  fullMonthLearningDays,
+  kollelSessionDaysInMonth,
   type HebrewDate,
 } from "./hebrew-calendar";
 
@@ -767,5 +769,61 @@ describe("defaults to today", () => {
     expect(typeof hasNoSederB()).toBe("boolean");
     const name = fastDayName();
     expect(name === null || typeof name === "string").toBe(true);
+  });
+});
+
+// ============================================================================
+// Learning-day counts for a month (the stipend's proportional reference)
+// ============================================================================
+
+describe("fullMonthLearningDays", () => {
+  it("counts every Sunday-to-Thursday in the month", () => {
+    // July 2026 runs Wed 1 to Fri 31: five Fridays and four Shabbatot, so 22
+    // of its 31 days are weekdays.
+    expect(fullMonthLearningDays(2026, 6)).toBe(22);
+  });
+
+  it("stays within 20–23 for every month of a decade", () => {
+    // 20 is February, which is exactly four weeks however it starts; 23 is a
+    // 31-day month opening on a Sunday. Nothing outside that.
+    for (let y = 2024; y <= 2034; y++) {
+      for (let m = 0; m < 12; m++) {
+        const days = fullMonthLearningDays(y, m);
+        expect(days, `${y}-${m + 1}`).toBeGreaterThanOrEqual(20);
+        expect(days, `${y}-${m + 1}`).toBeLessThanOrEqual(23);
+      }
+    }
+  });
+
+  it("takes no notice of Yom Tov — that is the other function's job", () => {
+    // Whatever falls inside it, the reference month is the plain weekday count.
+    expect(fullMonthLearningDays(2026, 8)).toBe(22);   // ספטמבר 2026, חודש תשרי
+  });
+});
+
+describe("kollelSessionDaysInMonth", () => {
+  it("never exceeds the month's weekday count", () => {
+    for (let m = 0; m < 12; m++) {
+      expect(kollelSessionDaysInMonth(2026, m), `month ${m + 1}`)
+        .toBeLessThanOrEqual(fullMonthLearningDays(2026, m));
+    }
+  });
+
+  it("equals the weekday count in a month with no Yom Tov and no Bein HaZmanim", () => {
+    // פברואר 2026 — שבט/אדר, ללא יו״ט וללא בין הזמנים.
+    expect(kollelSessionDaysInMonth(2026, 1)).toBe(fullMonthLearningDays(2026, 1));
+  });
+
+  it("drops the whole of Nisan, which is Bein HaZmanim end to end", () => {
+    // ניסן תשפ״ו נופל כולו באפריל 2026.
+    expect(kollelSessionDaysInMonth(2026, 3)).toBeLessThan(fullMonthLearningDays(2026, 3));
+  });
+
+  it("is never negative", () => {
+    for (let y = 2025; y <= 2030; y++) {
+      for (let m = 0; m < 12; m++) {
+        expect(kollelSessionDaysInMonth(y, m)).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 });

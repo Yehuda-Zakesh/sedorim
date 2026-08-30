@@ -787,3 +787,59 @@ describe("replaceAllData", () => {
     expect(getLearningSnapshot().map((l) => l.id)).toEqual(["a", "b"]);
   });
 });
+
+// ============================================================================
+// חבורת ש"ס — calcSeder().isShasArrival
+// ============================================================================
+
+describe("calcSeder — חבורת ש\"ס", () => {
+  const at = (hhmmStr: string, overrides: Partial<SederEntry> = {}) =>
+    calcSeder(entry({ seder: 2, arrival: hhmmStr, departure: s2End, ...overrides }));
+
+  it("counts an arrival before the deadline", () => {
+    expect(at("14:30").isShasArrival).toBe(true);
+  });
+
+  it("counts an arrival exactly on the deadline", () => {
+    expect(at("15:00").isShasArrival).toBe(true);
+  });
+
+  it("does not count a minute past the deadline", () => {
+    expect(at("15:01").isShasArrival).toBe(false);
+  });
+
+  it("does not count an arrival at the start of seder ב׳ itself", () => {
+    // The deadline is deliberately earlier than 15:45 — being on time is not
+    // the same as being counted for the חבורה.
+    expect(at(s2Start).isShasArrival).toBe(false);
+  });
+
+  it("never counts seder א׳, whatever the hour", () => {
+    expect(calcSeder(entry({ seder: 1, arrival: "08:00", departure: s1End })).isShasArrival).toBe(false);
+  });
+
+  it("does not count an absence", () => {
+    expect(at("14:00", { absent: true }).isShasArrival).toBe(false);
+  });
+
+  it("does not count a row with no arrival time", () => {
+    expect(calcSeder(entry({ seder: 2, arrival: undefined, departure: s2End })).isShasArrival).toBe(false);
+  });
+
+  it("counts an early arrival even when the seder was left early", () => {
+    // The חבורה counts turning up by the hour, not staying to the end — that
+    // is what אוהבי ה׳ measures, and the two are scored separately.
+    const c = at(hhmm(s2StartMin - 60), { departure: hhmm(s2EndMin - 30) });
+    expect(c.isShasArrival).toBe(true);
+    expect(c.isOhevei).toBe(false);
+  });
+
+  it("is computed regardless of whether the חבורה setting is on", () => {
+    // The setting governs display, not the record: turning it on has to reveal
+    // arrivals already on file, without re-entering anything.
+    updateSettings({ seder: { ...DEFAULT_SETTINGS.seder, shasChavura: false } });
+    expect(at("14:00").isShasArrival).toBe(true);
+    updateSettings({ seder: { ...DEFAULT_SETTINGS.seder, shasChavura: true } });
+    expect(at("14:00").isShasArrival).toBe(true);
+  });
+});

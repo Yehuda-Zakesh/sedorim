@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, ClipboardCheck, History, BookOpen, CalendarDays,
-  BarChart3, FileText, Settings, Info, DatabaseBackup,
+  BarChart3, FileText, Settings, Info, DatabaseBackup, Wallet,
   PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 
@@ -28,6 +28,7 @@ const NAV_GROUPS = [
     label: "ניתוח",
     items: [
       { to: "/statistics", label: "סטטיסטיקות ותובנות", icon: BarChart3 },
+      { to: "/stipend", label: "מחשבון מלגה", icon: Wallet },
       { to: "/reports", label: "דוחות", icon: FileText },
     ],
   },

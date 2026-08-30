@@ -1,7 +1,10 @@
 // The learning timer. Its session lives in module scope, so it gets its own
 // file — vitest hands each test file a fresh copy of the module.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { startTimer, stopTimer, cancelTimer, getTimer } from "./kollel-store";
+import {
+  startTimer, stopTimer, cancelTimer, getTimer,
+  pauseTimer, resumeTimer, timerElapsedMs, isTimerPaused,
+} from "./kollel-store";
 
 beforeEach(() => {
   cancelTimer();
@@ -155,5 +158,101 @@ describe("cancelTimer", () => {
     cancelTimer();
     expect(() => cancelTimer()).not.toThrow();
     expect(getTimer()).toBe(null);
+  });
+});
+
+describe("pauseTimer / resumeTimer", () => {
+  it("freezes the elapsed reading while paused", () => {
+    startTimer("kollel-erev");
+    vi.advanceTimersByTime(10 * 60_000);
+    pauseTimer();
+    vi.advanceTimersByTime(60 * 60_000);
+    expect(timerElapsedMs(getTimer()!)).toBe(10 * 60_000);
+  });
+
+  it("does not count the paused stretch towards the saved minutes", () => {
+    startTimer("kollel-erev");
+    vi.advanceTimersByTime(20 * 60_000);
+    pauseTimer();
+    vi.advanceTimersByTime(90 * 60_000);   // a long break
+    resumeTimer();
+    vi.advanceTimersByTime(10 * 60_000);
+    expect(stopTimer()?.minutes).toBe(30);
+  });
+
+  it("adds up across several pauses", () => {
+    startTimer("torato-beyado");
+    for (let i = 0; i < 3; i++) {
+      vi.advanceTimersByTime(5 * 60_000);
+      pauseTimer();
+      vi.advanceTimersByTime(15 * 60_000);
+      resumeTimer();
+    }
+    expect(stopTimer()?.minutes).toBe(15);
+  });
+
+  it("can be stopped and saved while still paused", () => {
+    startTimer("kollel-erev");
+    vi.advanceTimersByTime(25 * 60_000);
+    pauseTimer();
+    vi.advanceTimersByTime(5 * 60_000);
+    expect(stopTimer()?.minutes).toBe(25);
+    expect(getTimer()).toBe(null);
+  });
+
+  it("reports its own paused state", () => {
+    startTimer("kollel-erev");
+    expect(isTimerPaused(getTimer()!)).toBe(false);
+    pauseTimer();
+    expect(isTimerPaused(getTimer()!)).toBe(true);
+    resumeTimer();
+    expect(isTimerPaused(getTimer()!)).toBe(false);
+  });
+
+  it("keeps the framework, the limit and תענית דיבור across a pause", () => {
+    startTimer("kollel-erev", { limitMinutes: 45, tanitDibur: true });
+    vi.advanceTimersByTime(5 * 60_000);
+    pauseTimer();
+    resumeTimer();
+    expect(getTimer()).toMatchObject({ framework: "kollel-erev", limitMinutes: 45, tanitDibur: true });
+  });
+
+  it("still caps at the limit when the break is longer than the limit", () => {
+    startTimer("kollel-erev", { limitMinutes: 30 });
+    vi.advanceTimersByTime(20 * 60_000);
+    pauseTimer();
+    vi.advanceTimersByTime(120 * 60_000);
+    resumeTimer();
+    vi.advanceTimersByTime(50 * 60_000);
+    expect(stopTimer()?.minutes).toBe(30);
+  });
+
+  it("is a no-op when pausing twice — the break does not double-count", () => {
+    startTimer("kollel-erev");
+    vi.advanceTimersByTime(10 * 60_000);
+    pauseTimer();
+    vi.advanceTimersByTime(30 * 60_000);
+    pauseTimer();
+    expect(timerElapsedMs(getTimer()!)).toBe(10 * 60_000);
+  });
+
+  it("is a no-op when resuming a timer that is already running", () => {
+    startTimer("kollel-erev");
+    vi.advanceTimersByTime(10 * 60_000);
+    resumeTimer();
+    expect(timerElapsedMs(getTimer()!)).toBe(10 * 60_000);
+  });
+
+  it("returns null with nothing running", () => {
+    expect(pauseTimer()).toBe(null);
+    expect(resumeTimer()).toBe(null);
+  });
+
+  it("counts a session started before the app closed and reopened", () => {
+    // The clock is derived from a stored timestamp, not from a running
+    // interval, so wall-clock time passing with no window open still counts.
+    const t = startTimer("kollel-erev");
+    const twoHoursLater = t.startedAt + 2 * 60 * 60_000;
+    expect(timerElapsedMs(t, twoHoursLater)).toBe(2 * 60 * 60_000);
   });
 });

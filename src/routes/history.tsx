@@ -22,6 +22,7 @@ import {
 import { exportMonthClosingsPdf } from "@/lib/exporters";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
 import { currentMonthKey, monthKeyLabel, monthsWithData, shiftMonth } from "@/lib/month-nav";
+import { useSettings, SHAS_ARRIVAL_DEADLINE } from "@/lib/settings-store";
 import { logProblem } from "@/lib/diagnostics";
 import { toastUndo } from "@/lib/undo";
 import { toast } from "sonner";
@@ -329,6 +330,8 @@ function MonthClosingCard({
   onExport: () => void;
 }) {
   const { seder, learning } = closing;
+  const { settings } = useSettings();
+  const shasChavura = settings.seder.shasChavura;
   const erevTitle = learning.kollelErev !== learning.kollelErevRaw
     ? `${learning.kollelErevRaw} דק׳ בפועל · תענית דיבור נספרת כפול`
     : undefined;
@@ -360,6 +363,10 @@ function MonthClosingCard({
         <ClosingStat label="חיסורים" value={seder.absenceCount} />
         <ClosingStat label="אוהבי ה׳" value={seder.oheveiCount} />
         <ClosingStat label="כולל ערב" value={learning.kollelErev} title={erevTitle} />
+        {shasChavura && (
+          <ClosingStat label="חבורת ש״ס" value={seder.shasCount}
+            title={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`} />
+        )}
       </div>
       {learning.toratoBeyado > 0 || learning.beinHazmanim > 0 ? (
         <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
