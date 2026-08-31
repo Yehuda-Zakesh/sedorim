@@ -19,6 +19,11 @@
 // the kollel sat fewer days scales every one of them down, and the same goes
 // for the 150 ₪ bonus itself. The base of 2000 ₪ is the one figure that never
 // scales.
+//
+// A second thing runs through some of it: a rule can be written to bend for
+// prior special approval from the Rosh Kollel. `StipendInput.priorApproval`
+// is that approval, set per month from the checkbox on the stipend screen —
+// see settings-store.ts's `stipend.approvedMonths`. Today only §3 reads it.
 import {
   effectiveLearningMin, summarizeEntries,
   type LearningEntry, type SederEntry,
@@ -56,7 +61,8 @@ export const STIPEND_POLICY = {
   /**
    * §3 — excused minutes cost nothing at all, up to this much. Past it, and
    * without prior approval from the Rosh Kollel, the excess is charged like
-   * any other missing minute.
+   * any other missing minute. `StipendInput.priorApproval` is that approval:
+   * when the user has it for the month, this ceiling is waived entirely.
    */
   excusedFreeMin: 600,
 
@@ -179,8 +185,10 @@ export type StipendBreakdown = {
     /** כל הדקות שנשמטו, מוצדקות ולא מוצדקות. */
     total: number;
     excused: number;
-    /** דקות מוצדקות מעבר לתקרה, שנחשבות כרגילות. */
+    /** דקות מוצדקות מעבר לתקרה, שנחשבות כרגילות. 0 כשיש אישור מראש הכולל. */
     excusedCharged: number;
+    /** מה ש-excusedCharged היה אילולא האישור — 0 כשאין אישור, או כשאין עודף. */
+    excusedWaived: number;
     /** חסר נטו — לא מוצדק, אחרי בונוס והתאמות. */
     net: number;
     /** מה שנכנס בפועל למדרגות ההפחתה. */
@@ -217,13 +225,19 @@ export type StipendInput = {
   lessons: LearningEntry[];
   /** Whether the user marked himself a member of חבורת ש"ס. */
   shasChavura: boolean;
+  /**
+   * Whether the user has prior special approval from the Rosh Kollel for
+   * this month — waives every rule below that is written to bend for one.
+   * Today that is just §3's ceiling on free excused minutes.
+   */
+  priorApproval?: boolean;
   /** Overrides for tests; both are derived from the calendar otherwise. */
   sessionDays?: number;
   fullMonthDays?: number;
 };
 
 export function calcStipend(input: StipendInput): StipendBreakdown {
-  const { monthKey, shasChavura } = input;
+  const { monthKey, shasChavura, priorApproval = false } = input;
   const [year, month] = monthKey.split("-").map(Number);
   const monthIdx = month - 1;
 
@@ -246,7 +260,11 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
   // §3 — excused minutes are free up to the ceiling; the excess joins the
   // ordinary missing minutes. §1's own free allowance then applies to the sum,
   // which is what the first tier starting at the same threshold expresses.
-  const excusedCharged = Math.max(0, s.excused - scaled.excusedFreeMin);
+  // With prior approval from the Rosh Kollel for this month, the ceiling
+  // itself is waived, so nothing past it is charged either.
+  const excusedOverCeiling = Math.max(0, s.excused - scaled.excusedFreeMin);
+  const excusedCharged = priorApproval ? 0 : excusedOverCeiling;
+  const excusedWaived = priorApproval ? excusedOverCeiling : 0;
   const chargeable = s.netMissing + excusedCharged;
 
   const charges = tierCharges(chargeable, scaled.tiers);
@@ -284,9 +302,10 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
     {
       id: "deduction",
       label: "הפחתה על דקות חסרות",
-      detail: chargeable <= scaled.freeMissingMin
+      detail: (chargeable <= scaled.freeMissingMin
         ? `${chargeable} דק׳ לחיוב — מתחת לסף ${scaled.freeMissingMin} דק׳, אין הפחתה`
-        : `${chargeable} דק׳ לחיוב, מתוכן ${chargeable - scaled.freeMissingMin} דק׳ מעל הסף`,
+        : `${chargeable} דק׳ לחיוב, מתוכן ${chargeable - scaled.freeMissingMin} דק׳ מעל הסף`)
+        + (excusedWaived > 0 ? ` (${excusedWaived} דק׳ מוצדקות מעל התקרה לא נספרו — אישור מראש הכולל)` : ""),
       nis: -deductionNis,
       kind: "debit",
     },
@@ -347,6 +366,7 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
       total: s.totalMissing,
       excused: s.excused,
       excusedCharged,
+      excusedWaived,
       net: s.netMissing,
       chargeable,
     },

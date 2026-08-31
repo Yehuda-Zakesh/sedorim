@@ -15,10 +15,10 @@ import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   Wallet, ChevronRight, ChevronLeft, Info, AlertTriangle, TrendingDown,
-  TrendingUp, CalendarRange, X,
+  TrendingUp, CalendarRange, X, ShieldCheck,
 } from "lucide-react";
 import { useSeder, useLearning } from "@/lib/kollel-store";
-import { useSettings } from "@/lib/settings-store";
+import { useSettings, setMonthApproved } from "@/lib/settings-store";
 import { calcStipend, STIPEND_POLICY, type StipendBreakdown, type StipendLine } from "@/lib/stipend";
 import { currentMonthKey, monthKeyLabel, monthsWithData, shiftMonth } from "@/lib/month-nav";
 import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
@@ -38,14 +38,17 @@ function StipendPage() {
   const [month, setMonth] = useState(currentMonthKey());
 
   const months = useMemo(() => monthsWithData(entries, lessons), [entries, lessons]);
+  const approvedMonths = settings.stipend?.approvedMonths ?? [];
+  const priorApproval = approvedMonths.includes(month);
   const result = useMemo(
     () => calcStipend({
       monthKey: month,
       entries,
       lessons,
       shasChavura: settings.seder.shasChavura,
+      priorApproval,
     }),
-    [month, entries, lessons, settings.seder.shasChavura],
+    [month, entries, lessons, settings.seder.shasChavura, priorApproval],
   );
 
   const [y, m] = month.split("-").map(Number);
@@ -56,6 +59,12 @@ function StipendPage() {
       <MonthPicker value={month} months={months} hebrewLabel={hebrewLabel} onChange={setMonth} />
 
       <Disclaimer />
+
+      <ApprovalToggle
+        month={month}
+        checked={priorApproval}
+        onChange={(v) => setMonthApproved(month, v)}
+      />
 
       {/* 1 — the figure. */}
       <section className="mt-4 card-surface p-6 border-s-4 border-s-primary">
@@ -151,6 +160,43 @@ function Disclaimer() {
   );
 }
 
+/**
+ * The one thing about a month the app cannot derive: whether the Rosh Kollel
+ * approved it in advance.
+ *
+ * Kept per month rather than as a global setting, because that is how the
+ * approval itself is given — for a particular month, not once and for all.
+ * Every rule written to bend for such an approval reads it; today that is only
+ * §3's ceiling on free excused minutes.
+ */
+function ApprovalToggle({
+  month, checked, onChange,
+}: {
+  month: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className={`mt-4 card-surface p-4 flex items-start gap-3 cursor-pointer pressable transition ${
+      checked ? "border-s-4 border-s-success" : ""
+    }`}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 size-4 shrink-0" />
+      <div className="min-w-0 text-sm">
+        <div className="font-semibold flex items-center gap-1.5">
+          <ShieldCheck className={`size-4 shrink-0 ${checked ? "text-success" : "text-muted-foreground"}`} />
+          יש לי אישור מראש הכולל ל{monthKeyLabel(month)}
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {checked
+            ? "ההגבלות שתלויות באישור מיוחד מראש הכולל אינן חלות על חודש זה — דקות מוצדקות אינן מורידות מהמלגה, ללא תקרה."
+            : "סמן אם ראש הכולל אישר לך מראש. הסימון נשמר לחודש זה בלבד, ומבטל את התקרה על הדקות המוצדקות."}
+        </p>
+      </div>
+    </label>
+  );
+}
+
 /** Why the thresholds on this screen are not always 500 and 600. */
 function ProportionSection({ result }: { result: StipendBreakdown }) {
   const partial = result.sessionDays < result.fullMonthDays;
@@ -180,19 +226,24 @@ function ProportionSection({ result }: { result: StipendBreakdown }) {
 function MissingMinutesSection({ result }: { result: StipendBreakdown }) {
   const { missing, scaled, charges } = result;
   const excusedOver = missing.excusedCharged > 0;
+  const waived = missing.excusedWaived > 0;
 
   return (
     <section className="card-surface p-5">
       <h2 className="text-sm font-semibold">הדקות החסרות</h2>
       <p className="text-2xs text-muted-foreground mt-0.5">
-        דקות מוצדקות אינן מורידות מהמלגה — עד {scaled.excusedFreeMin} דק׳. מעבר לכך, ובלי אישור מראש הכולל,
-        העודף נחשב כדקות רגילות.
+        {waived
+          ? "יש אישור מראש הכולל לחודש זה — דקות מוצדקות אינן מורידות מהמלגה, ללא תקרה."
+          : <>דקות מוצדקות אינן מורידות מהמלגה — עד {scaled.excusedFreeMin} דק׳. מעבר לכך, ובלי אישור מראש הכולל,
+             העודף נחשב כדקות רגילות.</>}
       </p>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
         <StatTile label="סה״כ נשמט" value={missing.total} hint="כולל מוצדקות" />
         <StatTile label="מתוכן מוצדקות" value={missing.excused}
-          hint={excusedOver ? `${missing.excusedCharged} דק׳ מעל התקרה — נחשבות רגילות` : "כולן בתוך התקרה"} />
+          hint={waived ? `${missing.excusedWaived} דק׳ מעל התקרה — לא נספרו, יש אישור`
+            : excusedOver ? `${missing.excusedCharged} דק׳ מעל התקרה — נחשבות רגילות`
+            : "כולן בתוך התקרה"} />
         <StatTile label="חסר נטו" value={missing.net} hint="לא מוצדק, אחרי בונוס" />
         <StatTile label="נכנס לחישוב" value={missing.chargeable} hint="חסר נטו + מוצדק מעל התקרה" />
       </div>

@@ -73,6 +73,7 @@ function run(opts: {
   entries?: SederEntry[];
   lessons?: LearningEntry[];
   shasChavura?: boolean;
+  priorApproval?: boolean;
   sessionDays?: number;
   fullMonthDays?: number;
 }) {
@@ -81,6 +82,7 @@ function run(opts: {
     entries: opts.entries ?? [],
     lessons: opts.lessons ?? [],
     shasChavura: opts.shasChavura ?? false,
+    priorApproval: opts.priorApproval ?? false,
     sessionDays: opts.sessionDays ?? FULL.sessionDays,
     fullMonthDays: opts.fullMonthDays ?? FULL.fullMonthDays,
   });
@@ -328,6 +330,54 @@ describe("calcStipend — §3, excused minutes", () => {
     });
     expect(r.scaled.excusedFreeMin).toBe(300);
     expect(r.missing.excusedCharged).toBe(180);   // 480 − 300
+  });
+});
+
+describe("calcStipend — prior approval from the Rosh Kollel", () => {
+  /** Enough excused minutes to land 480 past the 600-minute ceiling. */
+  const wellOverCeiling = () =>
+    [1, 2, 3, 4, 5].map((d) => entry({ date: july(d), absent: true, excusedAll: true }));
+
+  it("charges the excess over the ceiling without an approval", () => {
+    const r = run({ entries: wellOverCeiling() });
+    expect(r.missing.excused).toBe(1200);
+    expect(r.missing.excusedCharged).toBe(600);
+    expect(r.missing.excusedWaived).toBe(0);
+  });
+
+  it("waives the ceiling entirely with one", () => {
+    const r = run({ entries: wellOverCeiling(), priorApproval: true });
+    expect(r.missing.excused).toBe(1200);
+    expect(r.missing.excusedCharged).toBe(0);
+    expect(r.missing.excusedWaived).toBe(600);
+    expect(r.missing.chargeable).toBe(0);
+    expect(r.deductionNis).toBe(0);
+  });
+
+  it("still charges minutes that were never excused", () => {
+    // The approval covers §3's ceiling, not attendance itself: 720 ordinary
+    // missing minutes are charged with or without it.
+    const r = run({
+      entries: [
+        ...wellOverCeiling(),
+        ...[6, 7, 8].map((d) => entry({ date: july(d), absent: true })),
+      ],
+      priorApproval: true,
+    });
+    expect(r.missing.net).toBe(720);
+    expect(r.missing.chargeable).toBe(720);
+    expect(r.deductionNis).toBe(44);
+  });
+
+  it("does not change a month that never reached the ceiling", () => {
+    const entries = [1, 2].map((d) => entry({ date: july(d), absent: true, excusedAll: true }));
+    expect(run({ entries, priorApproval: true })).toEqual(run({ entries }));
+  });
+
+  it("leaves the §2 bonus test alone — it counts excused minutes regardless", () => {
+    const r = run({ entries: wellOverCeiling(), priorApproval: true });
+    expect(r.missing.total).toBe(1200);
+    expect(r.shortfallBonusNis).toBe(0);
   });
 });
 
