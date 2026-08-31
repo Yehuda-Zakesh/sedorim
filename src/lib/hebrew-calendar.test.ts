@@ -24,9 +24,17 @@ import {
 
 // `new Date("YYYY-MM-DD")` parses as UTC, which shifts the day in negative
 // offsets — every date here is built from local components instead.
+//
+// Noon, not midnight. A DST rule can leave a local midnight that does not
+// exist, and the constructor then resolves it to 23:00 the day before: in
+// Asia/Hebron, new Date(2040, 9, 21) is 2040-10-20 23:00. That fed the same
+// Gregorian day to hebrewFromGregorian twice while nextHebrew moved on, and
+// the day-by-day walk below failed on 2040-10-22 with an off-by-one that was
+// never in the calendar code. Over 2000-2060 seven midnights land on the
+// wrong day; no noon does, and setDate stepping from noon never repeats one.
 function d(iso: string): Date {
   const [y, m, day] = iso.split("-").map(Number);
-  return new Date(y, m - 1, day);
+  return new Date(y, m - 1, day, 12);
 }
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const SUN = 0,
