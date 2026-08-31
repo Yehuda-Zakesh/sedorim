@@ -1,11 +1,15 @@
 // Form controls shared by Settings, the onboarding wizard and the record
 // screens. The raw look lives in the `field-input` utility in styles.css so
 // that plain <input>s elsewhere match these without importing anything.
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 /** Label on the right, control filling the rest — the Settings row layout. */
 export function Field({
-  label, value, onChange, maxLength = 80, placeholder,
+  label,
+  value,
+  onChange,
+  maxLength = 80,
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -13,10 +17,14 @@ export function Field({
   maxLength?: number;
   placeholder?: string;
 }) {
+  const id = useId();
   return (
     <div className="grid grid-cols-3 gap-3 items-center">
-      <label className="text-xs text-muted-foreground">{label}</label>
+      <label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </label>
       <input
+        id={id}
         value={value}
         maxLength={maxLength}
         placeholder={placeholder}
@@ -28,7 +36,11 @@ export function Field({
 }
 
 export function NumberField({
-  label, value, min, max, onChange,
+  label,
+  value,
+  min,
+  max,
+  onChange,
 }: {
   label: string;
   value: number;
@@ -36,10 +48,14 @@ export function NumberField({
   max: number;
   onChange: (v: number) => void;
 }) {
+  const id = useId();
   return (
     <div className="grid grid-cols-3 gap-3 items-center">
-      <label className="text-xs text-muted-foreground">{label}</label>
+      <label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </label>
       <input
+        id={id}
         type="number"
         min={min}
         max={max}
@@ -52,41 +68,57 @@ export function NumberField({
 }
 
 export function SelectField({
-  label, value, options, onChange,
+  label,
+  value,
+  options,
+  onChange,
 }: {
   label: string;
   value: string;
   options: { v: string; l: string }[];
   onChange: (v: string) => void;
 }) {
+  const id = useId();
   return (
     <div className="grid grid-cols-3 gap-3 items-center">
-      <label className="text-xs text-muted-foreground">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="field-input col-span-2 w-full">
-        {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+      <label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="field-input col-span-2 w-full"
+      >
+        {options.map((o) => (
+          <option key={o.v} value={o.v}>
+            {o.l}
+          </option>
+        ))}
       </select>
     </div>
   );
 }
 
 /** Label above the control — used where fields sit side by side in a grid. */
-export function StackedField({
-  label, children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+// The <label> wraps the control rather than pointing at it by id: children is
+// an arbitrary node here, so there is nothing to hang an id on. Wrapping gives
+// the same association, and every caller passes exactly one input or select.
+// The caption is a <span>, not a nested <label>, which would be invalid.
+export function StackedField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div>
-      <label className="text-xs text-muted-foreground">{label}</label>
+    <label className="block">
+      <span className="text-xs text-muted-foreground">{label}</span>
       <div className="mt-1">{children}</div>
-    </div>
+    </label>
   );
 }
 
 export function TimeField({
-  label, value, onChange, disabled = false,
+  label,
+  value,
+  onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -95,9 +127,13 @@ export function TimeField({
 }) {
   return (
     <StackedField label={label}>
-      <input type="time" value={value} disabled={disabled}
+      <input
+        type="time"
+        value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="field-input w-full tabular-nums" />
+        className="field-input w-full tabular-nums"
+      />
     </StackedField>
   );
 }
@@ -116,7 +152,9 @@ export function TimeField({
  * physical thing that was pushed settles rather than stopping dead.
  */
 export function Toggle({
-  label, on, onChange,
+  label,
+  on,
+  onChange,
 }: {
   label: ReactNode;
   on: boolean;

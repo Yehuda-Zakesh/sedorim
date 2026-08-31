@@ -25,7 +25,7 @@
 // records and everything else on the other. Below 768 CSS pixels the two
 // columns fold back into one.
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Zap,
   Clock,
@@ -985,6 +985,7 @@ function MinutesDialog({
   onApply: (framework: LearningFramework, minutes: number) => void;
 }) {
   const [minutes, setMinutes] = useState(60);
+  const minutesId = useId();
   const { title, hint, icon: Icon } = FRAMEWORK_DIALOG[framework];
   const { items } = useLearning();
 
@@ -1010,9 +1011,12 @@ function MinutesDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-2">
-          <label className="text-xs text-muted-foreground">{hint}</label>
+          <label htmlFor={minutesId} className="text-xs text-muted-foreground">
+            {hint}
+          </label>
           <div className="flex items-center gap-2">
             <input
+              id={minutesId}
               type="number"
               min={1}
               max={1440}
