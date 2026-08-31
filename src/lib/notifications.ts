@@ -9,12 +9,18 @@
 //             in src-tauri/core/src/lib.rs. It appears over whatever the user
 //             is doing, so it starts off and has to be asked for.
 //
-// What this is not: a background scheduler. The app has no service and does
-// not run when closed, so a reminder can only fire while a window is open.
-// The rules below are written for that — they ask "is this still worth saying
-// *now*", not "was this due at 09:00" — and each one fires at most once per
-// day / week / month, tracked in the shared data file so the two EXEs don't
-// both raise the same reminder.
+// These rules run while a window is open, and they ask "is this still worth
+// saying *now*", not "was this due at 09:00" — so nothing here is lost by the
+// app having been closed at the moment something fell due. Each one fires at
+// most once per day / week / month, tracked in the shared data file so the
+// two EXEs don't both raise the same reminder.
+//
+// Two of them also run when every window is closed. SederPlusAgent.exe — a
+// windowless process a few megabytes in size, off unless the user asks for it
+// (settings.background.enabled) — raises the unrecorded-seder reminder and
+// the phone-system one from a timetable this app writes for it. It shares
+// `notificationsSent` with these rules, which is how the two never say the
+// same thing twice. See background-plan.ts and src-tauri/agent/src/main.rs.
 //
 // On top of the rules sits a thin adaptive layer, switched on by
 // `settings.notifications.adaptive` and switched off to get exactly the fixed
@@ -37,24 +43,57 @@ import { sharedValue } from "./shared-state";
 import { getSettings } from "./settings-store";
 import { getSederTimesFor } from "./settings-store";
 import {
-  hhmmToMin, todayISO, summarizeEntries, getSederSnapshot, entriesInMonth,
+  hhmmToMin,
+  todayISO,
+  summarizeEntries,
+  getSederSnapshot,
+  entriesInMonth,
   type SederEntry,
 } from "./kollel-store";
-import { isLearningDay } from "./hebrew-calendar";
+import { isBeinHazmanim, isLearningDay } from "./hebrew-calendar";
 import {
-  averageArrivalOffsetMin, forecastMonthlyNetMissing, weakestLearningWeekday,
-  fmtMin, WEEKDAY_NAMES,
+  averageArrivalOffsetMin,
+  forecastMonthlyNetMissing,
+  weakestLearningWeekday,
+  fmtMin,
+  WEEKDAY_NAMES,
 } from "./insights";
 import {
-  parseLearningState, memoryFor, settle, gate, markDelivered,
+  parseLearningState,
+  memoryFor,
+  settle,
+  gate,
+  markDelivered,
   type LearningState,
 } from "./notification-learning";
+import {
+  formatMonthKey,
+  isReported,
+  reportedMonthFor,
+  REPORT_REMINDER_MINUTE,
+  REPORT_WINDOW_LAST_DAY,
+} from "./phone-report";
 
 export const NOTIFICATION_KINDS = [
-  "daily-reminder", "lateness-alert", "weekly-summary", "forecast-warning",
+  "daily-reminder",
+  "lateness-alert",
+  "weekly-summary",
+  "forecast-warning",
+  "phone-report",
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+/**
+ * The two kinds only SederPlusAgent.exe raises.
+ *
+ * They are tracked in the same `notificationsSent` map as everything else, so
+ * that neither side repeats what the other has already said — the agent
+ * checks `daily-reminder` before speaking, and rule 1 below checks these.
+ * See src-tauri/shared/src/plan.rs.
+ */
+export const BACKGROUND_KINDS = ["bg-seder-1", "bg-seder-2"] as const;
+export type BackgroundKind = (typeof BACKGROUND_KINDS)[number];
 
 /**
  * The kinds the adaptive layer is allowed to quieten.
@@ -131,7 +170,7 @@ export async function announce(title: string, body: string): Promise<Delivery> {
 // ============ once-per-period bookkeeping ============
 
 /** kind -> the period token last delivered for it. */
-type SentMap = Partial<Record<NotificationKind, string>>;
+type SentMap = Partial<Record<NotificationKind | BackgroundKind, string>>;
 
 const sent = sharedValue<SentMap>({
   key: "notificationsSent",
@@ -202,7 +241,12 @@ export function graceMinutes(avgArrivalOffsetMin: number | null, onWeakDay: bool
 
 export type ReminderFacts = {
   now: Date;
-  /** Is the kollel in session today (not weekend / yom tov / erev yom tov)? */
+  /**
+   * Is the kollel sitting today — not weekend, Yom Tov, Erev Yom Tov, and not
+   * bein hazmanim either, when there are no sedarim to record and so nothing
+   * to chase. (The stipend calculation counts bein hazmanim out for the same
+   * reason; see kollelSessionDaysInMonth.)
+   */
   isLearningDay: boolean;
   /** Minutes past midnight at which seder 1 begins today. */
   seder1StartMin: number;
@@ -215,7 +259,12 @@ export type ReminderFacts = {
     latenessAlert: boolean;
     weeklySummary: boolean;
     forecastWarning: boolean;
+    phoneReport: boolean;
   };
+  /** The month the phone-system report is about — last month, as YYYY-MM. */
+  reportMonth: string;
+  /** Whether that month has already been marked as reported. */
+  reportDone: boolean;
   /** Whether any channel is switched on at all. */
   anyChannelOn: boolean;
   sent: SentMap;
@@ -269,6 +318,9 @@ export function decideNotifications(f: ReminderFacts): ReminderDecision {
     "lateness-alert": monthKey,
     "weekly-summary": weekKey,
     "forecast-warning": monthKey,
+    // Daily, not monthly: it is raised once a day for the first five days of
+    // the month, and stops the moment the month is marked as reported.
+    "phone-report": today,
   };
 
   // Settle outstanding verdicts before anything else: a delivery that turned
@@ -288,11 +340,15 @@ export function decideNotifications(f: ReminderFacts): ReminderDecision {
   // 1. Nothing logged yet today. Held back until seder 1 has begun — a reminder
   //    at 06:00 to record a seder that starts at 09:00 is noise — plus the
   //    grace period above, and never raised on a day the kollel is not sitting.
+  //    Nor when the background agent has already said it this morning: it
+  //    says the same thing about the same seder, and the app opening an hour
+  //    later is not a reason to hear it twice.
   if (
     f.enabled.dailyReminder &&
     f.isLearningDay &&
     !f.hasEntryToday &&
-    f.sent["daily-reminder"] !== today
+    f.sent["daily-reminder"] !== today &&
+    f.sent["bg-seder-1"] !== today
   ) {
     const weakDay =
       f.adaptive && f.weakWeekday !== null && f.now.getDay() === f.weakWeekday
@@ -304,9 +360,10 @@ export function decideNotifications(f: ReminderFacts): ReminderDecision {
         kind: "daily-reminder",
         token: today,
         title: "סדר פלוס — לא נרשם סדר היום",
-        body: weakDay !== null
-          ? `עדיין לא רשמת נוכחות להיום. יום ${WEEKDAY_NAMES[weakDay]} הוא היום שבו הכי הרבה סדרים יוצאים חסרים אצלך.`
-          : "עדיין לא רשמת נוכחות להיום. פתח את מסך הנוכחות כדי לסמן הגעה.",
+        body:
+          weakDay !== null
+            ? `עדיין לא רשמת נוכחות להיום. יום ${WEEKDAY_NAMES[weakDay]} הוא היום שבו הכי הרבה סדרים יוצאים חסרים אצלך.`
+            : "עדיין לא רשמת נוכחות להיום. פתח את מסך הנוכחות כדי לסמן הגעה.",
       });
     }
   }
@@ -328,11 +385,7 @@ export function decideNotifications(f: ReminderFacts): ReminderDecision {
   }
 
   // 3. Last week's numbers, the first time the app is open in a new week.
-  if (
-    f.enabled.weeklySummary &&
-    f.lastWeek.entries > 0 &&
-    f.sent["weekly-summary"] !== weekKey
-  ) {
+  if (f.enabled.weeklySummary && f.lastWeek.entries > 0 && f.sent["weekly-summary"] !== weekKey) {
     candidates.push({
       kind: "weekly-summary",
       token: weekKey,
@@ -359,6 +412,34 @@ export function decideNotifications(f: ReminderFacts): ReminderDecision {
       token: monthKey,
       title: "סדר פלוס — הקצב הנוכחי חורג מהסף",
       body: `לפי הקצב עד כה צפויות ${fmtMin(f.forecastNetMissing)} חסרות עד סוף החודש, מול סף של ${fmtMin(f.alertMissingMinPerMonth)}. יש עוד זמן לסגור את הפער.`,
+    });
+  }
+
+  // 5. Last month has not been reported to the phone system. Once a day for
+  //    the first five days of the month — not once, because the whole point
+  //    is the deadline, and not after the 5th, because by then it is late and
+  //    saying so again helps nobody.
+  //
+  //    This is the one reminder about something the app cannot see: it knows
+  //    the report is due, but only the user can say it was made. The moment
+  //    he does — on the dashboard, or on the button on the Windows toast —
+  //    `reportDone` goes true and this stops.
+  if (
+    f.enabled.phoneReport &&
+    !f.reportDone &&
+    f.now.getDate() <= REPORT_WINDOW_LAST_DAY &&
+    nowMin >= REPORT_REMINDER_MINUTE &&
+    f.sent["phone-report"] !== today
+  ) {
+    const daysLeft = REPORT_WINDOW_LAST_DAY - f.now.getDate();
+    candidates.push({
+      kind: "phone-report",
+      token: today,
+      title: "סדר פלוס — דיווח למערכת הטלפונית",
+      body:
+        daysLeft === 0
+          ? `היום היום האחרון לדווח על חודש ${formatMonthKey(f.reportMonth)} במערכת הטלפונית.`
+          : `עדיין לא דיווחת על חודש ${formatMonthKey(f.reportMonth)} במערכת הטלפונית. נשארו ${daysLeft + 1} ימים.`,
     });
   }
 
@@ -396,7 +477,8 @@ function lastWeekSummary(entries: SederEntry[], now: Date) {
   end.setDate(end.getDate() - 1);
   const start = new Date(end);
   start.setDate(start.getDate() - 6);
-  const from = isoOf(start), to = isoOf(end);
+  const from = isoOf(start),
+    to = isoOf(end);
   return summarizeEntries(entries.filter((e) => e.date >= from && e.date <= to));
 }
 
@@ -437,13 +519,15 @@ export function collectFacts(now = new Date()): ReminderFacts {
   const weak = weakestLearningWeekday(entries);
   return {
     now,
-    isLearningDay: isLearningDay(now),
+    isLearningDay: isLearningDay(now) && !isBeinHazmanim(now),
     seder1StartMin: hhmmToMin(times.s1Start) ?? 0,
     hasEntryToday: entries.some((e) => e.date === todayISO()),
     lateCountThisMonth: monthTotals.lateCount,
     maxLatePerMonth: settings.goals.maxLatePerMonth,
     lastWeek: lastWeekSummary(entries, now),
     enabled: settings.notifications,
+    reportMonth: reportedMonthFor(now),
+    reportDone: isReported(reportedMonthFor(now)),
     anyChannelOn: settings.notifications.popups || settings.notifications.desktop,
     sent: sent.get(),
     adaptive: settings.notifications.adaptive,
@@ -502,8 +586,15 @@ export function useReminderNotifications() {
   useEffect(() => {
     // A short delay so the shared file has hydrated first — otherwise the very
     // first check reads an empty `sent` map and re-sends today's reminder.
-    const first = setTimeout(() => { void runReminderCheck(); }, 8000);
-    const timer = setInterval(() => { void runReminderCheck(); }, CHECK_INTERVAL_MS);
-    return () => { clearTimeout(first); clearInterval(timer); };
+    const first = setTimeout(() => {
+      void runReminderCheck();
+    }, 8000);
+    const timer = setInterval(() => {
+      void runReminderCheck();
+    }, CHECK_INTERVAL_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
   }, []);
 }

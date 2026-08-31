@@ -2,15 +2,25 @@ import { sharedValue, useHydrated } from "./shared-state";
 
 export type FontSize = "small" | "normal" | "large" | "xlarge";
 export type ColorTheme =
-  | "blue" | "emerald" | "violet" | "rose" | "amber"
-  | "teal" | "pink" | "slate" | "crimson" | "indigo" | "lime";
+  | "blue"
+  | "emerald"
+  | "violet"
+  | "rose"
+  | "amber"
+  | "teal"
+  | "pink"
+  | "slate"
+  | "crimson"
+  | "indigo"
+  | "lime";
 export type BgTheme =
-  | "white" | "cream" | "mint" | "sky" | "lavender"
-  | "peach" | "blush" | "sand" | "gray" | "paper";
+  "white" | "cream" | "mint" | "sky" | "lavender" | "peach" | "blush" | "sand" | "gray" | "paper";
 
 export type SederConfig = {
-  s1Start: string; s1End: string;
-  s2Start: string; s2End: string;
+  s1Start: string;
+  s1End: string;
+  s2Start: string;
+  s2End: string;
   bonusThresholdMin: number;
   alertMissingMinPerMonth: number;
   /** Whether the user is counted among חבורת ש"ס — see SHAS_ARRIVAL_DEADLINE. */
@@ -29,7 +39,13 @@ export type SederTimes = { s1Start: string; s1End: string; s2Start: string; s2En
 /** A permanent change of seder hours, valid from `effectiveFrom` (ISO date) onwards. */
 export type SederScheduleEntry = { id: string; effectiveFrom: string; times: SederTimes };
 /** A temporary change for a closed date range; hours revert afterwards. */
-export type SederOverride = { id: string; from: string; to: string; label?: string; times: SederTimes };
+export type SederOverride = {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+  times: SederTimes;
+};
 
 export type Settings = {
   profile: { name: string; classroom: string };
@@ -58,12 +74,31 @@ export type Settings = {
     /** Warns that the month is *heading* past the missing-minutes threshold. */
     forecastWarning: boolean;
     /**
+     * At the start of a month, that last month has not yet been reported to
+     * the phone system. Runs until the 5th or until the user says he has
+     * reported it — see phone-report.ts.
+     */
+    phoneReport: boolean;
+    /**
      * Lets the reminders fit themselves to the user: a grace period drawn from
      * his own arrival habit, an earlier nudge on his weakest weekday, and going
      * quieter when a reminder keeps going unanswered. Switching it off restores
      * the fixed behaviour exactly — see notifications.ts.
      */
     adaptive: boolean;
+  };
+  /**
+   * Reminders while the app is closed.
+   *
+   * Off by default, and deliberately the only setting in the app that starts
+   * a process: switching it on writes a login entry and runs
+   * SederPlusAgent.exe, a windowless few-megabyte program that raises two
+   * reminders and nothing else (src-tauri/agent/src/main.rs). Switching it
+   * off removes the entry; the running agent reads this same flag once a
+   * minute and exits on its own.
+   */
+  background: {
+    enabled: boolean;
   };
   appearance: {
     fontSize: FontSize;
@@ -91,8 +126,10 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   profile: { name: "תלמיד הכולל", classroom: "" },
   seder: {
-    s1Start: "09:00", s1End: "13:00",
-    s2Start: "15:45", s2End: "19:30",
+    s1Start: "09:00",
+    s1End: "13:00",
+    s2Start: "15:45",
+    s2End: "19:30",
     bonusThresholdMin: 15,
     alertMissingMinPerMonth: 180,
     shasChavura: false,
@@ -101,17 +138,29 @@ export const DEFAULT_SETTINGS: Settings = {
   // whatever the user is doing, and that has to be asked for. In-app pop-ups
   // only show while a window is already in front, so they are on.
   notifications: {
-    popups: true, desktop: false,
-    dailyReminder: true, latenessAlert: true, weeklySummary: false,
+    popups: true,
+    desktop: false,
+    dailyReminder: true,
+    latenessAlert: true,
+    weeklySummary: false,
     // On by default, unlike the weekly digest: it fires at most once a month
     // and only while there is still a month left to do something about it.
     forecastWarning: true,
+    phoneReport: true,
     adaptive: true,
   },
+  // Off: nothing starts a background process without being asked.
+  background: { enabled: false },
   sederSchedule: [],
   sederOverrides: [],
   stipend: { approvedMonths: [] },
-  appearance: { fontSize: "normal", highContrast: false, compactMode: false, colorTheme: "blue", background: "white" },
+  appearance: {
+    fontSize: "normal",
+    highContrast: false,
+    compactMode: false,
+    colorTheme: "blue",
+    background: "white",
+  },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
   data: { autoBackup: "weekly", backupRetention: 5, autoBackupBeforeOps: true },
   goals: { monthlyTarget: 95, maxLatePerMonth: 3 },
@@ -123,16 +172,23 @@ const LEGACY_SETTINGS_KEY = "tracker.settings.v1";
 const LEGACY_ONBOARD_KEY = "tracker.onboarded.v1";
 
 function deepMerge<T>(base: T, over: Partial<T>): T {
-  const out: any = Array.isArray(base) ? [...(base as any)] : { ...base };
+  // Both sides are walked by key, so they are viewed as plain records here.
+  // The array branch still spreads into a real array, so an array-valued
+  // setting (sederSchedule, sederOverrides, approvedMonths) stays an array.
+  const baseRec = base as Record<string, unknown>;
+  const out = (Array.isArray(base) ? [...base] : { ...baseRec }) as unknown as Record<
+    string,
+    unknown
+  >;
   for (const k of Object.keys(over || {})) {
-    const v: any = (over as any)[k];
-    if (v && typeof v === "object" && !Array.isArray(v) && typeof (base as any)[k] === "object") {
-      out[k] = deepMerge((base as any)[k], v);
+    const v = (over as Record<string, unknown>)[k];
+    if (v && typeof v === "object" && !Array.isArray(v) && typeof baseRec[k] === "object") {
+      out[k] = deepMerge(baseRec[k], v as Partial<unknown>);
     } else if (v !== undefined) {
       out[k] = v;
     }
   }
-  return out;
+  return out as T;
 }
 
 // Lives in the shared data file, not localStorage: the two EXEs each have
@@ -146,7 +202,9 @@ const store = sharedValue<Settings>({
   // Merged over the defaults so a file written by an older version — missing
   // whichever fields have been added since — still loads.
   parse: (raw) =>
-    raw && typeof raw === "object" ? deepMerge(DEFAULT_SETTINGS, raw as Partial<Settings>) : DEFAULT_SETTINGS,
+    raw && typeof raw === "object"
+      ? deepMerge(DEFAULT_SETTINGS, raw as Partial<Settings>)
+      : DEFAULT_SETTINGS,
   // Re-applied on hydration and on the other EXE's changes too, so a theme
   // change made over there shows up here.
   onChange: () => applyAppearance(),
@@ -159,7 +217,9 @@ const store = sharedValue<Settings>({
 // hoisted, so calling it here is safe.)
 applyAppearance();
 
-export function getSettings(): Settings { return store.get(); }
+export function getSettings(): Settings {
+  return store.get();
+}
 
 export function updateSettings(patch: Partial<Settings>) {
   store.set(deepMerge(store.get(), patch));
@@ -176,7 +236,12 @@ function todayIso(): string {
 }
 
 function baseTimes(s: Settings = store.get()): SederTimes {
-  return { s1Start: s.seder.s1Start, s1End: s.seder.s1End, s2Start: s.seder.s2Start, s2End: s.seder.s2End };
+  return {
+    s1Start: s.seder.s1Start,
+    s1End: s.seder.s1End,
+    s2Start: s.seder.s2Start,
+    s2End: s.seder.s2End,
+  };
 }
 
 /**
@@ -193,7 +258,8 @@ export function sederTimesError(t: SederTimes): string | null {
     [t.s2Start, t.s2End, "סדר ב׳"],
   ];
   for (const [start, end, label] of pairs) {
-    const a = toMinutes(start), b = toMinutes(end);
+    const a = toMinutes(start),
+      b = toMinutes(end);
     if (a === null || b === null) return `${label}: שעה לא תקינה`;
     if (b <= a) return `${label}: שעת הסיום חייבת להיות אחרי שעת ההתחלה`;
   }
@@ -205,7 +271,8 @@ export function sederTimesError(t: SederTimes): string | null {
 function toMinutes(t: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(t ?? "");
   if (!m) return null;
-  const h = +m[1], mm = +m[2];
+  const h = +m[1],
+    mm = +m[2];
   if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
   return h * 60 + mm;
 }
@@ -218,7 +285,9 @@ export function getSederTimesFor(dateISO: string): SederTimes {
     .sort((a, b) => (a.from < b.from ? 1 : -1))[0];
   if (ov) return ov.times;
 
-  const sched = [...(settings.sederSchedule || [])].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : 1));
+  const sched = [...(settings.sederSchedule || [])].sort((a, b) =>
+    a.effectiveFrom < b.effectiveFrom ? -1 : 1,
+  );
   let times: SederTimes | null = null;
   for (const e of sched) {
     if (e.effectiveFrom <= dateISO) times = e.times;
@@ -232,11 +301,20 @@ export function setSederTimesFromToday(times: SederTimes, effectiveFrom = todayI
   const sched = [...(settings.sederSchedule || [])];
   if (sched.length === 0) {
     // Snapshot the previous hours so earlier dates stay unchanged.
-    sched.push({ id: `base-${Date.now()}`, effectiveFrom: "0001-01-01", times: baseTimes(settings) });
+    sched.push({
+      id: `base-${Date.now()}`,
+      effectiveFrom: "0001-01-01",
+      times: baseTimes(settings),
+    });
   }
   const idx = sched.findIndex((e) => e.effectiveFrom === effectiveFrom);
   if (idx >= 0) sched[idx] = { ...sched[idx], times };
-  else sched.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, effectiveFrom, times });
+  else
+    sched.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      effectiveFrom,
+      times,
+    });
   updateSettings({ sederSchedule: sched, seder: { ...settings.seder, ...times } });
 }
 
@@ -245,7 +323,10 @@ export function removeSederScheduleEntry(id: string) {
 }
 
 export function addSederOverride(o: Omit<SederOverride, "id">) {
-  const item: SederOverride = { ...o, id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+  const item: SederOverride = {
+    ...o,
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  };
   updateSettings({ sederOverrides: [...(store.get().sederOverrides || []), item] });
 }
 
@@ -260,7 +341,9 @@ export function removeSederOverride(id: string) {
 export function setMonthApproved(monthKey: string, approved: boolean) {
   const months = store.get().stipend?.approvedMonths || [];
   const approvedMonths = approved
-    ? (months.includes(monthKey) ? months : [...months, monthKey])
+    ? months.includes(monthKey)
+      ? months
+      : [...months, monthKey]
     : months.filter((m) => m !== monthKey);
   updateSettings({ stipend: { approvedMonths } });
 }
@@ -278,8 +361,14 @@ export function applyAppearance() {
   r.dataset.fontSize = appearance.fontSize;
   r.dataset.theme = appearance.colorTheme || "blue";
   const bg = appearance.background || "white";
-  if (bg === "white") delete r.dataset.bg; else r.dataset.bg = bg;
-  const sizes: Record<FontSize, string> = { small: "14px", normal: "16px", large: "18px", xlarge: "20px" };
+  if (bg === "white") delete r.dataset.bg;
+  else r.dataset.bg = bg;
+  const sizes: Record<FontSize, string> = {
+    small: "14px",
+    normal: "16px",
+    large: "18px",
+    xlarge: "20px",
+  };
   r.style.fontSize = sizes[appearance.fontSize];
 }
 
@@ -297,9 +386,15 @@ const onboarded = sharedValue<boolean>({
   parse: (raw) => raw === true || raw === "1" || raw === 1,
 });
 
-export function isOnboarded(): boolean { return onboarded.get(); }
-export function markOnboarded() { onboarded.set(true); }
-export function resetOnboarding() { onboarded.set(false); }
+export function isOnboarded(): boolean {
+  return onboarded.get();
+}
+export function markOnboarded() {
+  onboarded.set(true);
+}
+export function resetOnboarding() {
+  onboarded.set(false);
+}
 
 /**
  * Whether to show the onboarding wizard.

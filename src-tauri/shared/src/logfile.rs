@@ -108,93 +108,13 @@ pub fn clear_in(dir: &Path) -> Result<(), String> {
 /// `2026-08-21 14:32:07` in local time — the log is read by the person using
 /// the app, so it is stamped in their clock, not UTC.
 fn timestamp() -> String {
-    // std has no calendar arithmetic and pulling `chrono` in for one line
-    // would grow the EXE for nothing, so this is the civil-from-days
-    // conversion, plus the local UTC offset Windows reports.
-    let now = std::time::SystemTime::now();
-    let secs = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-        + local_offset_secs();
-    let days = secs.div_euclid(86_400);
-    let rem = secs.rem_euclid(86_400);
-    let (y, m, d) = civil_from_days(days);
+    let now = crate::clock::local_now();
     format!(
-        "{y:04}-{m:02}-{d:02} {:02}:{:02}:{:02}",
-        rem / 3600,
-        (rem % 3600) / 60,
-        rem % 60
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        now.year, now.month, now.day, now.hour, now.minute, now.second
     )
 }
 
-/// Seconds to add to UTC for the machine's own clock. Read from the `TZ`-free
-/// Windows API through `std`: comparing a known instant's local and UTC
-/// renderings is not available in std, so this reads the offset the OS reports
-/// for "now".
-#[cfg(windows)]
-fn local_offset_secs() -> i64 {
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn GetTimeZoneInformation(info: *mut TimeZoneInformation) -> u32;
-    }
-    #[repr(C)]
-    struct SystemTime {
-        year: u16,
-        month: u16,
-        day_of_week: u16,
-        day: u16,
-        hour: u16,
-        minute: u16,
-        second: u16,
-        milliseconds: u16,
-    }
-    #[repr(C)]
-    struct TimeZoneInformation {
-        bias: i32,
-        standard_name: [u16; 32],
-        standard_date: SystemTime,
-        standard_bias: i32,
-        daylight_name: [u16; 32],
-        daylight_date: SystemTime,
-        daylight_bias: i32,
-    }
-    const TIME_ZONE_ID_INVALID: u32 = u32::MAX;
-    const TIME_ZONE_ID_DAYLIGHT: u32 = 2;
-
-    // Safety: the struct layout is the documented TIME_ZONE_INFORMATION and
-    // the call only writes into it.
-    unsafe {
-        let mut info: TimeZoneInformation = std::mem::zeroed();
-        let id = GetTimeZoneInformation(&mut info);
-        if id == TIME_ZONE_ID_INVALID {
-            return 0;
-        }
-        // `bias` is UTC = local + bias, in minutes — hence the negation.
-        let bias = info.bias + if id == TIME_ZONE_ID_DAYLIGHT { info.daylight_bias } else { info.standard_bias };
-        -(bias as i64) * 60
-    }
-}
-
-#[cfg(not(windows))]
-fn local_offset_secs() -> i64 {
-    0
-}
-
-/// Howard Hinnant's `civil_from_days`: day number since the Unix epoch to a
-/// (year, month, day) in the proleptic Gregorian calendar.
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64; // [0, 146096]
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365; // [0, 399]
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
-    let mp = (5 * doy + 2) / 153; // [0, 11]
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
-    (if m <= 2 { y + 1 } else { y }, m, d)
-}
 
 #[cfg(test)]
 mod tests {
@@ -292,11 +212,11 @@ mod tests {
 
     #[test]
     fn the_calendar_conversion_matches_known_dates() {
-        assert_eq!(civil_from_days(0), (1970, 1, 1));
-        assert_eq!(civil_from_days(19_000), (2022, 1, 8));
+        assert_eq!(crate::clock::civil_from_days(0), (1970, 1, 1));
+        assert_eq!(crate::clock::civil_from_days(19_000), (2022, 1, 8));
         // A leap day, and the day after it.
-        assert_eq!(civil_from_days(18_321), (2020, 2, 29));
-        assert_eq!(civil_from_days(18_322), (2020, 3, 1));
+        assert_eq!(crate::clock::civil_from_days(18_321), (2020, 2, 29));
+        assert_eq!(crate::clock::civil_from_days(18_322), (2020, 3, 1));
     }
 
     #[test]

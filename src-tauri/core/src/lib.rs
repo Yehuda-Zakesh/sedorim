@@ -7,12 +7,14 @@
 //! is embedded in the EXE and talks to this code over Tauri's IPC. The two
 //! EXEs share data purely through the JSON file in `store.rs`.
 
-mod logfile;
-mod store;
+mod background;
 mod updater;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
+// The data file and the problem log live in the shared crate now, so that
+// SederPlusAgent.exe — which has no Tauri runtime at all — can use them too.
+use seder_plus_shared::{logfile, store};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, LogicalSize, Manager, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
@@ -173,6 +175,32 @@ async fn notify(app: AppHandle, title: String, body: String) -> Result<(), Strin
         .body(body)
         .show()
         .map_err(|e| e.to_string())
+}
+
+/// Turns the background agent on or off: the login entry, and the process.
+///
+/// Called from the switch in Settings and from the first-run wizard. The
+/// frontend has already written `settings.background.enabled` by the time
+/// this runs — that flag is what the agent itself obeys — so this is only the
+/// part the frontend cannot do: the registry, and starting the process.
+#[tauri::command]
+async fn set_background_agent(enabled: bool) -> Result<(), String> {
+    let result = background::set_enabled(enabled);
+    match &result {
+        Ok(()) => logfile::append(
+            "info",
+            if enabled { "מצב הרקע הופעל." } else { "מצב הרקע כובה." },
+        ),
+        Err(err) => logfile::append("error", &format!("שינוי מצב הרקע נכשל: {err}")),
+    }
+    result
+}
+
+/// Whether the agent is set to start with Windows — read off the machine, not
+/// off a saved preference, so the Settings screen shows what is actually true.
+#[tauri::command]
+async fn background_agent_registered() -> bool {
+    background::is_registered()
 }
 
 /// Hands a link to the user's default browser. Used by the update prompt —
@@ -365,6 +393,20 @@ mod tests {
     }
 }
 
+/// `settings.background.enabled`, straight off the data file.
+///
+/// Read here rather than asked of the frontend: this runs before any window
+/// has finished loading, and the answer decides whether a process is started
+/// at all.
+fn background_wanted() -> bool {
+    store::read_store()
+        .get("settings")
+        .and_then(|s| s.get("background"))
+        .and_then(|b| b.get("enabled"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
 pub fn run(context: tauri::Context, mode: Mode) {
     tauri::Builder::default()
         // All three plugins are driven from Rust only (save_file_as,
@@ -385,13 +427,23 @@ pub fn run(context: tauri::Context, mode: Mode) {
             read_log,
             clear_log,
             open_log_folder,
-            install_update
+            install_update,
+            set_background_agent,
+            background_agent_registered
         ])
         .setup(move |app| {
             let handle = app.handle();
             match mode {
                 Mode::Full => build_main_window(handle)?,
                 Mode::Quick => build_quick_window(handle)?,
+            }
+            // If the user asked for reminders while the app is closed, make
+            // sure they are actually running: the agent can have been killed
+            // by an update, by Task Manager, or by a login the Run entry
+            // never reached. Starting a second one is harmless — it sees the
+            // first one's mutex and exits.
+            if background_wanted() {
+                background::start();
             }
             Ok(())
         })

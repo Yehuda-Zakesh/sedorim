@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rust": "cargo test --manifest-path src-tauri/core/Cargo.toml",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml -p seder-plus-shared -p seder-plus-core -p seder-plus-agent",
     "test:all": "vitest run && cargo test --manifest-path src-tauri/core/Cargo.toml",
     "format": "prettier --write .",
     "exe": "node scripts/build-exes.mjs",

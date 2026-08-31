@@ -55,5 +55,5 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Test the shared core
-        run: cargo test --manifest-path src-tauri/core/Cargo.toml
+      - name: Test the Rust side
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p seder-plus-shared -p seder-plus-core -p seder-plus-agent

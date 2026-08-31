@@ -2,12 +2,14 @@ import type { ElementType, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Moon, Sun, Monitor, Keyboard, Search } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { AppSidebar, useSidebarCollapsed } from "./app-sidebar";
+import { AppSidebar } from "./app-sidebar";
+import { useSidebarCollapsed } from "@/lib/sidebar-state";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
 import { applyAppearance, useSettings, useNeedsOnboarding } from "@/lib/settings-store";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { useReminderNotifications } from "@/lib/notifications";
+import { useBackgroundPlan } from "@/lib/background-plan";
 import { OnboardingWizard } from "./onboarding-wizard";
 import { useAutoUpdateCheck } from "@/lib/updater";
 import { UpdatePrompt } from "./update-prompt";
@@ -46,7 +48,10 @@ function useScrolled() {
 
 /** The identical bordered icon control the header had written out three times. */
 function HeaderButton({
-  as: As = "button", label, children, ...rest
+  as: As = "button",
+  label,
+  children,
+  ...rest
 }: {
   as?: typeof Link | "button";
   label: string;
@@ -65,8 +70,16 @@ function HeaderButton({
   );
 }
 
-export function AppShell({ title, subtitle, actions, children }: {
-  title: string; subtitle?: string; actions?: ReactNode; children: ReactNode;
+export function AppShell({
+  title,
+  subtitle,
+  actions,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+  children: ReactNode;
 }) {
   const { theme, setTheme } = useTheme();
   useSettings(); // re-render on settings change
@@ -76,13 +89,18 @@ export function AppShell({ title, subtitle, actions, children }: {
   // means the other one never shows it again.
   const needsOnboarding = useNeedsOnboarding();
 
-  useEffect(() => { applyAppearance(); }, []);
+  useEffect(() => {
+    applyAppearance();
+  }, []);
   useGlobalShortcuts(() => setHelpOpen((v) => !v));
   // The quick window raises reminders too (it renders its own shell) — a user
   // who only ever opens that one would otherwise never be reminded of
   // anything. Two open windows cannot double up: the "already sent" map lives
   // in the shared data file. See src/lib/notifications.ts.
   useReminderNotifications();
+  // Keeps the timetable SederPlusAgent.exe reads current. A no-op unless the
+  // user has asked for reminders while the app is closed.
+  useBackgroundPlan();
   const { update, dismiss } = useAutoUpdateCheck();
 
   const cycle = () => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light");
@@ -96,7 +114,9 @@ export function AppShell({ title, subtitle, actions, children }: {
       <AppSidebar />
       {/* `ms-`, not `mr-`: the rail is pinned to the inline start, which is the
           right only because the document is RTL. */}
-      <div className={`${collapsed ? "ms-[64px]" : "ms-[220px]"} flex flex-col min-h-screen transition-[margin] duration-200 ease-[var(--ease-out-soft)]`}>
+      <div
+        className={`${collapsed ? "ms-[64px]" : "ms-[220px]"} flex flex-col min-h-screen transition-[margin] duration-200 ease-[var(--ease-out-soft)]`}
+      >
         {/* A translucent layer with the page passing underneath it, and a seam
             that only appears once there is something to separate from — a
             permanent 1px rule under a header floating over blank space is a
@@ -112,10 +132,18 @@ export function AppShell({ title, subtitle, actions, children }: {
               <HeaderButton as={Link} to="/search" title="חיפוש" label="חיפוש">
                 <Search className="size-4" />
               </HeaderButton>
-              <HeaderButton onClick={() => setHelpOpen(true)} title="קיצורי מקלדת (?)" label="קיצורי מקלדת">
+              <HeaderButton
+                onClick={() => setHelpOpen(true)}
+                title="קיצורי מקלדת (?)"
+                label="קיצורי מקלדת"
+              >
                 <Keyboard className="size-4" />
               </HeaderButton>
-              <HeaderButton onClick={cycle} title={`ערכת נושא: ${label}`} label={`ערכת נושא: ${label}`}>
+              <HeaderButton
+                onClick={cycle}
+                title={`ערכת נושא: ${label}`}
+                label={`ערכת נושא: ${label}`}
+              >
                 <Icon className="size-4" />
                 <span className="hidden sm:inline">{label}</span>
               </HeaderButton>

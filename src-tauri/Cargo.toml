@@ -1,15 +1,23 @@
 [workspace]
 resolver = "2"
-members = ["core", "full", "quick"]
+members = ["agent", "core", "full", "quick", "shared"]
 
-# Two EXEs, one shared implementation:
-#   full/  -> SederPlus.exe       (the whole app)
-#   quick/ -> SederPlusQuick.exe  (the quick-entry window)
-#   core/  -> everything both of them actually do
+# Three EXEs, one shared implementation:
+#   full/   -> SederPlus.exe       (the whole app)
+#   quick/  -> SederPlusQuick.exe  (the quick-entry window)
+#   agent/  -> SederPlusAgent.exe  (reminders while both of those are closed)
+#   core/   -> everything the two windowed ones actually do
+#   shared/ -> the data file, the problem log, the background rules
 #
-# They are separate crates only because a Windows EXE icon is embedded at
-# compile time per crate — one crate cannot produce two differently-iconed
-# binaries. Each leaf crate is ~10 lines; all the real code lives in core/.
+# full and quick are separate crates only because a Windows EXE icon is
+# embedded at compile time per crate — one crate cannot produce two
+# differently-iconed binaries. Each leaf crate is ~10 lines; all the real code
+# lives in core/.
+#
+# agent/ is separate for a different reason: it must not depend on Tauri. It
+# opens no window, so it loads no WebView2, so it costs a few megabytes of
+# memory instead of a hundred and fifty. Everything it needs from core/ moved
+# into shared/, which knows nothing about Tauri.
 
 [profile.release]
 opt-level = "z"     # optimize for size — this is a UI shell, not a hot loop

@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::logfile;
+use seder_plus_shared::logfile;
 
 /// Hosts a release asset may come from. GitHub redirects release downloads to
 /// `objects.githubusercontent.com`, so both have to be allowed — and nothing

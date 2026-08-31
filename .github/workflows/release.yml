@@ -10,6 +10,8 @@
 #   SederPlusSetup.exe    the installer — both programs, silent, per-user
 #   SederPlus.exe         the full app, for anyone who prefers no installer
 #   SederPlusQuick.exe    the quick-entry window
+#   SederPlusAgent.exe    the background reminders. Attached for completeness;
+#                         it is started by the app, never on its own.
 #
 # The in-app updater looks for the setup file by name (pickInstaller in
 # src/lib/updater.ts), so keep it attached and keep the name.
@@ -123,4 +125,5 @@ jobs:
             release-win/SederPlusSetup.exe
             release-win/SederPlus.exe
             release-win/SederPlusQuick.exe
+            release-win/SederPlusAgent.exe
           fail_on_unmatched_files: true

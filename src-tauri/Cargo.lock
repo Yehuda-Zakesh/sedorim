@@ -2993,16 +2993,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "seder-plus-agent"
+version = "1.0.0"
+dependencies = [
+ "seder-plus-shared",
+ "serde_json",
+ "tauri-winrt-notification",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "seder-plus-core"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
+ "seder-plus-shared",
  "serde",
  "serde_json",
  "tauri",
  "tauri-plugin-dialog",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "winreg",
 ]
 
 [[package]]
@@ -3021,6 +3033,14 @@ dependencies = [
  "seder-plus-core",
  "tauri",
  "tauri-build",
+]
+
+[[package]]
+name = "seder-plus-shared"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

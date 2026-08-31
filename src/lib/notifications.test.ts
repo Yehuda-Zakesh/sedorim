@@ -3,13 +3,22 @@
 // production by being nagged at 06:00 on a Shabbos.
 import { describe, it, expect } from "vitest";
 import {
-  dueNotifications, decideNotifications, isoWeekKey, graceMinutes,
-  BASE_GRACE_MIN, MAX_GRACE_MIN, type ReminderFacts,
+  dueNotifications,
+  decideNotifications,
+  isoWeekKey,
+  graceMinutes,
+  BASE_GRACE_MIN,
+  MAX_GRACE_MIN,
+  type ReminderFacts,
 } from "./notifications";
 import { EMPTY_MEMORY, IGNORE_THRESHOLD } from "./notification-learning";
 
 const ALL_ON = {
-  dailyReminder: true, latenessAlert: true, weeklySummary: true, forecastWarning: true,
+  dailyReminder: true,
+  latenessAlert: true,
+  weeklySummary: true,
+  forecastWarning: true,
+  phoneReport: true,
 };
 
 /**
@@ -29,6 +38,10 @@ function facts(over: Partial<ReminderFacts> = {}): ReminderFacts {
     maxLatePerMonth: 3,
     lastWeek: { entries: 0, netMissing: 0, oheveiCount: 0 },
     enabled: ALL_ON,
+    // July 2026: the report reminder is about June, and the 8th is past its
+    // window anyway, so it stays out of the way of every other rule here.
+    reportMonth: "2026-06",
+    reportDone: false,
     anyChannelOn: true,
     sent: {},
     adaptive: false,
@@ -52,9 +65,7 @@ describe("isoWeekKey", () => {
 
   it("gives every day of one week the same key", () => {
     // Mon 6 July through Sun 12 July 2026.
-    const keys = new Set(
-      Array.from({ length: 7 }, (_, i) => isoWeekKey(new Date(2026, 6, 6 + i))),
-    );
+    const keys = new Set(Array.from({ length: 7 }, (_, i) => isoWeekKey(new Date(2026, 6, 6 + i))));
     expect(keys.size).toBe(1);
   });
 
@@ -115,7 +126,9 @@ describe("lateness alert", () => {
   });
 
   it("stays quiet below the quota", () => {
-    expect(kinds(facts({ lateCountThisMonth: 2, maxLatePerMonth: 3 }))).not.toContain("lateness-alert");
+    expect(kinds(facts({ lateCountThisMonth: 2, maxLatePerMonth: 3 }))).not.toContain(
+      "lateness-alert",
+    );
   });
 
   it("does not repeat within the same month", () => {
@@ -136,8 +149,9 @@ describe("lateness alert", () => {
   });
 
   it("names both numbers in the body", () => {
-    const [n] = dueNotifications(facts({ lateCountThisMonth: 4, maxLatePerMonth: 3 }))
-      .filter((x) => x.kind === "lateness-alert");
+    const [n] = dueNotifications(facts({ lateCountThisMonth: 4, maxLatePerMonth: 3 })).filter(
+      (x) => x.kind === "lateness-alert",
+    );
     expect(n.body).toContain("4");
     expect(n.body).toContain("3");
   });
@@ -164,8 +178,9 @@ describe("weekly summary", () => {
   });
 
   it("carries last week's figures", () => {
-    const [n] = dueNotifications(facts({ lastWeek: { entries: 8, netMissing: 45, oheveiCount: 2 } }))
-      .filter((x) => x.kind === "weekly-summary");
+    const [n] = dueNotifications(
+      facts({ lastWeek: { entries: 8, netMissing: 45, oheveiCount: 2 } }),
+    ).filter((x) => x.kind === "weekly-summary");
     expect(n.body).toContain("8");
     expect(n.body).toContain("45");
     expect(n.body).toContain("2");
@@ -178,7 +193,13 @@ describe("all together", () => {
       hasEntryToday: false,
       lateCountThisMonth: 9,
       lastWeek: { entries: 8, netMissing: 45, oheveiCount: 2 },
-      enabled: { dailyReminder: false, latenessAlert: false, weeklySummary: false, forecastWarning: false },
+      enabled: {
+        dailyReminder: false,
+        latenessAlert: false,
+        weeklySummary: false,
+        forecastWarning: false,
+        phoneReport: false,
+      },
     });
     expect(dueNotifications(f)).toEqual([]);
   });
@@ -233,7 +254,12 @@ describe("all together", () => {
 describe("forecast warning", () => {
   /** On course for 400 missing minutes against a 180 threshold, 60 so far. */
   const heading = (over: Partial<ReminderFacts> = {}) =>
-    facts({ forecastNetMissing: 400, netMissingThisMonth: 60, alertMissingMinPerMonth: 180, ...over });
+    facts({
+      forecastNetMissing: 400,
+      netMissingThisMonth: 60,
+      alertMissingMinPerMonth: 180,
+      ...over,
+    });
 
   it("warns while the month is only heading past the threshold", () => {
     expect(kinds(heading())).toContain("forecast-warning");
@@ -258,11 +284,15 @@ describe("forecast warning", () => {
   });
 
   it("does not repeat within the same month", () => {
-    expect(kinds(heading({ sent: { "forecast-warning": "2026-07" } }))).not.toContain("forecast-warning");
+    expect(kinds(heading({ sent: { "forecast-warning": "2026-07" } }))).not.toContain(
+      "forecast-warning",
+    );
   });
 
   it("fires again in a new month", () => {
-    expect(kinds(heading({ sent: { "forecast-warning": "2026-06" } }))).toContain("forecast-warning");
+    expect(kinds(heading({ sent: { "forecast-warning": "2026-06" } }))).toContain(
+      "forecast-warning",
+    );
   });
 
   it("respects the switch being off", () => {
@@ -320,20 +350,28 @@ describe("daily reminder, adapted", () => {
 
   it("comes sooner on the weakest weekday", () => {
     // 8 July 2026 is a Wednesday — weekday 3.
-    expect(kinds(unlogged({ now: new Date(2026, 6, 8, 9, 10), weakWeekday: 3 }))).toContain("daily-reminder");
+    expect(kinds(unlogged({ now: new Date(2026, 6, 8, 9, 10), weakWeekday: 3 }))).toContain(
+      "daily-reminder",
+    );
   });
 
   it("says which day it is on the weakest weekday", () => {
-    const [n] = decideNotifications(unlogged({ now: new Date(2026, 6, 8, 9, 15), weakWeekday: 3 })).due;
+    const [n] = decideNotifications(
+      unlogged({ now: new Date(2026, 6, 8, 9, 15), weakWeekday: 3 }),
+    ).due;
     expect(n.body).toContain("רביעי");
   });
 
   it("ignores a weak weekday that is not today", () => {
-    expect(kinds(unlogged({ now: new Date(2026, 6, 8, 9, 10), weakWeekday: 0 }))).not.toContain("daily-reminder");
+    expect(kinds(unlogged({ now: new Date(2026, 6, 8, 9, 10), weakWeekday: 0 }))).not.toContain(
+      "daily-reminder",
+    );
   });
 
   it("keeps the fixed behaviour when adaptation is switched off", () => {
-    expect(kinds(unlogged({ adaptive: false, now: new Date(2026, 6, 8, 9, 0) }))).toContain("daily-reminder");
+    expect(kinds(unlogged({ adaptive: false, now: new Date(2026, 6, 8, 9, 0) }))).toContain(
+      "daily-reminder",
+    );
   });
 });
 
@@ -369,30 +407,41 @@ describe("backing off a reminder nobody answers", () => {
   });
 
   it("counts a day that went by unrecorded as unanswered", () => {
-    const d = decideNotifications(unlogged({
-      learning: { "daily-reminder": { ...EMPTY_MEMORY, pendingToken: "2026-07-07" } },
-      satisfiedPending: { "daily-reminder": false },
-    }));
+    const d = decideNotifications(
+      unlogged({
+        learning: { "daily-reminder": { ...EMPTY_MEMORY, pendingToken: "2026-07-07" } },
+        satisfiedPending: { "daily-reminder": false },
+      }),
+    );
     expect(d.learning["daily-reminder"]?.ignoredStreak).toBe(1);
     expect(d.learning["daily-reminder"]?.pendingToken).toBeUndefined();
   });
 
   it("leaves today's delivery unjudged — there is still time to act on it", () => {
-    const d = decideNotifications(unlogged({
-      learning: { "daily-reminder": { ...EMPTY_MEMORY, pendingToken: "2026-07-08" } },
-      satisfiedPending: { "daily-reminder": false },
-    }));
+    const d = decideNotifications(
+      unlogged({
+        learning: { "daily-reminder": { ...EMPTY_MEMORY, pendingToken: "2026-07-08" } },
+        satisfiedPending: { "daily-reminder": false },
+      }),
+    );
     expect(d.learning["daily-reminder"]?.pendingToken).toBe("2026-07-08");
     expect(d.learning["daily-reminder"]?.ignoredStreak).toBe(0);
   });
 
   it("lets one answered reminder clear the whole backlog at once", () => {
-    const d = decideNotifications(unlogged({
-      learning: {
-        "daily-reminder": { ...EMPTY_MEMORY, ignoredStreak: 5, cooldown: 3, pendingToken: "2026-07-07" },
-      },
-      satisfiedPending: { "daily-reminder": true },
-    }));
+    const d = decideNotifications(
+      unlogged({
+        learning: {
+          "daily-reminder": {
+            ...EMPTY_MEMORY,
+            ignoredStreak: 5,
+            cooldown: 3,
+            pendingToken: "2026-07-07",
+          },
+        },
+        satisfiedPending: { "daily-reminder": true },
+      }),
+    );
     expect(d.learning["daily-reminder"]?.ignoredStreak).toBe(0);
     expect(d.learning["daily-reminder"]?.cooldown).toBe(0);
     // And it is free to speak again on this very check.
@@ -430,5 +479,87 @@ describe("backing off a reminder nobody answers", () => {
       satisfiedPending: { "daily-reminder": false },
     });
     expect(decideNotifications(f).learning).toEqual(f.learning);
+  });
+});
+
+// ============================================================================
+// דיווח למערכת הטלפונית
+// ============================================================================
+
+describe("phone-system report reminder", () => {
+  /** The 2nd of the month at 20:00, with last month unreported. */
+  const due = (over: Partial<ReminderFacts> = {}) =>
+    facts({
+      now: new Date(2026, 8, 2, 20, 0),
+      reportMonth: "2026-08",
+      reportDone: false,
+      ...over,
+    });
+
+  it("says which month it is about", () => {
+    const [n] = dueNotifications(due()).filter((x) => x.kind === "phone-report");
+    expect(n.body).toContain("08/2026");
+  });
+
+  it("waits for the evening", () => {
+    expect(kinds(due({ now: new Date(2026, 8, 2, 19, 59) }))).not.toContain("phone-report");
+    expect(kinds(due({ now: new Date(2026, 8, 2, 20, 0) }))).toContain("phone-report");
+  });
+
+  it("runs on each of the first five days", () => {
+    for (let day = 1; day <= 5; day++) {
+      expect(kinds(due({ now: new Date(2026, 8, day, 20, 0) })), `day ${day}`).toContain(
+        "phone-report",
+      );
+    }
+  });
+
+  it("stops after the 5th", () => {
+    expect(kinds(due({ now: new Date(2026, 8, 6, 20, 0) }))).not.toContain("phone-report");
+  });
+
+  it("says so on the last day", () => {
+    const [n] = dueNotifications(due({ now: new Date(2026, 8, 5, 20, 0) })).filter(
+      (x) => x.kind === "phone-report",
+    );
+    expect(n.body).toContain("היום האחרון");
+  });
+
+  it("stops the moment the month is marked as reported", () => {
+    expect(kinds(due({ reportDone: true }))).not.toContain("phone-report");
+  });
+
+  it("goes out once a day, not once a tick", () => {
+    expect(kinds(due({ sent: { "phone-report": "2026-09-02" } }))).not.toContain("phone-report");
+    // Yesterday's token does not silence today.
+    expect(kinds(due({ sent: { "phone-report": "2026-09-01" } }))).toContain("phone-report");
+  });
+
+  it("respects the switch being off", () => {
+    expect(kinds(due({ enabled: { ...ALL_ON, phoneReport: false } }))).not.toContain(
+      "phone-report",
+    );
+  });
+});
+
+describe("what the background agent has already said", () => {
+  /** Mid-morning on a learning day, nothing recorded: the daily reminder is due. */
+  const unlogged = (over: Partial<ReminderFacts> = {}) => facts({ hasEntryToday: false, ...over });
+
+  it("silences the app's own reminder about the same morning", () => {
+    expect(kinds(unlogged())).toContain("daily-reminder");
+    expect(kinds(unlogged({ sent: { "bg-seder-1": "2026-07-08" } }))).not.toContain(
+      "daily-reminder",
+    );
+  });
+
+  it("does not silence it on a later day", () => {
+    expect(kinds(unlogged({ sent: { "bg-seder-1": "2026-07-07" } }))).toContain("daily-reminder");
+  });
+
+  it("leaves the seder ב׳ reminder to the agent alone", () => {
+    // The app has no rule of its own for seder ב׳, so the agent's token for it
+    // changes nothing here — and must not suppress the morning reminder.
+    expect(kinds(unlogged({ sent: { "bg-seder-2": "2026-07-08" } }))).toContain("daily-reminder");
   });
 });

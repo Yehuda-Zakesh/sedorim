@@ -12,9 +12,18 @@ path = "src/lib.rs"
 
 [dependencies]
 tauri = "2"
+# The data file, the problem log and the background reminder rules. Shared
+# with SederPlusAgent.exe, which must not depend on Tauri — see
+# ../shared/src/lib.rs.
+seder-plus-shared = { path = "../shared" }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
+
+[target.'cfg(windows)'.dependencies]
+# One registry value under HKCU\...\Run: the "start with Windows" half of the
+# background switch. Nothing else in the app touches the registry.
+winreg = "0.55"

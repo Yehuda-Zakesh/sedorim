@@ -1,0 +1,30 @@
+[package]
+name = "seder-plus-agent"
+version = "1.0.0"
+description = "SederPlusAgent — the windowless process that raises reminders while the app is closed"
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+# The bin name is the EXE name: target/release/SederPlusAgent.exe
+[[bin]]
+name = "SederPlusAgent"
+path = "src/main.rs"
+
+[dependencies]
+seder-plus-shared = { path = "../shared" }
+serde_json = "1"
+# The same crate Tauri's notification plugin uses underneath on Windows, used
+# directly here: this process has no Tauri runtime to hang a plugin off, and
+# using it directly is also what makes a button on the toast possible.
+tauri-winrt-notification = "0.7"
+
+[target.'cfg(windows)'.dependencies]
+# Two calls: CreateMutexW (only one agent per user) and CoInitializeEx (the
+# WinRT toast API needs an initialised apartment on the calling thread).
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Com",
+  "Win32_System_Threading",
+] }

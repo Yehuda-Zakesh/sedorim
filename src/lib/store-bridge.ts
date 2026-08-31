@@ -32,7 +32,14 @@ export type StoreKey =
   | "notificationsSent"
   // How each reminder's recent deliveries went, which is what lets one that
   // keeps going unanswered go quiet — see notification-learning.ts.
-  | "notificationLearning";
+  | "notificationLearning"
+  // When each of the next few hundred days' reminders falls due, worked out
+  // here and left for SederPlusAgent.exe to act on while the app is closed —
+  // see background-plan.ts and src-tauri/shared/src/plan.rs.
+  | "backgroundPlan"
+  // Which months have been reported to the phone system. Written by the app
+  // and by the agent (from the button on its toast) — see phone-report.ts.
+  | "phoneReport";
 
 export type StoreShape = Partial<Record<StoreKey, unknown>> & {
   updatedAt?: number;

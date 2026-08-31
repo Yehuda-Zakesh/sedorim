@@ -1,4 +1,4 @@
-﻿; SederPlusSetup.exe — one installer, both programs.
+﻿; SederPlusSetup.exe — one installer, all three programs.
 ;
 ; Built by scripts/build-installer.mjs, which passes the version in on the
 ; command line. Inno Setup 6 is pre-installed on GitHub's windows runners, so
@@ -16,13 +16,20 @@
 ;    consent dialog in front of every automatic update.
 ;
 ;  * Quiet by default. Every page a wizard could show is suppressed: there is
-;    nothing to choose here — two EXEs, one folder, two desktop shortcuts — so
+;    nothing to choose here — three EXEs, one folder, two desktop shortcuts — so
 ;    the installer shows a progress bar and finishes. /SILENT and /VERYSILENT
 ;    work as usual for the updater, which passes /SILENT.
 
 #define AppName "סדר פלוס"
 #define AppExe "SederPlus.exe"
 #define QuickExe "SederPlusQuick.exe"
+#define AgentExe "SederPlusAgent.exe"
+; The AppUserModelID the app raises its Windows notifications under (the
+; `identifier` in src-tauri/full/tauri.conf.json). Stamped onto the Start menu
+; shortcut below so Windows recognises the toasts as this app - they group
+; under one name in the Action Center and get one entry in Windows' own
+; notification settings.
+#define ToastAppId "il.co.9900.sederplus"
 #define Publisher "סדר פלוס"
 
 #ifndef AppVersion
@@ -71,15 +78,31 @@ RestartApplications=no
 [Files]
 Source: "{#SourceDir}\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\{#QuickExe}"; DestDir: "{app}"; Flags: ignoreversion
+; The background reminder process. It gets no shortcut anywhere: it is started
+; by the app when the switch in Settings is turned on, and by the Run entry
+; that switch writes. Nobody is meant to double-click it.
+Source: "{#SourceDir}\{#AgentExe}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Both programs get a desktop shortcut — the quick window is the one most
 ; people open every day, so burying it in the Start menu would be wrong.
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; IconFilename: "{app}\{#AppExe}"
 Name: "{autodesktop}\כניסה מהירה - {#AppName}"; Filename: "{app}\{#QuickExe}"; IconFilename: "{app}\{#QuickExe}"
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
+; The Start menu shortcut carries the AppUserModelID. That is what makes a
+; Windows notification from either the app or SederPlusAgent.exe show up as
+; this app rather than as an unidentified program: they raise their toasts
+; under the same ID (see src-tauri/agent/src/main.rs), and Windows resolves it
+; through this shortcut.
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "{#ToastAppId}"
 Name: "{group}\כניסה מהירה - {#AppName}"; Filename: "{app}\{#QuickExe}"
 Name: "{group}\הסרת {#AppName}"; Filename: "{uninstallexe}"
+
+[Registry]
+; The "start with Windows" entry is written by the app itself, not here — it
+; is a setting, not part of the install. This only makes sure an uninstall
+; does not leave it pointing at an EXE that is gone. The value name must match
+; RUN_VALUE_NAME in src-tauri/core/src/background.rs.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SederPlusAgent"; Flags: dontcreatekey uninsdeletevalue
 
 [Run]
 ; A plain `nowait` entry rather than `postinstall`: a postinstall item is a
@@ -87,7 +110,30 @@ Name: "{group}\הסרת {#AppName}"; Filename: "{uninstallexe}"
 ; updates itself — never shows that page, so the app would never come back up.
 Filename: "{app}\{#AppExe}"; Flags: nowait
 
+[UninstallRun]
+; Stop the agent before its EXE is deleted out from under it.
+Filename: "{sys}\taskkill.exe"; Parameters: "/f /im {#AgentExe}"; Flags: runhidden; RunOnceId: "StopAgent"
+
 [UninstallDelete]
 ; The data in %APPDATA%\SederPlus is the user's own and is never touched by an
 ; uninstall — only what the installer itself put down.
 Type: dirifempty; Name: "{app}"
+
+[Code]
+// SederPlusAgent.exe has no window, and CloseApplications works by asking
+// windows to close. An update — which the app runs silently, in place, over
+// files that are in use — would otherwise fail on the one file that is
+// running and cannot be asked to stop.
+//
+// It comes back on its own: the [Run] entry starts SederPlus.exe, which
+// starts the agent again if the switch is on (see core/src/lib.rs).
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/f /im {#AgentExe}', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Nothing here can fail in a way worth stopping an install for: if the
+  // agent was not running, taskkill returns non-zero and that is correct.
+  Result := '';
+end;

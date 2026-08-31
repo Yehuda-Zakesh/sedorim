@@ -1,18 +1,44 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import {
-  Clock, TrendingUp, CalendarCheck, BookOpen, ChevronLeft,
-  Sparkles, Bell, Flame, Target, FileDown, DatabaseBackup, Award,
+  Clock,
+  TrendingUp,
+  CalendarCheck,
+  BookOpen,
+  ChevronLeft,
+  Sparkles,
+  Bell,
+  Flame,
+  Target,
+  FileDown,
+  DatabaseBackup,
+  Award,
+  PhoneCall,
 } from "lucide-react";
 import {
-  useSeder, useLearning, monthlySummary, attendanceScore, currentDayStreak, todayISO, calcSeder,
-  entriesInMonth, scoreEntries,
-  FRAMEWORK_LABELS, type LearningFramework,
+  useSeder,
+  useLearning,
+  monthlySummary,
+  attendanceScore,
+  currentDayStreak,
+  todayISO,
+  calcSeder,
+  entriesInMonth,
+  scoreEntries,
+  FRAMEWORK_LABELS,
+  type LearningFramework,
 } from "@/lib/kollel-store";
 import { forecastMonthlyNetMissing } from "@/lib/insights";
 import { formatHebrewDate, isBeinHazmanim, isLearningDay } from "@/lib/hebrew-calendar";
 import { useSettings, SHAS_ARRIVAL_DEADLINE } from "@/lib/settings-store";
 import { KpiCard, StatTile, IconBadge } from "@/components/ui/stat";
+import {
+  formatMonthKey,
+  reportedMonthFor,
+  setReported,
+  usePhoneReport,
+  REPORT_WINDOW_LAST_DAY,
+} from "@/lib/phone-report";
 
 // א׳–ה׳ בלבד, לפי getDay(). שישי ושבת אינם ימי לימוד ואינם נכנסים לחישוב.
 const LEARNING_WEEKDAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי"];
@@ -29,7 +55,8 @@ export const Route = createFileRoute("/")({
 
 function fmtMin(m: number): string {
   if (!m) return "0";
-  const h = Math.floor(m / 60), r = m % 60;
+  const h = Math.floor(m / 60),
+    r = m % 60;
   return h > 0 ? `${h}:${String(r).padStart(2, "0")}` : `${r}`;
 }
 
@@ -39,7 +66,8 @@ function Dashboard() {
   const { settings } = useSettings();
 
   const today = new Date();
-  const y = today.getFullYear(), m = today.getMonth();
+  const y = today.getFullYear(),
+    m = today.getMonth();
   const summary = monthlySummary(y, m);
   const score = attendanceScore(y, m);
   const streak = currentDayStreak();
@@ -54,8 +82,12 @@ function Dashboard() {
   const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
   const monthLessons = lessons.filter((l) => l.date.startsWith(monthPrefix));
   const learningTotalMin = monthLessons.reduce((s, l) => s + l.minutes, 0);
-  const learningByFw = (["kollel-erev", "torato-beyado", "bein-hazmanim"] as LearningFramework[])
-    .map((fw) => ({ fw, minutes: monthLessons.filter((l) => l.framework === fw).reduce((s, l) => s + l.minutes, 0) }));
+  const learningByFw = (
+    ["kollel-erev", "torato-beyado", "bein-hazmanim"] as LearningFramework[]
+  ).map((fw) => ({
+    fw,
+    minutes: monthLessons.filter((l) => l.framework === fw).reduce((s, l) => s + l.minutes, 0),
+  }));
 
   // Weekly attendance score, over the month's real calendar weeks.
   //
@@ -69,7 +101,9 @@ function Dashboard() {
   const weekCount = Math.ceil((leadingBlanks + daysInMonth) / 7);
 
   const weekBars = Array.from({ length: weekCount }, (_, w) => {
-    let expected = 0, netMissing = 0, count = 0;
+    let expected = 0,
+      netMissing = 0,
+      count = 0;
     const firstDay = Math.max(1, w * 7 - leadingBlanks + 1);
     const lastDay = Math.min(daysInMonth, (w + 1) * 7 - leadingBlanks);
     for (const e of entries) {
@@ -82,7 +116,9 @@ function Dashboard() {
       count++;
     }
     return {
-      firstDay, lastDay, count,
+      firstDay,
+      lastDay,
+      count,
       // null, not 0 — "nothing was recorded" and "recorded, scored zero" are
       // different answers and the chart has to be able to tell them apart.
       score: expected === 0 ? null : Math.max(0, 100 - Math.round((netMissing / expected) * 100)),
@@ -101,7 +137,7 @@ function Dashboard() {
     const acc = LEARNING_WEEKDAY_NAMES.map((day) => ({ day, net: 0, count: 0 }));
     for (const e of entries) {
       const wd = new Date(e.date).getDay();
-      if (Number.isNaN(wd) || wd > 4) continue;   // שישי־שבת אינם ימי לימוד
+      if (Number.isNaN(wd) || wd > 4) continue; // שישי־שבת אינם ימי לימוד
       acc[wd].net += calcSeder(e).netMissingMin;
       acc[wd].count++;
     }
@@ -114,10 +150,37 @@ function Dashboard() {
   })();
 
   const kpis = [
-    { label: "ציון נוכחות החודש", value: `${score}`, hint: `יעד ${settings.goals.monthlyTarget}`, icon: Target, tone: "primary" as const },
-    { label: "דקות חסרות (נטו)", value: fmtMin(summary.netMissing), hint: `${summary.entries} סדרים נרשמו`, icon: Clock, tone: summary.netMissing > settings.seder.alertMissingMinPerMonth ? "destructive" as const : "info" as const },
-    { label: "סדרי אוהבי ה׳", value: summary.oheveiCount.toString(), hint: "החודש", icon: Award, tone: "success" as const },
-    { label: "רצף ימים", value: streak.toString(), hint: streak > 0 ? "ימים ללא חיסור" : "התחל היום", icon: Flame, tone: "warning" as const },
+    {
+      label: "ציון נוכחות החודש",
+      value: `${score}`,
+      hint: `יעד ${settings.goals.monthlyTarget}`,
+      icon: Target,
+      tone: "primary" as const,
+    },
+    {
+      label: "דקות חסרות (נטו)",
+      value: fmtMin(summary.netMissing),
+      hint: `${summary.entries} סדרים נרשמו`,
+      icon: Clock,
+      tone:
+        summary.netMissing > settings.seder.alertMissingMinPerMonth
+          ? ("destructive" as const)
+          : ("info" as const),
+    },
+    {
+      label: "סדרי אוהבי ה׳",
+      value: summary.oheveiCount.toString(),
+      hint: "החודש",
+      icon: Award,
+      tone: "success" as const,
+    },
+    {
+      label: "רצף ימים",
+      value: streak.toString(),
+      hint: streak > 0 ? "ימים ללא חיסור" : "התחל היום",
+      icon: Flame,
+      tone: "warning" as const,
+    },
   ];
 
   // These three switches sit in Settings → "לוח בקרה" and, until now, changed
@@ -125,16 +188,30 @@ function Dashboard() {
   const { showInsights, showReminders, showQuickActions } = settings.dashboard;
 
   return (
-    <AppShell title="לוח בקרה" subtitle={hebrewDate} actions={
-      <div className="flex gap-2">
-        <Link to="/attendance" className="pressable inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-          <CalendarCheck className="size-4" /> רישום סדר
-        </Link>
-      </div>
-    }>
+    <AppShell
+      title="לוח בקרה"
+      subtitle={hebrewDate}
+      actions={
+        <div className="flex gap-2">
+          <Link
+            to="/attendance"
+            className="pressable inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <CalendarCheck className="size-4" /> רישום סדר
+          </Link>
+        </div>
+      }
+    >
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {kpis.map((k) => (
-          <KpiCard key={k.label} label={k.label} value={k.value} hint={k.hint} icon={k.icon} tone={k.tone} />
+          <KpiCard
+            key={k.label}
+            label={k.label}
+            value={k.value}
+            hint={k.hint}
+            icon={k.icon}
+            tone={k.tone}
+          />
         ))}
       </section>
 
@@ -143,9 +220,14 @@ function Dashboard() {
           <IconBadge icon={BookOpen} tone="info" size="md" />
           <div className="flex-1">
             <div className="text-sm font-semibold">בין הזמנים</div>
-            <p className="text-xs text-muted-foreground mt-0.5">מסגרת "ישיבת בין הזמנים" זמינה במסך לימוד נוסף.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              מסגרת "ישיבת בין הזמנים" זמינה במסך לימוד נוסף.
+            </p>
           </div>
-          <Link to="/learning" className="text-xs text-info hover:underline inline-flex items-center gap-1">
+          <Link
+            to="/learning"
+            className="text-xs text-info hover:underline inline-flex items-center gap-1"
+          >
             לפתיחה <ChevronLeft className="size-3" />
           </Link>
         </div>
@@ -156,40 +238,58 @@ function Dashboard() {
           <IconBadge icon={Bell} tone="warning" size="md" />
           <div className="flex-1">
             <div className="text-sm font-semibold">לא רשמת סדר היום</div>
-            <p className="text-xs text-muted-foreground mt-0.5">סמן הגעה/יציאה כדי לעקוב אחר הנוכחות.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              סמן הגעה/יציאה כדי לעקוב אחר הנוכחות.
+            </p>
           </div>
-          <Link to="/attendance" className="text-xs text-warning-fg hover:underline inline-flex items-center gap-1">
+          <Link
+            to="/attendance"
+            className="text-xs text-warning-fg hover:underline inline-flex items-center gap-1"
+          >
             לרישום <ChevronLeft className="size-3" />
           </Link>
         </div>
       )}
+
+      {showReminders && <PhoneReportCard />}
 
       <div className={`mt-5 grid grid-cols-1 gap-4 ${showReminders ? "lg:grid-cols-3" : ""}`}>
         <div className={`card-surface p-5 ${showReminders ? "lg:col-span-2" : ""}`}>
           <h2 className="text-sm font-semibold mb-3">פירוט החודש</h2>
           {/* Five across when the חבורה is on, so the extra figure joins the
               row instead of dropping onto one of its own. */}
-          <div className={`grid grid-cols-2 gap-3 ${settings.seder.shasChavura ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+          <div
+            className={`grid grid-cols-2 gap-3 ${settings.seder.shasChavura ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}
+          >
             <StatTile label="איחורים" value={summary.lateCount} dot="var(--status-late)" />
             <StatTile label="היעדרויות" value={summary.absenceCount} dot="var(--status-absent)" />
             <StatTile label="יציאה מוקדמת" value={summary.earlyDepCount} dot="var(--status-late)" />
             <StatTile label="בונוס (דק׳)" value={summary.bonus} dot="var(--status-present)" />
             {settings.seder.shasChavura && (
-              <StatTile label="חבורת ש״ס" value={summary.shasCount} dot="var(--status-present)"
-                hint={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`} />
+              <StatTile
+                label="חבורת ש״ס"
+                value={summary.shasCount}
+                dot="var(--status-present)"
+                hint={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`}
+              />
             )}
           </div>
 
           <div className="mt-5">
             <div className="flex items-baseline justify-between gap-2 mb-2">
               <div className="text-xs text-muted-foreground">ציון נוכחות לפי שבוע</div>
-              <div className="text-2xs text-muted-foreground">היעד: {settings.goals.monthlyTarget}</div>
+              <div className="text-2xs text-muted-foreground">
+                היעד: {settings.goals.monthlyTarget}
+              </div>
             </div>
             {/* The values, on their own row, so nothing sits on top of the
                 target line. */}
             <div className="flex gap-2">
               {weekBars.map((w, i) => (
-                <div key={i} className="flex-1 text-center text-2xs tabular-nums text-muted-foreground">
+                <div
+                  key={i}
+                  className="flex-1 text-center text-2xs tabular-nums text-muted-foreground"
+                >
                   {w.score === null ? "" : w.score}
                 </div>
               ))}
@@ -209,8 +309,11 @@ function Dashboard() {
                 style={{ bottom: `${settings.goals.monthlyTarget}%` }}
               />
               {weekBars.map((w, i) => (
-                <div key={i} className="flex-1 h-full flex items-end rounded-md bg-muted/50"
-                  title={`${w.firstDay}–${w.lastDay} בחודש · ${w.score === null ? "אין רישומים" : `ציון ${w.score} מתוך 100`}`}>
+                <div
+                  key={i}
+                  className="flex-1 h-full flex items-end rounded-md bg-muted/50"
+                  title={`${w.firstDay}–${w.lastDay} בחודש · ${w.score === null ? "אין רישומים" : `ציון ${w.score} מתוך 100`}`}
+                >
                   {w.score !== null && (
                     <div
                       className="w-full rounded-md bg-primary"
@@ -223,7 +326,10 @@ function Dashboard() {
 
             <div className="mt-1.5 flex gap-2">
               {weekBars.map((w, i) => (
-                <div key={i} className="flex-1 text-center text-2xs tabular-nums text-muted-foreground">
+                <div
+                  key={i}
+                  className="flex-1 text-center text-2xs tabular-nums text-muted-foreground"
+                >
                   {w.firstDay}–{w.lastDay}
                 </div>
               ))}
@@ -245,7 +351,9 @@ function Dashboard() {
                   <IconBadge icon={Clock} tone="destructive" size="sm" />
                   <div className="min-w-0">
                     <div className="text-sm font-medium">חרגת ממכסת האיחורים</div>
-                    <div className="text-xs text-muted-foreground">{summary.lateCount} מתוך {settings.goals.maxLatePerMonth}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {summary.lateCount} מתוך {settings.goals.maxLatePerMonth}
+                    </div>
                   </div>
                 </li>
               )}
@@ -272,12 +380,19 @@ function Dashboard() {
             <BookOpen className="size-4 text-primary" />
             <h2 className="text-sm font-semibold">לימוד נוסף החודש</h2>
           </div>
-          <Link to="/learning" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+          <Link
+            to="/learning"
+            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+          >
             לפרטים <ChevronLeft className="size-3" />
           </Link>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatTile label="סה״כ דקות" value={learningTotalMin} hint={`${(learningTotalMin / 60).toFixed(1)} שע׳`} />
+          <StatTile
+            label="סה״כ דקות"
+            value={learningTotalMin}
+            hint={`${(learningTotalMin / 60).toFixed(1)} שע׳`}
+          />
           {learningByFw.map(({ fw, minutes }) => (
             <StatTile key={fw} label={FRAMEWORK_LABELS[fw]} value={minutes} hint="דקות" />
           ))}
@@ -285,15 +400,22 @@ function Dashboard() {
       </div>
 
       {(showInsights || showQuickActions) && (
-        <div className={`mt-5 grid grid-cols-1 gap-4 ${showInsights && showQuickActions ? "lg:grid-cols-3" : ""}`}>
+        <div
+          className={`mt-5 grid grid-cols-1 gap-4 ${showInsights && showQuickActions ? "lg:grid-cols-3" : ""}`}
+        >
           {showInsights && (
-            <div className={`card-surface p-5 bg-gradient-to-l from-primary/5 to-transparent ${showQuickActions ? "lg:col-span-2" : ""}`}>
+            <div
+              className={`card-surface p-5 bg-gradient-to-l from-primary/5 to-transparent ${showQuickActions ? "lg:col-span-2" : ""}`}
+            >
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
                   <Sparkles className="size-4 text-primary" />
                   <h2 className="text-sm font-semibold">סיכום מהיר</h2>
                 </div>
-                <Link to="/statistics" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                <Link
+                  to="/statistics"
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                >
                   לסטטיסטיקות <ChevronLeft className="size-3" />
                 </Link>
               </div>
@@ -306,27 +428,48 @@ function Dashboard() {
                   before it, and where the time is actually being lost. */}
               <ul className="space-y-2 text-sm">
                 <li className="flex items-start gap-2">
-                  <TrendingUp className={`size-4 mt-0.5 shrink-0 ${vsLastMonth === null || vsLastMonth >= 0 ? "text-success" : "text-destructive"}`} />
+                  <TrendingUp
+                    className={`size-4 mt-0.5 shrink-0 ${vsLastMonth === null || vsLastMonth >= 0 ? "text-success" : "text-destructive"}`}
+                  />
                   <span>
-                    {vsLastMonth === null
-                      ? "אין נתונים מהחודש שעבר להשוואה."
-                      : <>מול החודש שעבר: <b className="tabular-nums">{vsLastMonth >= 0 ? "+" : ""}{vsLastMonth}</b> נקודות ציון.</>}
+                    {vsLastMonth === null ? (
+                      "אין נתונים מהחודש שעבר להשוואה."
+                    ) : (
+                      <>
+                        מול החודש שעבר:{" "}
+                        <b className="tabular-nums">
+                          {vsLastMonth >= 0 ? "+" : ""}
+                          {vsLastMonth}
+                        </b>{" "}
+                        נקודות ציון.
+                      </>
+                    )}
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <Target className="size-4 text-info mt-0.5 shrink-0" />
                   <span>
-                    {forecast === null
-                      ? "עוד מעט רישומים ואפשר יהיה לחזות את סוף החודש."
-                      : <>בקצב הזה החודש ייסגר על <b className="tabular-nums">{fmtMin(forecast)}</b> דקות חסרות.</>}
+                    {forecast === null ? (
+                      "עוד מעט רישומים ואפשר יהיה לחזות את סוף החודש."
+                    ) : (
+                      <>
+                        בקצב הזה החודש ייסגר על <b className="tabular-nums">{fmtMin(forecast)}</b>{" "}
+                        דקות חסרות.
+                      </>
+                    )}
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <Clock className="size-4 text-warning-fg mt-0.5 shrink-0" />
                   <span>
-                    {worstWeekday === null
-                      ? "אין עדיין מספיק רישומים כדי לזהות יום חלש."
-                      : <>הכי הרבה נשמט בימי <b>{worstWeekday.day}</b> — {worstWeekday.avg} דק׳ לסדר בממוצע.</>}
+                    {worstWeekday === null ? (
+                      "אין עדיין מספיק רישומים כדי לזהות יום חלש."
+                    ) : (
+                      <>
+                        הכי הרבה נשמט בימי <b>{worstWeekday.day}</b> — {worstWeekday.avg} דק׳ לסדר
+                        בממוצע.
+                      </>
+                    )}
                   </span>
                 </li>
               </ul>
@@ -343,7 +486,11 @@ function Dashboard() {
                   { label: "ייצוא דוח", icon: FileDown, to: "/reports" as const },
                   { label: "גיבוי ושחזור", icon: DatabaseBackup, to: "/backup" as const },
                 ].map((a) => (
-                  <Link key={a.label} to={a.to} className="rounded-lg border border-border bg-card hover:bg-accent pressable-lg p-3 text-start">
+                  <Link
+                    key={a.label}
+                    to={a.to}
+                    className="rounded-lg border border-border bg-card hover:bg-accent pressable-lg p-3 text-start"
+                  >
                     <a.icon className="size-4 text-primary mb-2" />
                     <div className="text-xs font-medium">{a.label}</div>
                   </Link>
@@ -354,5 +501,67 @@ function Dashboard() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+/**
+ * דיווח למערכת הטלפונית — the one card on this screen about something the app
+ * cannot check for itself.
+ *
+ * It shows for the first five days of the month, about the month that ended,
+ * and disappears the moment it is marked as reported. The two days after
+ * being marked it stays, showing what it recorded, with an undo — otherwise
+ * a mis-click has no way back and the card is gone.
+ */
+function PhoneReportCard() {
+  const state = usePhoneReport();
+  const now = new Date();
+  const month = reportedMonthFor(now);
+  const done = state.reported.includes(month);
+  const inWindow = now.getDate() <= REPORT_WINDOW_LAST_DAY;
+
+  if (!inWindow) return null;
+
+  if (done) {
+    return (
+      <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-success">
+        <IconBadge icon={PhoneCall} tone="success" size="md" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold">חודש {formatMonthKey(month)} סומן כמדווח</div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            לא יישלחו עוד תזכורות על החודש הזה.
+          </p>
+        </div>
+        <button
+          onClick={() => setReported(month, false)}
+          className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+        >
+          ביטול הסימון
+        </button>
+      </div>
+    );
+  }
+
+  const daysLeft = REPORT_WINDOW_LAST_DAY - now.getDate();
+  return (
+    <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-warning">
+      <IconBadge icon={PhoneCall} tone="warning" size="md" />
+      <div className="flex-1">
+        <div className="text-sm font-semibold">
+          דיווח למערכת הטלפונית — חודש {formatMonthKey(month)}
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {daysLeft === 0
+            ? "היום היום האחרון לדווח."
+            : `נשארו ${daysLeft + 1} ימים לדווח (עד ה־${REPORT_WINDOW_LAST_DAY} בחודש).`}
+        </p>
+      </div>
+      <button
+        onClick={() => setReported(month, true)}
+        className="pressable rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+      >
+        דיווחתי
+      </button>
+    </div>
   );
 }
