@@ -29,7 +29,10 @@ export type StoreKey =
   | "lastAutoBackupAt"
   // Which reminders have already been raised, so two open EXEs don't both
   // toast the same one — see notifications.ts.
-  | "notificationsSent";
+  | "notificationsSent"
+  // How each reminder's recent deliveries went, which is what lets one that
+  // keeps going unanswered go quiet — see notification-learning.ts.
+  | "notificationLearning";
 
 export type StoreShape = Partial<Record<StoreKey, unknown>> & {
   updatedAt?: number;

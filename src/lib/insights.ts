@@ -23,6 +23,47 @@ export function isLearningWeekday(dateISO: string): boolean {
   return !Number.isNaN(d.getTime()) && !isWeekend(d);
 }
 
+export const WEEKDAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
+
+/** Entries to look back over for a weekday breakdown — roughly two months. */
+const WEAK_DAY_WINDOW = 120;
+/** Entries needed overall before the breakdown is allowed to conclude anything. */
+const WEAK_DAY_MIN_SAMPLE = 20;
+/** Entries needed on one weekday before that day can be named. */
+const WEAK_DAY_MIN_PER_DAY = 3;
+/** A weekday counts as weak only below this share of complete sedarim. */
+export const WEAK_DAY_MAX_RATE = 0.6;
+
+/**
+ * The weekday the user most often falls short on, or null when the record is
+ * too thin to say.
+ *
+ * Both the sample floors matter. Without the per-day one, a single bad Tuesday
+ * in a new install is "your weakest day is Tuesday"; without the overall one,
+ * the answer changes every time an entry is added. Expects `entries` newest
+ * first, as the store keeps them.
+ */
+export function weakestLearningWeekday(entries: SederEntry[]): { day: number; rate: number } | null {
+  const recent = entries.slice(0, WEAK_DAY_WINDOW);
+  if (recent.length < WEAK_DAY_MIN_SAMPLE) return null;
+
+  const stats: { good: number; total: number }[] = Array.from({ length: 7 }, () => ({ good: 0, total: 0 }));
+  for (const e of recent) {
+    if (!isLearningWeekday(e.date)) continue;   // שישי־שבת אינם ימי לימוד
+    const d = new Date(e.date).getDay();
+    stats[d].total++;
+    if (!e.absent && calcSeder(e).netMissingMin === 0) stats[d].good++;
+  }
+
+  let day = -1, rate = 1;
+  for (const i of LEARNING_WEEKDAYS) {
+    if (stats[i].total < WEAK_DAY_MIN_PER_DAY) continue;
+    const r = stats[i].good / stats[i].total;
+    if (r < rate) { rate = r; day = i; }
+  }
+  return day >= 0 && rate < WEAK_DAY_MAX_RATE ? { day, rate } : null;
+}
+
 export type Insight = {
   id: string;
   tone: "success" | "warning" | "info" | "destructive";
@@ -293,31 +334,15 @@ export function generateInsights(
     });
   }
 
-  // Best day of week (last 60 entries)
-  const recent = entries.slice(0, 120);
-  if (recent.length >= 20) {
-    const dayStats: { good: number; total: number }[] = Array.from({ length: 7 }, () => ({ good: 0, total: 0 }));
-    for (const e of recent) {
-      if (!isLearningWeekday(e.date)) continue;   // שישי־שבת אינם ימי לימוד
-      const d = new Date(e.date).getDay();
-      const c = calcSeder(e);
-      dayStats[d].total++;
-      if (!e.absent && c.netMissingMin === 0) dayStats[d].good++;
-    }
-    const dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-    let worst = -1, worstRate = 1;
-    for (const i of LEARNING_WEEKDAYS) {
-      if (dayStats[i].total < 3) continue;
-      const rate = dayStats[i].good / dayStats[i].total;
-      if (rate < worstRate) { worstRate = rate; worst = i; }
-    }
-    if (worst >= 0 && worstRate < 0.6) {
-      out.push({
-        id: "weak-day", tone: "info", category: "opportunity",
-        title: `יום ${dayNames[worst]} הוא היום החלש שלך`,
-        detail: `רק ${Math.round(worstRate * 100)}% מהסדרים ביום זה מלאים. תכנן מראש להגעה בזמן.`,
-      });
-    }
+  // The weekday that goes wrong most often. Shared with the reminder rules,
+  // which bring the daily nudge forward on that day — see notifications.ts.
+  const weak = weakestLearningWeekday(entries);
+  if (weak) {
+    out.push({
+      id: "weak-day", tone: "info", category: "opportunity",
+      title: `יום ${WEEKDAY_NAMES[weak.day]} הוא היום החלש שלך`,
+      detail: `רק ${Math.round(weak.rate * 100)}% מהסדרים ביום זה מלאים. תכנן מראש להגעה בזמן.`,
+    });
   }
 
   // Seder 1 vs Seder 2 comparison this month

@@ -36,6 +36,17 @@ export type Settings = {
   seder: SederConfig;
   sederSchedule: SederScheduleEntry[];
   sederOverrides: SederOverride[];
+  stipend: {
+    /**
+     * Months (YYYY-MM) the user has prior special approval from the Rosh
+     * Kollel for. Every rule in src/lib/stipend.ts that is written to bend
+     * for such an approval — today, only §3's ceiling on free excused
+     * minutes — is waived for a month listed here. Set from the checkbox on
+     * the stipend screen, one month at a time, since the approval itself is
+     * something the Rosh Kollel grants for a particular month.
+     */
+    approvedMonths: string[];
+  };
   notifications: {
     /** In-app pop-ups — a toast in whichever window is open. */
     popups: boolean;
@@ -44,6 +55,15 @@ export type Settings = {
     dailyReminder: boolean;
     latenessAlert: boolean;
     weeklySummary: boolean;
+    /** Warns that the month is *heading* past the missing-minutes threshold. */
+    forecastWarning: boolean;
+    /**
+     * Lets the reminders fit themselves to the user: a grace period drawn from
+     * his own arrival habit, an earlier nudge on his weakest weekday, and going
+     * quieter when a reminder keeps going unanswered. Switching it off restores
+     * the fixed behaviour exactly — see notifications.ts.
+     */
+    adaptive: boolean;
   };
   appearance: {
     fontSize: FontSize;
@@ -83,9 +103,14 @@ export const DEFAULT_SETTINGS: Settings = {
   notifications: {
     popups: true, desktop: false,
     dailyReminder: true, latenessAlert: true, weeklySummary: false,
+    // On by default, unlike the weekly digest: it fires at most once a month
+    // and only while there is still a month left to do something about it.
+    forecastWarning: true,
+    adaptive: true,
   },
   sederSchedule: [],
   sederOverrides: [],
+  stipend: { approvedMonths: [] },
   appearance: { fontSize: "normal", highContrast: false, compactMode: false, colorTheme: "blue", background: "white" },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
   data: { autoBackup: "weekly", backupRetention: 5, autoBackupBeforeOps: true },
@@ -226,6 +251,18 @@ export function addSederOverride(o: Omit<SederOverride, "id">) {
 
 export function removeSederOverride(id: string) {
   updateSettings({ sederOverrides: (store.get().sederOverrides || []).filter((o) => o.id !== id) });
+}
+
+// ============ Stipend approvals (per month) ============
+// Read straight off `settings.stipend.approvedMonths` rather than through a
+// helper: the stipend screen has to re-render when it changes, and only
+// useSettings() gives it that.
+export function setMonthApproved(monthKey: string, approved: boolean) {
+  const months = store.get().stipend?.approvedMonths || [];
+  const approvedMonths = approved
+    ? (months.includes(monthKey) ? months : [...months, monthKey])
+    : months.filter((m) => m !== monthKey);
+  updateSettings({ stipend: { approvedMonths } });
 }
 
 export function useSettings() {

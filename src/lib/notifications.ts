@@ -15,6 +15,21 @@
 // *now*", not "was this due at 09:00" — and each one fires at most once per
 // day / week / month, tracked in the shared data file so the two EXEs don't
 // both raise the same reminder.
+//
+// On top of the rules sits a thin adaptive layer, switched on by
+// `settings.notifications.adaptive` and switched off to get exactly the fixed
+// behaviour back. It does three things, all of them from figures the app
+// already keeps:
+//
+//   * waits out a grace period drawn from the user's own arrival habit before
+//     saying nothing has been recorded yet (graceMinutes below);
+//   * halves that wait on the weekday he most often falls short on, which is
+//     the morning the nudge is actually worth the interruption;
+//   * lets a reminder that keeps going unanswered go quiet for a period or two
+//     (notification-learning.ts).
+//
+// None of it is a model. It is arithmetic over the entries already in memory,
+// run once every ten minutes.
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { invoke, isDesktop } from "./tauri";
@@ -26,8 +41,30 @@ import {
   type SederEntry,
 } from "./kollel-store";
 import { isLearningDay } from "./hebrew-calendar";
+import {
+  averageArrivalOffsetMin, forecastMonthlyNetMissing, weakestLearningWeekday,
+  fmtMin, WEEKDAY_NAMES,
+} from "./insights";
+import {
+  parseLearningState, memoryFor, settle, gate, markDelivered,
+  type LearningState,
+} from "./notification-learning";
 
-export type NotificationKind = "daily-reminder" | "lateness-alert" | "weekly-summary";
+export const NOTIFICATION_KINDS = [
+  "daily-reminder", "lateness-alert", "weekly-summary", "forecast-warning",
+] as const;
+
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+/**
+ * The kinds the adaptive layer is allowed to quieten.
+ *
+ * A kind belongs here only if it recurs often enough to become noise *and*
+ * names something concrete to do, so that "was it answered?" has an answer.
+ * The monthly and weekly ones are statements of fact — going quiet on those
+ * would not be tact, it would be hiding them.
+ */
+const ADAPTIVE_KINDS: readonly NotificationKind[] = ["daily-reminder"];
 
 export type DueNotification = {
   kind: NotificationKind;
@@ -102,6 +139,27 @@ const sent = sharedValue<SentMap>({
   parse: (raw) => (raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as SentMap) : {}),
 });
 
+/**
+ * How each kind's recent deliveries went. Kept in its own key rather than
+ * folded into `notificationsSent`, so a file written by an older build keeps
+ * working untouched and this starts empty rather than misparsed.
+ */
+const learningStore = sharedValue<LearningState<NotificationKind>>({
+  key: "notificationLearning",
+  fallback: {},
+  parse: (raw) => parseLearningState(raw, NOTIFICATION_KINDS),
+});
+
+/** What the adaptive layer has learned, for the Settings screen. */
+export function useNotificationLearning(): LearningState<NotificationKind> {
+  return learningStore.use();
+}
+
+/** Forgets it and starts over — the escape hatch when it has got someone wrong. */
+export function resetNotificationLearning() {
+  learningStore.set({});
+}
+
 // ============ rules ============
 
 /** ISO-8601 week key, e.g. "2026-W34". Weeks start Monday. */
@@ -120,6 +178,28 @@ export function isoWeekKey(d: Date): string {
   return `${isoYear}-W${String(week).padStart(2, "0")}`;
 }
 
+/** The wait before the daily reminder speaks, for someone who arrives on time. */
+export const BASE_GRACE_MIN = 20;
+/** The longest that wait can ever grow to, however late the habit. */
+export const MAX_GRACE_MIN = 90;
+
+/**
+ * How long after the start of seder א׳ the daily reminder holds its tongue.
+ *
+ * With no wait at all it told a man who habitually walks in twenty minutes into
+ * the seder that he had not recorded it — every morning, twenty minutes before
+ * he could have. So the wait is his own average arrival plus a margin: the
+ * reminder arrives once he is genuinely late to record, not once the clock says
+ * the seder began. Arriving early never earns *less* than the margin.
+ */
+export function graceMinutes(avgArrivalOffsetMin: number | null, onWeakDay: boolean): number {
+  const habit = Math.max(0, Math.round(avgArrivalOffsetMin ?? 0));
+  const grace = Math.min(MAX_GRACE_MIN, BASE_GRACE_MIN + habit);
+  // On the weekday he most often falls short, half of it: that is the morning
+  // the interruption earns its keep.
+  return onWeakDay ? Math.round(grace / 2) : grace;
+}
+
 export type ReminderFacts = {
   now: Date;
   /** Is the kollel in session today (not weekend / yom tov / erev yom tov)? */
@@ -130,42 +210,105 @@ export type ReminderFacts = {
   lateCountThisMonth: number;
   maxLatePerMonth: number;
   lastWeek: { entries: number; netMissing: number; oheveiCount: number };
-  enabled: { dailyReminder: boolean; latenessAlert: boolean; weeklySummary: boolean };
+  enabled: {
+    dailyReminder: boolean;
+    latenessAlert: boolean;
+    weeklySummary: boolean;
+    forecastWarning: boolean;
+  };
   /** Whether any channel is switched on at all. */
   anyChannelOn: boolean;
   sent: SentMap;
+
+  // ---- what the adaptive layer reads ----
+  /** Off restores the fixed rules exactly: no grace, no weak day, no backing off. */
+  adaptive: boolean;
+  /** Mean minutes between a seder starting and the user arriving; +ve is late. */
+  avgArrivalOffsetMin: number | null;
+  /** The weekday (0 = Sunday) he most often falls short on, if the record says. */
+  weakWeekday: number | null;
+  /** Net missing minutes the month is on course for, if it can be projected. */
+  forecastNetMissing: number | null;
+  netMissingThisMonth: number;
+  alertMissingMinPerMonth: number;
+  learning: LearningState<NotificationKind>;
+  /**
+   * For each kind with a delivery awaiting judgement: was the need behind
+   * *that* delivery met? Judged against the period it was sent for — see
+   * notification-learning.ts.
+   */
+  satisfiedPending: Partial<Record<NotificationKind, boolean>>;
+};
+
+export type ReminderDecision = {
+  due: DueNotification[];
+  /** Due, but held back because the kind has been going unanswered. */
+  silenced: NotificationKind[];
+  /** The learning state after settling verdicts and charging any cooldown. */
+  learning: LearningState<NotificationKind>;
 };
 
 /**
- * Which reminders are worth raising right now.
+ * Which reminders are worth raising right now, and what that taught us.
  *
- * Pure, so the timing rules can be tested without a clock or a desktop.
+ * Pure, so both the timing rules and the adaptation can be tested without a
+ * clock, a desktop or a data file.
  */
-export function dueNotifications(f: ReminderFacts): DueNotification[] {
-  const out: DueNotification[] = [];
+export function decideNotifications(f: ReminderFacts): ReminderDecision {
   // With both channels off there is nowhere to say anything, and a reminder
-  // marked "sent" into the void would never be seen at all.
-  if (!f.anyChannelOn) return out;
+  // marked "sent" into the void would never be seen at all. Nothing is judged
+  // either: silence the user never had the chance to answer says nothing.
+  if (!f.anyChannelOn) return { due: [], silenced: [], learning: f.learning };
+
   const today = `${f.now.getFullYear()}-${String(f.now.getMonth() + 1).padStart(2, "0")}-${String(f.now.getDate()).padStart(2, "0")}`;
   const monthKey = today.slice(0, 7);
+  const weekKey = isoWeekKey(f.now);
   const nowMin = f.now.getHours() * 60 + f.now.getMinutes();
+  const tokens: Record<NotificationKind, string> = {
+    "daily-reminder": today,
+    "lateness-alert": monthKey,
+    "weekly-summary": weekKey,
+    "forecast-warning": monthKey,
+  };
 
-  // 1. Nothing logged yet today. Held back until seder 1 has actually begun —
-  //    a reminder at 06:00 to record a seder that starts at 09:00 is noise —
-  //    and never raised on a day the kollel is not sitting.
+  // Settle outstanding verdicts before anything else: a delivery that turned
+  // out to have been answered clears a cooldown that would otherwise silence
+  // this very check.
+  let learning = f.learning;
+  if (f.adaptive) {
+    for (const kind of ADAPTIVE_KINDS) {
+      const before = memoryFor(learning, kind);
+      const after = settle(before, f.satisfiedPending[kind] ?? false, tokens[kind]);
+      if (after !== before) learning = { ...learning, [kind]: after };
+    }
+  }
+
+  const candidates: DueNotification[] = [];
+
+  // 1. Nothing logged yet today. Held back until seder 1 has begun — a reminder
+  //    at 06:00 to record a seder that starts at 09:00 is noise — plus the
+  //    grace period above, and never raised on a day the kollel is not sitting.
   if (
     f.enabled.dailyReminder &&
     f.isLearningDay &&
-    nowMin >= f.seder1StartMin &&
     !f.hasEntryToday &&
     f.sent["daily-reminder"] !== today
   ) {
-    out.push({
-      kind: "daily-reminder",
-      token: today,
-      title: "סדר פלוס — לא נרשם סדר היום",
-      body: "עדיין לא רשמת נוכחות להיום. פתח את מסך הנוכחות כדי לסמן הגעה.",
-    });
+    const weakDay =
+      f.adaptive && f.weakWeekday !== null && f.now.getDay() === f.weakWeekday
+        ? f.weakWeekday
+        : null;
+    const grace = f.adaptive ? graceMinutes(f.avgArrivalOffsetMin, weakDay !== null) : 0;
+    if (nowMin >= f.seder1StartMin + grace) {
+      candidates.push({
+        kind: "daily-reminder",
+        token: today,
+        title: "סדר פלוס — לא נרשם סדר היום",
+        body: weakDay !== null
+          ? `עדיין לא רשמת נוכחות להיום. יום ${WEEKDAY_NAMES[weakDay]} הוא היום שבו הכי הרבה סדרים יוצאים חסרים אצלך.`
+          : "עדיין לא רשמת נוכחות להיום. פתח את מסך הנוכחות כדי לסמן הגעה.",
+      });
+    }
   }
 
   // 2. The month's late quota is used up. Once per month: re-toasting on every
@@ -176,7 +319,7 @@ export function dueNotifications(f: ReminderFacts): DueNotification[] {
     f.lateCountThisMonth >= f.maxLatePerMonth &&
     f.sent["lateness-alert"] !== monthKey
   ) {
-    out.push({
+    candidates.push({
       kind: "lateness-alert",
       token: monthKey,
       title: "סדר פלוס — חריגה ממכסת האיחורים",
@@ -185,13 +328,12 @@ export function dueNotifications(f: ReminderFacts): DueNotification[] {
   }
 
   // 3. Last week's numbers, the first time the app is open in a new week.
-  const weekKey = isoWeekKey(f.now);
   if (
     f.enabled.weeklySummary &&
     f.lastWeek.entries > 0 &&
     f.sent["weekly-summary"] !== weekKey
   ) {
-    out.push({
+    candidates.push({
       kind: "weekly-summary",
       token: weekKey,
       title: "סדר פלוס — סיכום השבוע שעבר",
@@ -199,7 +341,47 @@ export function dueNotifications(f: ReminderFacts): DueNotification[] {
     });
   }
 
-  return out;
+  // 4. The month is on course to cross the missing-minutes threshold. This is
+  //    the one reminder that arrives before the fact rather than after it,
+  //    which is the whole reason it is worth raising — so it is deliberately
+  //    dropped once the threshold has actually been crossed, where it would be
+  //    news to nobody and the statistics screen already says it better.
+  if (
+    f.enabled.forecastWarning &&
+    f.forecastNetMissing !== null &&
+    f.alertMissingMinPerMonth > 0 &&
+    f.forecastNetMissing >= f.alertMissingMinPerMonth &&
+    f.netMissingThisMonth < f.alertMissingMinPerMonth &&
+    f.sent["forecast-warning"] !== monthKey
+  ) {
+    candidates.push({
+      kind: "forecast-warning",
+      token: monthKey,
+      title: "סדר פלוס — הקצב הנוכחי חורג מהסף",
+      body: `לפי הקצב עד כה צפויות ${fmtMin(f.forecastNetMissing)} חסרות עד סוף החודש, מול סף של ${fmtMin(f.alertMissingMinPerMonth)}. יש עוד זמן לסגור את הפער.`,
+    });
+  }
+
+  const due: DueNotification[] = [];
+  const silenced: NotificationKind[] = [];
+  for (const n of candidates) {
+    if (!f.adaptive || !ADAPTIVE_KINDS.includes(n.kind)) {
+      due.push(n);
+      continue;
+    }
+    const before = memoryFor(learning, n.kind);
+    const { suppressed, memory } = gate(before, n.token);
+    if (memory !== before) learning = { ...learning, [n.kind]: memory };
+    if (suppressed) silenced.push(n.kind);
+    else due.push(n);
+  }
+
+  return { due, silenced, learning };
+}
+
+/** Which reminders are worth raising right now. */
+export function dueNotifications(f: ReminderFacts): DueNotification[] {
+  return decideNotifications(f).due;
 }
 
 // ============ wiring ============
@@ -218,41 +400,94 @@ function lastWeekSummary(entries: SederEntry[], now: Date) {
   return summarizeEntries(entries.filter((e) => e.date >= from && e.date <= to));
 }
 
+/**
+ * Entries to read the arrival habit off.
+ *
+ * Not the current month: on the 2nd that is one or two records, and a habit
+ * measured from two records is not a habit.
+ */
+const HABIT_WINDOW = 60;
+
+/**
+ * For each kind waiting on a verdict, whether the need behind that particular
+ * delivery was met — asked of the day it was sent for, never of today. See the
+ * note at the top of notification-learning.ts for why that distinction is the
+ * whole point.
+ */
+function pendingSatisfaction(
+  learning: LearningState<NotificationKind>,
+  entries: SederEntry[],
+): Partial<Record<NotificationKind, boolean>> {
+  const out: Partial<Record<NotificationKind, boolean>> = {};
+  const pendingDay = learning["daily-reminder"]?.pendingToken;
+  if (pendingDay !== undefined) {
+    out["daily-reminder"] = entries.some((e) => e.date === pendingDay);
+  }
+  return out;
+}
+
 export function collectFacts(now = new Date()): ReminderFacts {
   const settings = getSettings();
   const entries = getSederSnapshot();
   const today = isoOf(now);
   const times = getSederTimesFor(today);
   const month = entriesInMonth(entries, now.getFullYear(), now.getMonth());
+  const monthTotals = summarizeEntries(month);
+  const learning = learningStore.get();
+  const weak = weakestLearningWeekday(entries);
   return {
     now,
     isLearningDay: isLearningDay(now),
     seder1StartMin: hhmmToMin(times.s1Start) ?? 0,
     hasEntryToday: entries.some((e) => e.date === todayISO()),
-    lateCountThisMonth: summarizeEntries(month).lateCount,
+    lateCountThisMonth: monthTotals.lateCount,
     maxLatePerMonth: settings.goals.maxLatePerMonth,
     lastWeek: lastWeekSummary(entries, now),
     enabled: settings.notifications,
     anyChannelOn: settings.notifications.popups || settings.notifications.desktop,
     sent: sent.get(),
+    adaptive: settings.notifications.adaptive,
+    avgArrivalOffsetMin: averageArrivalOffsetMin(entries.slice(0, HABIT_WINDOW)),
+    weakWeekday: weak ? weak.day : null,
+    forecastNetMissing: forecastMonthlyNetMissing(),
+    netMissingThisMonth: monthTotals.netMissing,
+    alertMissingMinPerMonth: settings.seder.alertMissingMinPerMonth,
+    learning,
+    satisfiedPending: pendingSatisfaction(learning, entries),
   };
 }
 
-/** Delivers whatever is due, and records what was delivered. */
+/** Delivers whatever is due, and records what was delivered and how it landed. */
 export async function runReminderCheck(now = new Date()): Promise<DueNotification[]> {
-  const due = dueNotifications(collectFacts(now));
+  const f = collectFacts(now);
+  const decision = decideNotifications(f);
   const delivered: DueNotification[] = [];
-  for (const n of due) {
+  let learning = decision.learning;
+
+  for (const n of decision.due) {
     // Only mark it sent once a channel actually carried it, so a reminder is
     // not lost for the whole day because notifications happened to be muted
-    // when the first attempt ran.
+    // when the first attempt ran. The same goes for the verdict: a delivery
+    // nobody could have seen must not later count as one they ignored.
     const result = await announce(n.title, n.body);
-    if (result.popup || result.desktop) delivered.push(n);
+    if (!result.popup && !result.desktop) continue;
+    delivered.push(n);
+    if (f.adaptive && ADAPTIVE_KINDS.includes(n.kind)) {
+      learning = { ...learning, [n.kind]: markDelivered(memoryFor(learning, n.kind), n.token) };
+    }
   }
+
   if (delivered.length) {
     const next = { ...sent.get() };
     for (const n of delivered) next[n.kind] = n.token;
     sent.set(next);
+  }
+  // Settling a verdict and charging a cooldown both happen with nothing
+  // delivered, so this is written whenever it moved — and only then. These
+  // rules re-run every ten minutes in every open window, and each set() is a
+  // write to the file the other EXE is polling.
+  if (JSON.stringify(learning) !== JSON.stringify(learningStore.get())) {
+    learningStore.set(learning);
   }
   return delivered;
 }

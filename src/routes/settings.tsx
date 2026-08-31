@@ -28,7 +28,11 @@ import {
   sederTimesError, SHAS_ARRIVAL_DEADLINE, type SederTimes,
 } from "@/lib/settings-store";
 import { COLOR_THEMES, BG_THEMES } from "@/lib/theme-colors";
-import { announce } from "@/lib/notifications";
+import {
+  announce, useNotificationLearning, resetNotificationLearning,
+  NOTIFICATION_KINDS, type NotificationKind,
+} from "@/lib/notifications";
+import type { KindMemory } from "@/lib/notification-learning";
 import { readLog, openLogFolder, clearLog } from "@/lib/diagnostics";
 import { isDesktop } from "@/lib/tauri";
 import { Field, NumberField, SelectField, StackedField, TimeField, Toggle } from "@/components/ui/form";
@@ -143,6 +147,34 @@ function SettingsPage() {
                         onChange={(v) => update({ notifications: { ...settings.notifications, latenessAlert: v } })} />
                       <Toggle label="סיכום שבועי" on={settings.notifications.weeklySummary}
                         onChange={(v) => update({ notifications: { ...settings.notifications, weeklySummary: v } })} />
+                      <Toggle
+                        label={
+                          <span>
+                            התראה מוקדמת כשהקצב חורג
+                            <span className="block text-2xs text-muted-foreground">
+                              פעם בחודש, כשלפי הקצב עד כה החודש צפוי לעבור את סף הדקות החסרות —
+                              בזמן שעוד אפשר לסגור את הפער
+                            </span>
+                          </span>
+                        }
+                        on={settings.notifications.forecastWarning}
+                        onChange={(v) => update({ notifications: { ...settings.notifications, forecastWarning: v } })} />
+
+                      <div className="pt-2 text-xs font-semibold text-muted-foreground">התאמה אישית</div>
+                      <Toggle
+                        label={
+                          <span>
+                            התאם את התזכורות להרגלים שלי
+                            <span className="block text-2xs text-muted-foreground">
+                              התזכורת היומית ממתינה לפי שעת ההגעה הממוצעת שלך במקום לקפוץ בדיוק
+                              בתחילת הסדר, מקדימה ביום שבו הכי הרבה סדרים יוצאים חסרים, ומשתתקת
+                              לתקופה אם היא חוזרת שוב ושוב בלי שנרשם דבר.
+                            </span>
+                          </span>
+                        }
+                        on={settings.notifications.adaptive}
+                        onChange={(v) => update({ notifications: { ...settings.notifications, adaptive: v } })} />
+                      {settings.notifications.adaptive && <AdaptiveStatus />}
                       <NotificationTester />
                     </>
                   )}
@@ -229,6 +261,60 @@ function SettingsPage() {
         </button>
       </div>
     </AppShell>
+  );
+}
+
+const KIND_LABELS: Record<NotificationKind, string> = {
+  "daily-reminder": "תזכורת יומית",
+  "lateness-alert": "חריגה ממכסת איחורים",
+  "weekly-summary": "סיכום שבועי",
+  "forecast-warning": "התראה מוקדמת על הקצב",
+};
+
+/**
+ * What the adaptation has actually learned, as plain numbers.
+ *
+ * A reminder that goes quiet by itself is alarming unless there is somewhere
+ * to see that it did and why — so this shows the whole of the state, and the
+ * way to throw it away when it has got someone wrong.
+ */
+function AdaptiveStatus() {
+  const learning = useNotificationLearning();
+  const rows = NOTIFICATION_KINDS
+    .map((kind) => ({ kind, memory: learning[kind] }))
+    .filter((r): r is { kind: NotificationKind; memory: KindMemory } => (r.memory?.delivered ?? 0) > 0);
+
+  if (rows.length === 0) {
+    return (
+      <p className="text-2xs text-muted-foreground">
+        עוד לא נשלחה תזכורת שאפשר ללמוד ממנה. ההתאמה מתחילה מהתזכורת הראשונה, ומה שנלמד יופיע כאן.
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-border p-4">
+      <div className="text-sm font-semibold">מה נלמד עד כה</div>
+      <p className="mt-1 text-2xs text-muted-foreground">
+        תזכורת נחשבת "נענתה" כשנרשם סדר עבור היום שעליו היא הזכירה — לא לפי לחיצה עליה.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {rows.map(({ kind, memory }) => (
+          <li key={kind} className="flex items-center justify-between gap-3 text-xs">
+            <span>{KIND_LABELS[kind]}</span>
+            <span className="text-muted-foreground tabular-nums">
+              {memory.engaged}/{memory.delivered} נענו
+              {memory.cooldown > 0 && ` · שקטה ב-${memory.cooldown} הפעמים הבאות`}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button
+        onClick={() => { resetNotificationLearning(); toast.success("ההתאמה אופסה"); }}
+        className="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent">
+        <RotateCcw className="size-3.5" /> אפס את ההתאמה
+      </button>
+    </div>
   );
 }
 

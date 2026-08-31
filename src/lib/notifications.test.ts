@@ -2,11 +2,23 @@
 // user, so each guard is pinned down here rather than left to be discovered in
 // production by being nagged at 06:00 on a Shabbos.
 import { describe, it, expect } from "vitest";
-import { dueNotifications, isoWeekKey, type ReminderFacts } from "./notifications";
+import {
+  dueNotifications, decideNotifications, isoWeekKey, graceMinutes,
+  BASE_GRACE_MIN, MAX_GRACE_MIN, type ReminderFacts,
+} from "./notifications";
+import { EMPTY_MEMORY, IGNORE_THRESHOLD } from "./notification-learning";
 
-const ALL_ON = { dailyReminder: true, latenessAlert: true, weeklySummary: true };
+const ALL_ON = {
+  dailyReminder: true, latenessAlert: true, weeklySummary: true, forecastWarning: true,
+};
 
-/** A weekday mid-morning, seder 1 already started, nothing due. */
+/**
+ * A weekday mid-morning, seder 1 already started, nothing due.
+ *
+ * `adaptive` is off here on purpose: these are the fixed rules, and they are
+ * worth pinning down on their own. The layer that bends them has its own
+ * blocks further down, which switch it on explicitly.
+ */
 function facts(over: Partial<ReminderFacts> = {}): ReminderFacts {
   return {
     now: new Date(2026, 6, 8, 10, 0), // Wed 8 July 2026, 10:00
@@ -19,6 +31,14 @@ function facts(over: Partial<ReminderFacts> = {}): ReminderFacts {
     enabled: ALL_ON,
     anyChannelOn: true,
     sent: {},
+    adaptive: false,
+    avgArrivalOffsetMin: null,
+    weakWeekday: null,
+    forecastNetMissing: null,
+    netMissingThisMonth: 0,
+    alertMissingMinPerMonth: 180,
+    learning: {},
+    satisfiedPending: {},
     ...over,
   };
 }
@@ -158,7 +178,7 @@ describe("all together", () => {
       hasEntryToday: false,
       lateCountThisMonth: 9,
       lastWeek: { entries: 8, netMissing: 45, oheveiCount: 2 },
-      enabled: { dailyReminder: false, latenessAlert: false, weeklySummary: false },
+      enabled: { dailyReminder: false, latenessAlert: false, weeklySummary: false, forecastWarning: false },
     });
     expect(dueNotifications(f)).toEqual([]);
   });
@@ -199,11 +219,216 @@ describe("all together", () => {
       hasEntryToday: false,
       lateCountThisMonth: 9,
       lastWeek: { entries: 8, netMissing: 45, oheveiCount: 2 },
+      forecastNetMissing: 400,
+      netMissingThisMonth: 60,
     });
     for (const n of dueNotifications(f)) {
       expect(n.title.length, n.kind).toBeGreaterThan(0);
       expect(n.body.length, n.kind).toBeGreaterThan(0);
       expect(n.token.length, n.kind).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("forecast warning", () => {
+  /** On course for 400 missing minutes against a 180 threshold, 60 so far. */
+  const heading = (over: Partial<ReminderFacts> = {}) =>
+    facts({ forecastNetMissing: 400, netMissingThisMonth: 60, alertMissingMinPerMonth: 180, ...over });
+
+  it("warns while the month is only heading past the threshold", () => {
+    expect(kinds(heading())).toContain("forecast-warning");
+  });
+
+  it("stays quiet once the threshold has actually been crossed", () => {
+    // No longer a forecast. Saying it here would be news to nobody, and the
+    // statistics screen puts it better.
+    expect(kinds(heading({ netMissingThisMonth: 200 }))).not.toContain("forecast-warning");
+  });
+
+  it("stays quiet when the month is on course to stay under", () => {
+    expect(kinds(heading({ forecastNetMissing: 100 }))).not.toContain("forecast-warning");
+  });
+
+  it("stays quiet when there is too little of the month to project", () => {
+    expect(kinds(heading({ forecastNetMissing: null }))).not.toContain("forecast-warning");
+  });
+
+  it("stays quiet when the threshold is switched off with a zero", () => {
+    expect(kinds(heading({ alertMissingMinPerMonth: 0 }))).not.toContain("forecast-warning");
+  });
+
+  it("does not repeat within the same month", () => {
+    expect(kinds(heading({ sent: { "forecast-warning": "2026-07" } }))).not.toContain("forecast-warning");
+  });
+
+  it("fires again in a new month", () => {
+    expect(kinds(heading({ sent: { "forecast-warning": "2026-06" } }))).toContain("forecast-warning");
+  });
+
+  it("respects the switch being off", () => {
+    const f = heading({ enabled: { ...ALL_ON, forecastWarning: false } });
+    expect(kinds(f)).not.toContain("forecast-warning");
+  });
+});
+
+describe("graceMinutes", () => {
+  it("gives someone who arrives on time the base margin", () => {
+    expect(graceMinutes(0, false)).toBe(BASE_GRACE_MIN);
+  });
+
+  it("never gives an early arriver less than the base margin", () => {
+    expect(graceMinutes(-15, false)).toBe(BASE_GRACE_MIN);
+  });
+
+  it("waits out the habit of someone who arrives late", () => {
+    expect(graceMinutes(25, false)).toBe(BASE_GRACE_MIN + 25);
+  });
+
+  it("caps the wait however late the habit", () => {
+    // Otherwise a bad month of half-day arrivals would silence the reminder.
+    expect(graceMinutes(600, false)).toBe(MAX_GRACE_MIN);
+  });
+
+  it("halves the wait on the weak weekday", () => {
+    expect(graceMinutes(40, true)).toBe(Math.round((BASE_GRACE_MIN + 40) / 2));
+  });
+
+  it("falls back to the base margin with no record to read", () => {
+    expect(graceMinutes(null, false)).toBe(BASE_GRACE_MIN);
+  });
+});
+
+describe("daily reminder, adapted", () => {
+  const unlogged = (over: Partial<ReminderFacts> = {}) =>
+    facts({ adaptive: true, hasEntryToday: false, ...over });
+
+  it("holds back through the grace period", () => {
+    // 09:10 — ten minutes into a seder that began at 09:00, inside the margin.
+    expect(kinds(unlogged({ now: new Date(2026, 6, 8, 9, 10) }))).not.toContain("daily-reminder");
+  });
+
+  it("speaks once the grace period is up", () => {
+    expect(kinds(unlogged({ now: new Date(2026, 6, 8, 9, 20) }))).toContain("daily-reminder");
+  });
+
+  it("waits longer for someone who habitually arrives late", () => {
+    // An average arrival 25 minutes in makes the wait 45 minutes.
+    const f = unlogged({ avgArrivalOffsetMin: 25, now: new Date(2026, 6, 8, 9, 30) });
+    expect(kinds(f)).not.toContain("daily-reminder");
+    expect(kinds({ ...f, now: new Date(2026, 6, 8, 9, 45) })).toContain("daily-reminder");
+  });
+
+  it("comes sooner on the weakest weekday", () => {
+    // 8 July 2026 is a Wednesday — weekday 3.
+    expect(kinds(unlogged({ now: new Date(2026, 6, 8, 9, 10), weakWeekday: 3 }))).toContain("daily-reminder");
+  });
+
+  it("says which day it is on the weakest weekday", () => {
+    const [n] = decideNotifications(unlogged({ now: new Date(2026, 6, 8, 9, 15), weakWeekday: 3 })).due;
+    expect(n.body).toContain("רביעי");
+  });
+
+  it("ignores a weak weekday that is not today", () => {
+    expect(kinds(unlogged({ now: new Date(2026, 6, 8, 9, 10), weakWeekday: 0 }))).not.toContain("daily-reminder");
+  });
+
+  it("keeps the fixed behaviour when adaptation is switched off", () => {
+    expect(kinds(unlogged({ adaptive: false, now: new Date(2026, 6, 8, 9, 0) }))).toContain("daily-reminder");
+  });
+});
+
+describe("backing off a reminder nobody answers", () => {
+  const unlogged = (over: Partial<ReminderFacts> = {}) =>
+    facts({ adaptive: true, hasEntryToday: false, now: new Date(2026, 6, 8, 11, 0), ...over });
+
+  const owing = (cooldown: number, over: Partial<ReminderFacts> = {}) =>
+    unlogged({
+      learning: {
+        "daily-reminder": { ...EMPTY_MEMORY, ignoredStreak: IGNORE_THRESHOLD, cooldown },
+      },
+      ...over,
+    });
+
+  it("silences a kind that owes a period of quiet", () => {
+    const d = decideNotifications(owing(1));
+    expect(d.due.map((n) => n.kind)).not.toContain("daily-reminder");
+    expect(d.silenced).toContain("daily-reminder");
+  });
+
+  it("charges one period of quiet, not one per check", () => {
+    const first = decideNotifications(owing(2));
+    expect(first.learning["daily-reminder"]?.cooldown).toBe(1);
+    // The rules re-run every ten minutes; the same morning must not cost more.
+    const again = decideNotifications(owing(2, { learning: first.learning }));
+    expect(again.learning["daily-reminder"]?.cooldown).toBe(1);
+    expect(again.silenced).toContain("daily-reminder");
+  });
+
+  it("speaks again once the quiet is paid off", () => {
+    expect(kinds(owing(0))).toContain("daily-reminder");
+  });
+
+  it("counts a day that went by unrecorded as unanswered", () => {
+    const d = decideNotifications(unlogged({
+      learning: { "daily-reminder": { ...EMPTY_MEMORY, pendingToken: "2026-07-07" } },
+      satisfiedPending: { "daily-reminder": false },
+    }));
+    expect(d.learning["daily-reminder"]?.ignoredStreak).toBe(1);
+    expect(d.learning["daily-reminder"]?.pendingToken).toBeUndefined();
+  });
+
+  it("leaves today's delivery unjudged — there is still time to act on it", () => {
+    const d = decideNotifications(unlogged({
+      learning: { "daily-reminder": { ...EMPTY_MEMORY, pendingToken: "2026-07-08" } },
+      satisfiedPending: { "daily-reminder": false },
+    }));
+    expect(d.learning["daily-reminder"]?.pendingToken).toBe("2026-07-08");
+    expect(d.learning["daily-reminder"]?.ignoredStreak).toBe(0);
+  });
+
+  it("lets one answered reminder clear the whole backlog at once", () => {
+    const d = decideNotifications(unlogged({
+      learning: {
+        "daily-reminder": { ...EMPTY_MEMORY, ignoredStreak: 5, cooldown: 3, pendingToken: "2026-07-07" },
+      },
+      satisfiedPending: { "daily-reminder": true },
+    }));
+    expect(d.learning["daily-reminder"]?.ignoredStreak).toBe(0);
+    expect(d.learning["daily-reminder"]?.cooldown).toBe(0);
+    // And it is free to speak again on this very check.
+    expect(d.due.map((n) => n.kind)).toContain("daily-reminder");
+  });
+
+  it("never backs off the monthly or weekly kinds", () => {
+    // They state a fact rather than ask for anything, so "unanswered" is not a
+    // thing they can be, and going quiet would only hide them.
+    const f = unlogged({
+      lateCountThisMonth: 9,
+      lastWeek: { entries: 8, netMissing: 45, oheveiCount: 2 },
+      learning: {
+        "lateness-alert": { ...EMPTY_MEMORY, cooldown: 3 },
+        "weekly-summary": { ...EMPTY_MEMORY, cooldown: 3 },
+      },
+    });
+    expect(kinds(f)).toContain("lateness-alert");
+    expect(kinds(f)).toContain("weekly-summary");
+  });
+
+  it("neither adapts nor learns when adaptation is switched off", () => {
+    const f = owing(3, { adaptive: false });
+    const d = decideNotifications(f);
+    expect(d.due.map((n) => n.kind)).toContain("daily-reminder");
+    expect(d.silenced).toEqual([]);
+    expect(d.learning).toEqual(f.learning);
+  });
+
+  it("judges nothing while there is no channel to have seen it on", () => {
+    // Silence the user was never given the chance to answer is not an answer.
+    const f = unlogged({
+      anyChannelOn: false,
+      learning: { "daily-reminder": { ...EMPTY_MEMORY, pendingToken: "2026-07-07" } },
+      satisfiedPending: { "daily-reminder": false },
+    });
+    expect(decideNotifications(f).learning).toEqual(f.learning);
   });
 });
