@@ -1,9 +1,19 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useSidebarCollapsed } from "@/lib/sidebar-state";
 import {
-  LayoutDashboard, ClipboardCheck, History, BookOpen, CalendarDays,
-  BarChart3, FileText, Settings, Info, DatabaseBackup, Wallet,
-  PanelRightClose, PanelRightOpen,
+  LayoutDashboard,
+  ClipboardCheck,
+  History,
+  BookOpen,
+  CalendarDays,
+  BarChart3,
+  FileText,
+  Settings,
+  Info,
+  DatabaseBackup,
+  Wallet,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 
 // Every screen the app has, grouped. Each screen lives in exactly one place,
@@ -42,46 +52,33 @@ const NAV_GROUPS = [
   },
 ] as const;
 
-const SB_KEY = "sederplus.sidebar.collapsed.v1";
-const SB_LEGACY_KEY = "kollel.sidebar.collapsed.v1";
-
-export function getSidebarCollapsed(): boolean {
-  if (typeof window === "undefined") return false;
-  // Pre-rename installs still carry the old key; read it once as a fallback.
-  const v = localStorage.getItem(SB_KEY) ?? localStorage.getItem(SB_LEGACY_KEY);
-  return v === "1";
-}
-export function useSidebarCollapsed() {
-  const [c, setC] = useState<boolean>(() => getSidebarCollapsed());
-  useEffect(() => {
-    const h = () => setC(getSidebarCollapsed());
-    window.addEventListener("kollel:sidebar", h);
-    return () => window.removeEventListener("kollel:sidebar", h);
-  }, []);
-  const toggle = () => {
-    const next = !getSidebarCollapsed();
-    localStorage.setItem(SB_KEY, next ? "1" : "0");
-    window.dispatchEvent(new Event("kollel:sidebar"));
-  };
-  return { collapsed: c, toggle };
-}
-
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { collapsed, toggle } = useSidebarCollapsed();
   const width = collapsed ? "w-[64px]" : "w-[220px]";
 
   return (
-    <aside className={`fixed inset-y-0 start-0 z-30 flex ${width} flex-col bg-sidebar text-sidebar-foreground border-e border-sidebar-border transition-[width] duration-200 ease-[var(--ease-out-soft)]`}>
-      <div className={`px-2 py-3 border-b border-sidebar-border flex items-center ${collapsed ? "justify-center" : "justify-between gap-2"}`}>
+    <aside
+      className={`fixed inset-y-0 start-0 z-30 flex ${width} flex-col bg-sidebar text-sidebar-foreground border-e border-sidebar-border transition-[width] duration-200 ease-[var(--ease-out-soft)]`}
+    >
+      <div
+        className={`px-2 py-3 border-b border-sidebar-border flex items-center ${collapsed ? "justify-center" : "justify-between gap-2"}`}
+      >
         {!collapsed && (
           <div className="flex items-center gap-2 px-1 min-w-0">
-            <div className="size-9 rounded-lg bg-sidebar-primary grid place-items-center text-sidebar-primary-foreground font-bold shrink-0">ס</div>
+            <div className="size-9 rounded-lg bg-sidebar-primary grid place-items-center text-sidebar-primary-foreground font-bold shrink-0">
+              ס
+            </div>
             <div className="text-sm font-semibold truncate">סדר פלוס</div>
           </div>
         )}
         {collapsed && (
-          <div className="size-9 rounded-lg bg-sidebar-primary grid place-items-center text-sidebar-primary-foreground font-bold" title="סדר פלוס">ס</div>
+          <div
+            className="size-9 rounded-lg bg-sidebar-primary grid place-items-center text-sidebar-primary-foreground font-bold"
+            title="סדר פלוס"
+          >
+            ס
+          </div>
         )}
         <button
           onClick={toggle}
@@ -89,20 +86,24 @@ export function AppSidebar() {
           aria-label={collapsed ? "הרחב סרגל" : "כווץ סרגל"}
           className={`${collapsed ? "mt-2" : ""} pressable rounded-md p-1.5 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground`}
         >
-          {collapsed ? <PanelRightOpen className="size-4" /> : <PanelRightClose className="size-4" />}
+          {collapsed ? (
+            <PanelRightOpen className="size-4" />
+          ) : (
+            <PanelRightClose className="size-4" />
+          )}
         </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-1.5 py-3">
         {NAV_GROUPS.map((group, gi) => (
           <div key={group.label} className={gi > 0 ? "mt-4" : ""}>
-            {collapsed
-              ? gi > 0 && <div className="mx-2 mb-2 border-t border-sidebar-border" />
-              : (
-                <div className="px-2.5 pb-1.5 text-2xs font-semibold text-sidebar-foreground/60">
-                  {group.label}
-                </div>
-              )}
+            {collapsed ? (
+              gi > 0 && <div className="mx-2 mb-2 border-t border-sidebar-border" />
+            ) : (
+              <div className="px-2.5 pb-1.5 text-2xs font-semibold text-sidebar-foreground/60">
+                {group.label}
+              </div>
+            )}
             <ul className="space-y-1">
               {group.items.map(({ to, label, icon: Icon }) => {
                 const active = to === "/" ? pathname === "/" : pathname.startsWith(to);

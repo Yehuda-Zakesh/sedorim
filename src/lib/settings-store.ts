@@ -358,7 +358,8 @@ export function applyAppearance() {
   const r = document.documentElement;
   r.classList.toggle("hc", appearance.highContrast);
   r.classList.toggle("compact", appearance.compactMode);
-  r.dataset.fontSize = appearance.fontSize;
+  // No data-fontSize attribute: the size is applied as an inline root
+  // font-size below, and no stylesheet ever selected on the attribute.
   r.dataset.theme = appearance.colorTheme || "blue";
   const bg = appearance.background || "white";
   if (bg === "white") delete r.dataset.bg;

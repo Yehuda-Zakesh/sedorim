@@ -2,23 +2,29 @@ import { useEffect, useState } from "react";
 import { logWarn } from "./diagnostics";
 import { getSettings, getSederTimesFor, SHAS_ARRIVAL_DEADLINE } from "./settings-store";
 import { maybeAutoBackup, createSnapshot } from "./auto-backup";
-import { isLearningDay, hebrewFromGregorian, hebrewMonthName, hebrewYearLetters, formatHebrewMonthYear } from "./hebrew-calendar";
+import {
+  isLearningDay,
+  hebrewFromGregorian,
+  hebrewMonthName,
+  hebrewYearLetters,
+  formatHebrewMonthYear,
+} from "./hebrew-calendar";
 import { loadStore, saveStoreKey, saveStoreKeys, storeStamp } from "./store-bridge";
 export type SederNum = 1 | 2;
 export type LearningFramework = "kollel-erev" | "torato-beyado" | "bein-hazmanim";
 
 export type SederEntry = {
   id: string;
-  date: string;          // YYYY-MM-DD
+  date: string; // YYYY-MM-DD
   seder: SederNum;
-  arrival?: string;      // HH:MM (24h)
+  arrival?: string; // HH:MM (24h)
   departure?: string;
   absent: boolean;
   ohevei: boolean;
   excusedAll: boolean;
   excusedMinutes: number;
   excusedReason?: string;
-  manualAdjustMin: number;  // signed: +adds missing, -reduces missing
+  manualAdjustMin: number; // signed: +adds missing, -reduces missing
   tags: string[];
   note?: string;
 };
@@ -30,15 +36,15 @@ export type LearningEntry = {
   minutes: number;
   source: "manual" | "range" | "timer";
   note?: string;
-  tanitDibur?: boolean;  // לימוד בבית בתענית דיבור — כל דקה נחשבת ×2 בחישובים
+  tanitDibur?: boolean; // לימוד בבית בתענית דיבור — כל דקה נחשבת ×2 בחישובים
 };
 
 export type TimerSession = {
   framework: LearningFramework;
   /** תחילת הקטע הרץ הנוכחי — לא תחילת הלימוד, כשהטיימר הושהה וחזר. */
   startedAt: number;
-  limitMinutes?: number;   // הגבלת זמן אופציונלית — בסיום עוצר ושומר אוטומטית
-  tanitDibur?: boolean;    // רק לכולל ערב — סימון תענית דיבור
+  limitMinutes?: number; // הגבלת זמן אופציונלית — בסיום עוצר ושומר אוטומטית
+  tanitDibur?: boolean; // רק לכולל ערב — סימון תענית דיבור
   /** מילישניות שנצברו בקטעים שכבר הסתיימו (לפני ההשהיה האחרונה). */
   accumulatedMs?: number;
   /** מתי הושהה. כל עוד הוא קיים — הטיימר עומד ואינו צובר זמן. */
@@ -102,7 +108,12 @@ let hydrated = false;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
 
-function applyRemoteStore(store: { seder?: unknown; learning?: unknown; timer?: unknown; updatedAt?: number }) {
+function applyRemoteStore(store: {
+  seder?: unknown;
+  learning?: unknown;
+  timer?: unknown;
+  updatedAt?: number;
+}) {
   sederEntries = (store.seder as SederEntry[] | undefined) ?? [];
   learningEntries = (store.learning as LearningEntry[] | undefined) ?? [];
   timerSession = (store.timer as TimerSession | null | undefined) ?? null;
@@ -125,8 +136,12 @@ async function hydrate() {
 
 function persistKey(key: "seder" | "learning" | "timer", value: unknown) {
   saveStoreKey(key, value)
-    .then((res) => { lastKnownUpdatedAt = res.updatedAt; })
-    .catch(() => { /* best-effort; next poll will reconcile */ });
+    .then((res) => {
+      lastKnownUpdatedAt = res.updatedAt;
+    })
+    .catch(() => {
+      /* best-effort; next poll will reconcile */
+    });
 }
 
 // Use this instead of two separate persistKey() calls whenever seder +
@@ -136,8 +151,12 @@ function persistKey(key: "seder" | "learning" | "timer", value: unknown) {
 // partial state with only one of the two updated.
 function persistKeys(partial: { seder?: SederEntry[]; learning?: LearningEntry[] }) {
   saveStoreKeys(partial)
-    .then((res) => { lastKnownUpdatedAt = res.updatedAt; })
-    .catch(() => { /* best-effort; next poll will reconcile */ });
+    .then((res) => {
+      lastKnownUpdatedAt = res.updatedAt;
+    })
+    .catch(() => {
+      /* best-effort; next poll will reconcile */
+    });
 }
 
 // Cross-window sync: poll the shared data file so a write made in the
@@ -160,18 +179,26 @@ if (typeof window !== "undefined") {
         applyRemoteStore(store);
         emit();
       }
-    } catch { /* transient read failure — try again next tick */ }
+    } catch {
+      /* transient read failure — try again next tick */
+    }
   }, 4000);
 }
 
 function snapshotIfConfigured() {
   if (typeof window === "undefined") return;
   if (!getSettings().data.autoBackupBeforeOps) return;
-  createSnapshot({ attendance: sederEntries as unknown, learning: learningEntries as unknown }, "before-op");
+  createSnapshot(
+    { attendance: sederEntries as unknown, learning: learningEntries as unknown },
+    "before-op",
+  );
 }
 
 export class ValidationError extends Error {
-  constructor(msg: string) { super(msg); this.name = "ValidationError"; }
+  constructor(msg: string) {
+    super(msg);
+    this.name = "ValidationError";
+  }
 }
 
 // ============ Time helpers ============
@@ -179,7 +206,8 @@ export function hhmmToMin(t?: string): number | null {
   if (!t) return null;
   const m = /^(\d{1,2}):(\d{2})$/.exec(t);
   if (!m) return null;
-  const h = +m[1], mm = +m[2];
+  const h = +m[1],
+    mm = +m[2];
   if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
   return h * 60 + mm;
 }
@@ -196,14 +224,14 @@ export function todayISO(): string {
 // ============ Per-entry calculations ============
 export type SederCalc = {
   sederLengthMin: number;
-  missingMin: number;        // raw missing (late + early or absent length)
-  bonusMin: number;          // bonus from early arrival, capped at threshold
-  excusedMin: number;        // excused portion of missing
-  nonExcusedMin: number;     // missing - excused
-  netMissingMin: number;     // nonExcused + manualAdjust, clamped to >= 0, minus bonus, >= 0
+  missingMin: number; // raw missing (late + early or absent length)
+  bonusMin: number; // bonus from early arrival, capped at threshold
+  excusedMin: number; // excused portion of missing
+  nonExcusedMin: number; // missing - excused
+  netMissingMin: number; // nonExcused + manualAdjust, clamped to >= 0, minus bonus, >= 0
   isLate: boolean;
   isEarlyDeparture: boolean;
-  isOhevei: boolean;         // whether ohevei is actually valid
+  isOhevei: boolean; // whether ohevei is actually valid
   /**
    * A seder ב׳ the user was already sitting at by SHAS_ARRIVAL_DEADLINE —
    * what חבורת ש"ס counts. Computed for every row regardless of the setting;
@@ -222,15 +250,20 @@ export function calcSeder(entry: SederEntry): SederCalc {
   const endMin = hhmmToMin(endStr) ?? 0;
   const sederLengthMin = Math.max(0, endMin - startMin);
 
-  let missing = 0, bonus = 0, isLate = false, isEarly = false;
+  let missing = 0,
+    bonus = 0,
+    isLate = false,
+    isEarly = false;
   if (entry.absent) {
     missing = sederLengthMin;
   } else {
     const arr = hhmmToMin(entry.arrival);
     const dep = hhmmToMin(entry.departure);
     if (arr !== null) {
-      if (arr > startMin) { missing += arr - startMin; isLate = true; }
-      else if (arr < startMin) {
+      if (arr > startMin) {
+        missing += arr - startMin;
+        isLate = true;
+      } else if (arr < startMin) {
         bonus = Math.min(s.bonusThresholdMin, startMin - arr);
       }
     } else {
@@ -238,7 +271,10 @@ export function calcSeder(entry: SederEntry): SederCalc {
       if (dep === null) missing = sederLengthMin;
     }
     if (dep !== null) {
-      if (dep < endMin) { missing += endMin - dep; isEarly = true; }
+      if (dep < endMin) {
+        missing += endMin - dep;
+        isEarly = true;
+      }
     } else if (arr !== null) {
       // departure missing but arrived → treat as no early-leave (assume stayed)
     }
@@ -252,33 +288,54 @@ export function calcSeder(entry: SederEntry): SederCalc {
   // Ohevei valid: arrival ≤ start AND departure ≥ end AND not absent
   const arr = hhmmToMin(entry.arrival);
   const dep = hhmmToMin(entry.departure);
-  const isOhevei = entry.ohevei && !entry.absent &&
-    arr !== null && dep !== null && arr <= startMin && dep >= endMin;
+  const isOhevei =
+    entry.ohevei &&
+    !entry.absent &&
+    arr !== null &&
+    dep !== null &&
+    arr <= startMin &&
+    dep >= endMin;
 
   // חבורת ש"ס — סדר ב׳ בלבד, נוכח בפועל, והגיע עד השעה הקבועה.
   const shasDeadline = hhmmToMin(SHAS_ARRIVAL_DEADLINE);
-  const isShasArrival = entry.seder === 2 && !entry.absent &&
-    arr !== null && shasDeadline !== null && arr <= shasDeadline;
+  const isShasArrival =
+    entry.seder === 2 &&
+    !entry.absent &&
+    arr !== null &&
+    shasDeadline !== null &&
+    arr <= shasDeadline;
 
   return {
-    sederLengthMin, missingMin: missing, bonusMin: bonus,
-    excusedMin: excused, nonExcusedMin: nonExcused, netMissingMin,
-    isLate, isEarlyDeparture: isEarly, isOhevei, isShasArrival,
+    sederLengthMin,
+    missingMin: missing,
+    bonusMin: bonus,
+    excusedMin: excused,
+    nonExcusedMin: nonExcused,
+    netMissingMin,
+    isLate,
+    isEarlyDeparture: isEarly,
+    isOhevei,
+    isShasArrival,
   };
 }
 
 // ============ Validation ============
 function validateSeder(e: SederEntry): { ok: true } | { ok: false; error: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date)) return { ok: false, error: "תאריך לא תקין" };
-  if (new Date(e.date).getTime() > Date.now() + 86400000) return { ok: false, error: "לא ניתן לרשום תאריך עתידי" };
+  if (new Date(e.date).getTime() > Date.now() + 86400000)
+    return { ok: false, error: "לא ניתן לרשום תאריך עתידי" };
   if (e.seder !== 1 && e.seder !== 2) return { ok: false, error: "סדר לא חוקי" };
   if (!e.absent) {
-    if (e.arrival !== undefined && hhmmToMin(e.arrival) === null) return { ok: false, error: "שעת הגעה לא תקינה" };
-    if (e.departure !== undefined && hhmmToMin(e.departure) === null) return { ok: false, error: "שעת יציאה לא תקינה" };
-    const a = hhmmToMin(e.arrival), d = hhmmToMin(e.departure);
+    if (e.arrival !== undefined && hhmmToMin(e.arrival) === null)
+      return { ok: false, error: "שעת הגעה לא תקינה" };
+    if (e.departure !== undefined && hhmmToMin(e.departure) === null)
+      return { ok: false, error: "שעת יציאה לא תקינה" };
+    const a = hhmmToMin(e.arrival),
+      d = hhmmToMin(e.departure);
     if (a !== null && d !== null && d < a) return { ok: false, error: "שעת יציאה לפני שעת הגעה" };
   }
-  if (e.excusedMinutes < 0 || e.excusedMinutes > 24 * 60) return { ok: false, error: "מספר דקות מוצדק לא תקין" };
+  if (e.excusedMinutes < 0 || e.excusedMinutes > 24 * 60)
+    return { ok: false, error: "מספר דקות מוצדק לא תקין" };
   if (Math.abs(e.manualAdjustMin) > 24 * 60) return { ok: false, error: "התאמה ידנית גדולה מדי" };
   if (e.note && e.note.length > 500) return { ok: false, error: "הערה ארוכה מדי" };
   return { ok: true };
@@ -286,9 +343,11 @@ function validateSeder(e: SederEntry): { ok: true } | { ok: false; error: string
 
 function validateLearning(l: LearningEntry): { ok: true } | { ok: false; error: string } {
   if (!l.id) return { ok: false, error: "מזהה חסר" };
-  if (!["kollel-erev", "torato-beyado", "bein-hazmanim"].includes(l.framework)) return { ok: false, error: "מסגרת לא חוקית" };
+  if (!["kollel-erev", "torato-beyado", "bein-hazmanim"].includes(l.framework))
+    return { ok: false, error: "מסגרת לא חוקית" };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(l.date)) return { ok: false, error: "תאריך לא תקין" };
-  if (typeof l.minutes !== "number" || l.minutes < 1 || l.minutes > 24 * 60) return { ok: false, error: "משך לא חוקי (1–1440 דקות)" };
+  if (typeof l.minutes !== "number" || l.minutes < 1 || l.minutes > 24 * 60)
+    return { ok: false, error: "משך לא חוקי (1–1440 דקות)" };
   return { ok: true };
 }
 
@@ -303,7 +362,8 @@ export function effectiveLearningMin(l: LearningEntry): number {
 // persistKeys() for why: two separate saves leave a real window where a
 // concurrent reader can see only one of the two already updated.
 export function replaceAllData(sederList: SederEntry[], learningList: LearningEntry[]) {
-  sederEntries = sederList.filter((e) => validateSeder(e).ok)
+  sederEntries = sederList
+    .filter((e) => validateSeder(e).ok)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
   learningEntries = learningList.filter((l) => validateLearning(l).ok);
   persistKeys({ seder: sederEntries, learning: learningEntries });
@@ -316,7 +376,9 @@ export function useSeder() {
   useEffect(() => {
     const fn = () => force((n) => n + 1);
     listeners.add(fn);
-    return () => { listeners.delete(fn); };
+    return () => {
+      listeners.delete(fn);
+    };
   }, []);
   return {
     entries: sederEntries,
@@ -328,10 +390,14 @@ export function useSeder() {
       }
       const prev = sederEntries.find((x) => x.id === e.id);
       if (!prev) snapshotIfConfigured();
-      sederEntries = [e, ...sederEntries.filter((x) => x.id !== e.id)]
-        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
+      sederEntries = [e, ...sederEntries.filter((x) => x.id !== e.id)].sort((a, b) =>
+        a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder,
+      );
       persistKey("seder", sederEntries);
-      maybeAutoBackup({ attendance: sederEntries as unknown, learning: learningEntries as unknown });
+      maybeAutoBackup({
+        attendance: sederEntries as unknown,
+        learning: learningEntries as unknown,
+      });
       emit();
     },
     remove(id: string) {
@@ -343,7 +409,8 @@ export function useSeder() {
       emit();
     },
     replaceAll(list: SederEntry[]) {
-      sederEntries = list.filter((e) => validateSeder(e).ok)
+      sederEntries = list
+        .filter((e) => validateSeder(e).ok)
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
       persistKey("seder", sederEntries);
       emit();
@@ -362,7 +429,9 @@ export function useLearning() {
   useEffect(() => {
     const fn = () => force((n) => n + 1);
     listeners.add(fn);
-    return () => { listeners.delete(fn); };
+    return () => {
+      listeners.delete(fn);
+    };
   }, []);
   return {
     items: learningEntries,
@@ -374,7 +443,10 @@ export function useLearning() {
       }
       learningEntries = [item, ...learningEntries];
       persistKey("learning", learningEntries);
-      maybeAutoBackup({ attendance: sederEntries as unknown, learning: learningEntries as unknown });
+      maybeAutoBackup({
+        attendance: sederEntries as unknown,
+        learning: learningEntries as unknown,
+      });
       emit();
     },
     remove(id: string) {
@@ -407,7 +479,9 @@ export function useTimer(): TimerSession | null {
   useEffect(() => {
     const fn = () => force((n) => n + 1);
     listeners.add(fn);
-    return () => { listeners.delete(fn); };
+    return () => {
+      listeners.delete(fn);
+    };
   }, []);
   return timerSession;
 }
@@ -428,7 +502,10 @@ export function isTimerPaused(t: TimerSession): boolean {
   return t.pausedAt !== undefined;
 }
 
-export function startTimer(framework: LearningFramework, opts?: { limitMinutes?: number; tanitDibur?: boolean }): TimerSession {
+export function startTimer(
+  framework: LearningFramework,
+  opts?: { limitMinutes?: number; tanitDibur?: boolean },
+): TimerSession {
   const t: TimerSession = {
     framework,
     startedAt: Date.now(),
@@ -468,7 +545,11 @@ export function resumeTimer(now = Date.now()): TimerSession | null {
   return next;
 }
 
-export function stopTimer(): { framework: LearningFramework; minutes: number; tanitDibur?: boolean } | null {
+export function stopTimer(): {
+  framework: LearningFramework;
+  minutes: number;
+  tanitDibur?: boolean;
+} | null {
   const t = getTimer();
   if (!t) return null;
   let minutes = Math.max(1, Math.round(timerElapsedMs(t) / 60000));
@@ -513,9 +594,17 @@ export type MonthlySummary = {
 
 export function summarizeEntries(list: SederEntry[]): MonthlySummary {
   const out: MonthlySummary = {
-    totalMissing: 0, excused: 0, nonExcused: 0, bonus: 0,
-    lateCount: 0, absenceCount: 0, earlyDepCount: 0, oheveiCount: 0, shasCount: 0,
-    entries: list.length, netMissing: 0,
+    totalMissing: 0,
+    excused: 0,
+    nonExcused: 0,
+    bonus: 0,
+    lateCount: 0,
+    absenceCount: 0,
+    earlyDepCount: 0,
+    oheveiCount: 0,
+    shasCount: 0,
+    entries: list.length,
+    netMissing: 0,
   };
   for (const e of list) {
     const c = calcSeder(e);
@@ -543,22 +632,32 @@ export function monthlySummary(year: number, monthIdx: number): MonthlySummary {
 // History screen can close each month over exactly the rows it displays.
 
 const GREGORIAN_MONTHS_HE = [
-  "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
-  "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר",
+  "ינואר",
+  "פברואר",
+  "מרץ",
+  "אפריל",
+  "מאי",
+  "יוני",
+  "יולי",
+  "אוגוסט",
+  "ספטמבר",
+  "אוקטובר",
+  "נובמבר",
+  "דצמבר",
 ];
 
 export type MonthLearningTotals = {
-  kollelErev: number;        // דקות אפקטיביות (תענית דיבור נספרת כפול)
-  kollelErevRaw: number;     // דקות בפועל, לפני הכפלה
+  kollelErev: number; // דקות אפקטיביות (תענית דיבור נספרת כפול)
+  kollelErevRaw: number; // דקות בפועל, לפני הכפלה
   toratoBeyado: number;
   beinHazmanim: number;
 };
 
 export type MonthClosing = {
-  monthKey: string;          // YYYY-MM
-  gregorianLabel: string;    // "אוגוסט 2026"
-  hebrewLabel: string;       // "תמוז–אב תשפ״ו"
-  closed: boolean;           // האם החודש הסתיים (אחרת: סיכום ביניים)
+  monthKey: string; // YYYY-MM
+  gregorianLabel: string; // "אוגוסט 2026"
+  hebrewLabel: string; // "תמוז–אב תשפ״ו"
+  closed: boolean; // האם החודש הסתיים (אחרת: סיכום ביניים)
   seder: MonthlySummary;
   learning: MonthLearningTotals;
 };
@@ -577,15 +676,26 @@ function hebrewMonthLabelFor(year: number, monthIdx: number): string {
   return `${a}–${b} ${hebrewYearLetters(last.year)}`;
 }
 
-export function monthClosing(monthKey: string, entries: SederEntry[], lessons: LearningEntry[]): MonthClosing {
+export function monthClosing(
+  monthKey: string,
+  entries: SederEntry[],
+  lessons: LearningEntry[],
+): MonthClosing {
   const [year, month] = monthKey.split("-").map(Number);
   const monthIdx = month - 1;
-  const learning: MonthLearningTotals = { kollelErev: 0, kollelErevRaw: 0, toratoBeyado: 0, beinHazmanim: 0 };
+  const learning: MonthLearningTotals = {
+    kollelErev: 0,
+    kollelErevRaw: 0,
+    toratoBeyado: 0,
+    beinHazmanim: 0,
+  };
   for (const l of lessons) {
     if (!l.date.startsWith(monthKey)) continue;
     const eff = effectiveLearningMin(l);
-    if (l.framework === "kollel-erev") { learning.kollelErev += eff; learning.kollelErevRaw += l.minutes; }
-    else if (l.framework === "torato-beyado") learning.toratoBeyado += eff;
+    if (l.framework === "kollel-erev") {
+      learning.kollelErev += eff;
+      learning.kollelErevRaw += l.minutes;
+    } else if (l.framework === "torato-beyado") learning.toratoBeyado += eff;
     else learning.beinHazmanim += eff;
   }
   // Closed once the last day of the month has passed.
@@ -611,7 +721,10 @@ export function monthClosing(monthKey: string, entries: SederEntry[], lessons: L
 export function scoreEntries(list: SederEntry[]): number {
   if (!list.length) return 0;
   // expected total minutes = sum of seder lengths across entries
-  let expected = 0, net = 0, bonus = 0, lateCount = 0;
+  let expected = 0,
+    net = 0,
+    bonus = 0,
+    lateCount = 0;
   for (const e of list) {
     const c = calcSeder(e);
     expected += c.sederLengthMin;
@@ -643,22 +756,35 @@ export function currentDayStreak(): number {
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     if (!isLearningDay(d)) continue; // weekend / יום טוב / ערב יום טוב — לא שוברים רצף
     const list = byDate[iso];
-    if (!list) { if (i === 0) continue; break; }
+    if (!list) {
+      if (i === 0) continue;
+      break;
+    }
     const good = list.some((e) => {
       const c = calcSeder(e);
       return !e.absent && c.netMissingMin === 0;
     });
-    if (good) streak++; else break;
+    if (good) streak++;
+    else break;
   }
   return streak;
 }
 
-export function getSederSnapshot() { return sederEntries; }
-export function getLearningSnapshot() { return learningEntries; }
+export function getSederSnapshot() {
+  return sederEntries;
+}
+export function getLearningSnapshot() {
+  return learningEntries;
+}
 
-export function allTags(): string[] {
+// The list is a parameter so a component can hand over the entries it already
+// holds from useSeder. Reading the module store instead is invisible to
+// useMemo, which then flags its own [entries] trigger as an unnecessary
+// dependency; passing them in makes that dependency real. Defaults to the
+// store for callers with nothing in hand.
+export function allTags(list: readonly SederEntry[] = sederEntries): string[] {
   const set = new Set<string>();
-  for (const e of sederEntries) (e.tags || []).forEach((t) => set.add(t));
+  for (const e of list) (e.tags || []).forEach((t) => set.add(t));
   return [...set].sort();
 }
 
@@ -671,4 +797,3 @@ export const FRAMEWORK_LABELS: Record<LearningFramework, string> = {
 export function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
-

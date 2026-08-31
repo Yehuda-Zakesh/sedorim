@@ -54,4 +54,6 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-export { Button, buttonVariants };
+// buttonVariants stays local: nothing outside this file uses it, and exporting
+// a non-component alongside Button costs the file its Fast Refresh.
+export { Button };
