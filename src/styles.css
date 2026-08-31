@@ -180,15 +180,15 @@
   --radius: 0.625rem;
 
   /* Surfaces */
-  --background: oklch(0.969 0 0);            /* #F5F5F5 */
+  --background: oklch(0.969 0 0); /* #F5F5F5 */
   --foreground: oklch(0.22 0.02 250);
-  --card: oklch(1 0 0);                       /* #FFFFFF */
+  --card: oklch(1 0 0); /* #FFFFFF */
   --card-foreground: oklch(0.22 0.02 250);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.02 250);
 
   /* Brand */
-  --primary: oklch(0.49 0.13 252);            /* #1565C0 */
+  --primary: oklch(0.49 0.13 252); /* #1565C0 */
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.955 0.008 250);
   --secondary-foreground: oklch(0.28 0.04 252);
@@ -208,21 +208,21 @@
   --sidebar-ring: oklch(0.55 0.16 252);
 
   /* Status */
-  --destructive: oklch(0.55 0.21 27);         /* #C62828 */
+  --destructive: oklch(0.55 0.21 27); /* #C62828 */
   --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.52 0.15 145);            /* #2E7D32 */
+  --success: oklch(0.52 0.15 145); /* #2E7D32 */
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.65 0.17 50);             /* #E65100 */
+  --warning: oklch(0.65 0.17 50); /* #E65100 */
   --warning-foreground: oklch(0.99 0 0);
-  --info: oklch(0.5 0.14 235);                /* #01579B */
+  --info: oklch(0.5 0.14 235); /* #01579B */
   --info-foreground: oklch(0.99 0 0);
 
   /* Attendance — the marks (dots, fills, heatmap cells) */
-  --status-present: oklch(0.68 0.17 145);     /* #4CAF50 */
-  --status-late: oklch(0.83 0.17 85);         /* #FFC107 */
-  --status-absent: oklch(0.65 0.22 27);       /* #F44336 */
-  --status-excused: oklch(0.65 0.16 235);     /* #2196F3 */
-  --status-none: oklch(0.68 0 0);             /* #9E9E9E */
+  --status-present: oklch(0.68 0.17 145); /* #4CAF50 */
+  --status-late: oklch(0.83 0.17 85); /* #FFC107 */
+  --status-absent: oklch(0.65 0.22 27); /* #F44336 */
+  --status-excused: oklch(0.65 0.16 235); /* #2196F3 */
+  --status-none: oklch(0.68 0 0); /* #9E9E9E */
 
   /* …and the readable text alongside them. Measured against the white card:
      4.63, 4.65, 4.86, 4.64, 4.84 — all clear of AA. The marks above measured
@@ -232,7 +232,7 @@
   --status-absent-fg: oklch(0.575 0.21 27);
   --status-excused-fg: oklch(0.555 0.105 235);
   --status-none-fg: oklch(0.55 0.02 250);
-  --warning-fg: oklch(0.57 0.14 55);          /* --warning itself is 3.44:1 */
+  --warning-fg: oklch(0.57 0.14 55); /* --warning itself is 3.44:1 */
 
   --material-thin: color-mix(in oklch, var(--card) 62%, transparent);
   --material-regular: color-mix(in oklch, var(--card) 80%, transparent);
@@ -406,7 +406,9 @@
   color: var(--color-card-foreground);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 1px 3px oklch(0 0 0 / 0.06);
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 1px 3px oklch(0 0 0 / 0.06);
 }
 
 /* The look every text/number/date/time input and <select> in the app shares.
@@ -461,50 +463,252 @@ html.hc.dark {
 }
 
 /* Compact mode */
-html.compact main { padding: 1rem !important; }
-html.compact .card-surface { border-radius: var(--radius-md); }
+html.compact main {
+  padding: 1rem !important;
+}
+html.compact .card-surface {
+  border-radius: var(--radius-md);
+}
 
 /* Color themes — override primary AND sidebar surface so the side menu takes the chosen color */
-html[data-theme="emerald"]      { --primary: oklch(0.55 0.14 150); --ring: oklch(0.55 0.14 150); --sidebar: oklch(0.34 0.09 150); --sidebar-accent: oklch(0.42 0.10 150); --sidebar-border: oklch(0.42 0.09 150); --sidebar-primary: oklch(0.62 0.16 150); --sidebar-ring: oklch(0.62 0.16 150); }
-html.dark[data-theme="emerald"] { --primary: oklch(0.72 0.16 150); --ring: oklch(0.72 0.16 150); --sidebar: oklch(0.24 0.06 150); --sidebar-accent: oklch(0.32 0.07 150); --sidebar-border: oklch(0.32 0.07 150); --sidebar-primary: oklch(0.72 0.16 150); --sidebar-ring: oklch(0.72 0.16 150); }
+/* --primary is the fill behind a near-white --primary-foreground label.
+   At L 0.55 that pairing measured 4.43:1, under the 4.5 AA needs for
+   normal-size text; at L 0.53 it is 4.81:1. High-contrast mode does not
+   cover this — html.hc overrides only border, foreground and muted-foreground. */
+html[data-theme="emerald"] {
+  --primary: oklch(0.53 0.14 150);
+  --ring: oklch(0.53 0.14 150);
+  --sidebar: oklch(0.34 0.09 150);
+  --sidebar-accent: oklch(0.42 0.1 150);
+  --sidebar-border: oklch(0.42 0.09 150);
+  --sidebar-primary: oklch(0.62 0.16 150);
+  --sidebar-ring: oklch(0.62 0.16 150);
+}
+html.dark[data-theme="emerald"] {
+  --primary: oklch(0.72 0.16 150);
+  --ring: oklch(0.72 0.16 150);
+  --sidebar: oklch(0.24 0.06 150);
+  --sidebar-accent: oklch(0.32 0.07 150);
+  --sidebar-border: oklch(0.32 0.07 150);
+  --sidebar-primary: oklch(0.72 0.16 150);
+  --sidebar-ring: oklch(0.72 0.16 150);
+}
 
-html[data-theme="violet"]       { --primary: oklch(0.52 0.18 295); --ring: oklch(0.52 0.18 295); --sidebar: oklch(0.32 0.11 295); --sidebar-accent: oklch(0.4 0.12 295); --sidebar-border: oklch(0.4 0.11 295); --sidebar-primary: oklch(0.6 0.18 295); --sidebar-ring: oklch(0.6 0.18 295); }
-html.dark[data-theme="violet"]  { --primary: oklch(0.7 0.18 295);  --ring: oklch(0.7 0.18 295);  --sidebar: oklch(0.22 0.08 295); --sidebar-accent: oklch(0.3 0.10 295); --sidebar-border: oklch(0.3 0.09 295); --sidebar-primary: oklch(0.7 0.18 295); --sidebar-ring: oklch(0.7 0.18 295); }
+html[data-theme="violet"] {
+  --primary: oklch(0.52 0.18 295);
+  --ring: oklch(0.52 0.18 295);
+  --sidebar: oklch(0.32 0.11 295);
+  --sidebar-accent: oklch(0.4 0.12 295);
+  --sidebar-border: oklch(0.4 0.11 295);
+  --sidebar-primary: oklch(0.6 0.18 295);
+  --sidebar-ring: oklch(0.6 0.18 295);
+}
+html.dark[data-theme="violet"] {
+  --primary: oklch(0.7 0.18 295);
+  --ring: oklch(0.7 0.18 295);
+  --sidebar: oklch(0.22 0.08 295);
+  --sidebar-accent: oklch(0.3 0.1 295);
+  --sidebar-border: oklch(0.3 0.09 295);
+  --sidebar-primary: oklch(0.7 0.18 295);
+  --sidebar-ring: oklch(0.7 0.18 295);
+}
 
-html[data-theme="rose"]         { --primary: oklch(0.58 0.2 15);   --ring: oklch(0.58 0.2 15);   --sidebar: oklch(0.34 0.12 15);  --sidebar-accent: oklch(0.42 0.14 15);  --sidebar-border: oklch(0.42 0.12 15);  --sidebar-primary: oklch(0.65 0.2 15);   --sidebar-ring: oklch(0.65 0.2 15); }
-html.dark[data-theme="rose"]    { --primary: oklch(0.7 0.2 15);    --ring: oklch(0.7 0.2 15);    --sidebar: oklch(0.24 0.09 15);  --sidebar-accent: oklch(0.32 0.10 15);  --sidebar-border: oklch(0.32 0.10 15);  --sidebar-primary: oklch(0.7 0.2 15);    --sidebar-ring: oklch(0.7 0.2 15); }
+html[data-theme="rose"] {
+  --primary: oklch(0.58 0.2 15);
+  --ring: oklch(0.58 0.2 15);
+  --sidebar: oklch(0.34 0.12 15);
+  --sidebar-accent: oklch(0.42 0.14 15);
+  --sidebar-border: oklch(0.42 0.12 15);
+  --sidebar-primary: oklch(0.65 0.2 15);
+  --sidebar-ring: oklch(0.65 0.2 15);
+}
+html.dark[data-theme="rose"] {
+  --primary: oklch(0.7 0.2 15);
+  --ring: oklch(0.7 0.2 15);
+  --sidebar: oklch(0.24 0.09 15);
+  --sidebar-accent: oklch(0.32 0.1 15);
+  --sidebar-border: oklch(0.32 0.1 15);
+  --sidebar-primary: oklch(0.7 0.2 15);
+  --sidebar-ring: oklch(0.7 0.2 15);
+}
 
-html[data-theme="amber"]        { --primary: oklch(0.62 0.16 70);  --ring: oklch(0.62 0.16 70);  --sidebar: oklch(0.36 0.09 70);  --sidebar-accent: oklch(0.44 0.10 70);  --sidebar-border: oklch(0.44 0.09 70);  --sidebar-primary: oklch(0.7 0.17 70);   --sidebar-ring: oklch(0.7 0.17 70); }
-html.dark[data-theme="amber"]   { --primary: oklch(0.78 0.17 70);  --ring: oklch(0.78 0.17 70);  --sidebar: oklch(0.26 0.07 70);  --sidebar-accent: oklch(0.34 0.08 70);  --sidebar-border: oklch(0.34 0.07 70);  --sidebar-primary: oklch(0.78 0.17 70);  --sidebar-ring: oklch(0.78 0.17 70); }
+/* --primary is the fill behind a near-white --primary-foreground label.
+   At L 0.62 that pairing measured 3.64:1, under the 4.5 AA needs for
+   normal-size text; at L 0.555 it is 4.75:1. High-contrast mode does not
+   cover this — html.hc overrides only border, foreground and muted-foreground. */
+html[data-theme="amber"] {
+  --primary: oklch(0.555 0.16 70);
+  --ring: oklch(0.555 0.16 70);
+  --sidebar: oklch(0.36 0.09 70);
+  --sidebar-accent: oklch(0.44 0.1 70);
+  --sidebar-border: oklch(0.44 0.09 70);
+  --sidebar-primary: oklch(0.7 0.17 70);
+  --sidebar-ring: oklch(0.7 0.17 70);
+}
+html.dark[data-theme="amber"] {
+  --primary: oklch(0.78 0.17 70);
+  --ring: oklch(0.78 0.17 70);
+  --sidebar: oklch(0.26 0.07 70);
+  --sidebar-accent: oklch(0.34 0.08 70);
+  --sidebar-border: oklch(0.34 0.07 70);
+  --sidebar-primary: oklch(0.78 0.17 70);
+  --sidebar-ring: oklch(0.78 0.17 70);
+}
 
-html[data-theme="teal"]         { --primary: oklch(0.55 0.12 200); --ring: oklch(0.55 0.12 200); --sidebar: oklch(0.34 0.08 200); --sidebar-accent: oklch(0.42 0.09 200); --sidebar-border: oklch(0.42 0.08 200); --sidebar-primary: oklch(0.6 0.13 200);  --sidebar-ring: oklch(0.6 0.13 200); }
-html.dark[data-theme="teal"]    { --primary: oklch(0.72 0.13 200); --ring: oklch(0.72 0.13 200); --sidebar: oklch(0.24 0.06 200); --sidebar-accent: oklch(0.32 0.07 200); --sidebar-border: oklch(0.32 0.07 200); --sidebar-primary: oklch(0.72 0.13 200); --sidebar-ring: oklch(0.72 0.13 200); }
+/* --primary is the fill behind a near-white --primary-foreground label.
+   At L 0.55 that pairing measured 4.29:1, under the 4.5 AA needs for
+   normal-size text; at L 0.525 it is 4.73:1. High-contrast mode does not
+   cover this — html.hc overrides only border, foreground and muted-foreground. */
+html[data-theme="teal"] {
+  --primary: oklch(0.525 0.12 200);
+  --ring: oklch(0.525 0.12 200);
+  --sidebar: oklch(0.34 0.08 200);
+  --sidebar-accent: oklch(0.42 0.09 200);
+  --sidebar-border: oklch(0.42 0.08 200);
+  --sidebar-primary: oklch(0.6 0.13 200);
+  --sidebar-ring: oklch(0.6 0.13 200);
+}
+html.dark[data-theme="teal"] {
+  --primary: oklch(0.72 0.13 200);
+  --ring: oklch(0.72 0.13 200);
+  --sidebar: oklch(0.24 0.06 200);
+  --sidebar-accent: oklch(0.32 0.07 200);
+  --sidebar-border: oklch(0.32 0.07 200);
+  --sidebar-primary: oklch(0.72 0.13 200);
+  --sidebar-ring: oklch(0.72 0.13 200);
+}
 
-html[data-theme="pink"]         { --primary: oklch(0.6 0.2 340);   --ring: oklch(0.6 0.2 340);   --sidebar: oklch(0.34 0.12 340); --sidebar-accent: oklch(0.42 0.14 340); --sidebar-border: oklch(0.42 0.12 340); --sidebar-primary: oklch(0.66 0.2 340);  --sidebar-ring: oklch(0.66 0.2 340); }
-html.dark[data-theme="pink"]    { --primary: oklch(0.72 0.2 340);  --ring: oklch(0.72 0.2 340);  --sidebar: oklch(0.24 0.09 340); --sidebar-accent: oklch(0.32 0.10 340); --sidebar-border: oklch(0.32 0.10 340); --sidebar-primary: oklch(0.72 0.2 340);  --sidebar-ring: oklch(0.72 0.2 340); }
+/* --primary is the fill behind a near-white --primary-foreground label.
+   At L 0.6 that pairing measured 4.27:1, under the 4.5 AA needs for
+   normal-size text; at L 0.575 it is 4.74:1. High-contrast mode does not
+   cover this — html.hc overrides only border, foreground and muted-foreground. */
+html[data-theme="pink"] {
+  --primary: oklch(0.575 0.2 340);
+  --ring: oklch(0.575 0.2 340);
+  --sidebar: oklch(0.34 0.12 340);
+  --sidebar-accent: oklch(0.42 0.14 340);
+  --sidebar-border: oklch(0.42 0.12 340);
+  --sidebar-primary: oklch(0.66 0.2 340);
+  --sidebar-ring: oklch(0.66 0.2 340);
+}
+html.dark[data-theme="pink"] {
+  --primary: oklch(0.72 0.2 340);
+  --ring: oklch(0.72 0.2 340);
+  --sidebar: oklch(0.24 0.09 340);
+  --sidebar-accent: oklch(0.32 0.1 340);
+  --sidebar-border: oklch(0.32 0.1 340);
+  --sidebar-primary: oklch(0.72 0.2 340);
+  --sidebar-ring: oklch(0.72 0.2 340);
+}
 
-html[data-theme="slate"]        { --primary: oklch(0.4 0.04 255);  --ring: oklch(0.4 0.04 255);  --sidebar: oklch(0.28 0.03 255); --sidebar-accent: oklch(0.36 0.04 255); --sidebar-border: oklch(0.36 0.03 255); --sidebar-primary: oklch(0.5 0.06 255); --sidebar-ring: oklch(0.5 0.06 255); }
-html.dark[data-theme="slate"]   { --primary: oklch(0.7 0.04 255);  --ring: oklch(0.7 0.04 255);  --sidebar: oklch(0.2 0.02 255);  --sidebar-accent: oklch(0.28 0.03 255); --sidebar-border: oklch(0.28 0.03 255); --sidebar-primary: oklch(0.7 0.04 255);  --sidebar-ring: oklch(0.7 0.04 255); }
+html[data-theme="slate"] {
+  --primary: oklch(0.4 0.04 255);
+  --ring: oklch(0.4 0.04 255);
+  --sidebar: oklch(0.28 0.03 255);
+  --sidebar-accent: oklch(0.36 0.04 255);
+  --sidebar-border: oklch(0.36 0.03 255);
+  --sidebar-primary: oklch(0.5 0.06 255);
+  --sidebar-ring: oklch(0.5 0.06 255);
+}
+html.dark[data-theme="slate"] {
+  --primary: oklch(0.7 0.04 255);
+  --ring: oklch(0.7 0.04 255);
+  --sidebar: oklch(0.2 0.02 255);
+  --sidebar-accent: oklch(0.28 0.03 255);
+  --sidebar-border: oklch(0.28 0.03 255);
+  --sidebar-primary: oklch(0.7 0.04 255);
+  --sidebar-ring: oklch(0.7 0.04 255);
+}
 
-html[data-theme="crimson"]      { --primary: oklch(0.5 0.2 25);    --ring: oklch(0.5 0.2 25);    --sidebar: oklch(0.32 0.12 25);  --sidebar-accent: oklch(0.4 0.14 25);   --sidebar-border: oklch(0.4 0.12 25);   --sidebar-primary: oklch(0.6 0.2 25);    --sidebar-ring: oklch(0.6 0.2 25); }
-html.dark[data-theme="crimson"] { --primary: oklch(0.66 0.2 25);   --ring: oklch(0.66 0.2 25);   --sidebar: oklch(0.22 0.09 25);  --sidebar-accent: oklch(0.3 0.10 25);   --sidebar-border: oklch(0.3 0.10 25);   --sidebar-primary: oklch(0.66 0.2 25);   --sidebar-ring: oklch(0.66 0.2 25); }
+html[data-theme="crimson"] {
+  --primary: oklch(0.5 0.2 25);
+  --ring: oklch(0.5 0.2 25);
+  --sidebar: oklch(0.32 0.12 25);
+  --sidebar-accent: oklch(0.4 0.14 25);
+  --sidebar-border: oklch(0.4 0.12 25);
+  --sidebar-primary: oklch(0.6 0.2 25);
+  --sidebar-ring: oklch(0.6 0.2 25);
+}
+html.dark[data-theme="crimson"] {
+  --primary: oklch(0.66 0.2 25);
+  --ring: oklch(0.66 0.2 25);
+  --sidebar: oklch(0.22 0.09 25);
+  --sidebar-accent: oklch(0.3 0.1 25);
+  --sidebar-border: oklch(0.3 0.1 25);
+  --sidebar-primary: oklch(0.66 0.2 25);
+  --sidebar-ring: oklch(0.66 0.2 25);
+}
 
-html[data-theme="indigo"]       { --primary: oklch(0.45 0.18 275); --ring: oklch(0.45 0.18 275); --sidebar: oklch(0.3 0.11 275); --sidebar-accent: oklch(0.38 0.12 275); --sidebar-border: oklch(0.38 0.11 275); --sidebar-primary: oklch(0.55 0.18 275); --sidebar-ring: oklch(0.55 0.18 275); }
-html.dark[data-theme="indigo"]  { --primary: oklch(0.66 0.18 275); --ring: oklch(0.66 0.18 275); --sidebar: oklch(0.22 0.08 275); --sidebar-accent: oklch(0.3 0.10 275); --sidebar-border: oklch(0.3 0.10 275); --sidebar-primary: oklch(0.66 0.18 275); --sidebar-ring: oklch(0.66 0.18 275); }
+html[data-theme="indigo"] {
+  --primary: oklch(0.45 0.18 275);
+  --ring: oklch(0.45 0.18 275);
+  --sidebar: oklch(0.3 0.11 275);
+  --sidebar-accent: oklch(0.38 0.12 275);
+  --sidebar-border: oklch(0.38 0.11 275);
+  --sidebar-primary: oklch(0.55 0.18 275);
+  --sidebar-ring: oklch(0.55 0.18 275);
+}
+html.dark[data-theme="indigo"] {
+  --primary: oklch(0.66 0.18 275);
+  --ring: oklch(0.66 0.18 275);
+  --sidebar: oklch(0.22 0.08 275);
+  --sidebar-accent: oklch(0.3 0.1 275);
+  --sidebar-border: oklch(0.3 0.1 275);
+  --sidebar-primary: oklch(0.66 0.18 275);
+  --sidebar-ring: oklch(0.66 0.18 275);
+}
 
-html[data-theme="lime"]         { --primary: oklch(0.6 0.18 125);  --ring: oklch(0.6 0.18 125);  --sidebar: oklch(0.34 0.10 125); --sidebar-accent: oklch(0.42 0.12 125); --sidebar-border: oklch(0.42 0.10 125); --sidebar-primary: oklch(0.68 0.19 125); --sidebar-ring: oklch(0.68 0.19 125); }
-html.dark[data-theme="lime"]    { --primary: oklch(0.78 0.19 125); --ring: oklch(0.78 0.19 125); --sidebar: oklch(0.24 0.07 125); --sidebar-accent: oklch(0.32 0.08 125); --sidebar-border: oklch(0.32 0.08 125); --sidebar-primary: oklch(0.78 0.19 125); --sidebar-ring: oklch(0.78 0.19 125); }
+/* --primary is the fill behind a near-white --primary-foreground label.
+   At L 0.6 that pairing measured 3.64:1, under the 4.5 AA needs for
+   normal-size text; at L 0.535 it is 4.74:1. High-contrast mode does not
+   cover this — html.hc overrides only border, foreground and muted-foreground. */
+html[data-theme="lime"] {
+  --primary: oklch(0.535 0.18 125);
+  --ring: oklch(0.535 0.18 125);
+  --sidebar: oklch(0.34 0.1 125);
+  --sidebar-accent: oklch(0.42 0.12 125);
+  --sidebar-border: oklch(0.42 0.1 125);
+  --sidebar-primary: oklch(0.68 0.19 125);
+  --sidebar-ring: oklch(0.68 0.19 125);
+}
+html.dark[data-theme="lime"] {
+  --primary: oklch(0.78 0.19 125);
+  --ring: oklch(0.78 0.19 125);
+  --sidebar: oklch(0.24 0.07 125);
+  --sidebar-accent: oklch(0.32 0.08 125);
+  --sidebar-border: oklch(0.32 0.08 125);
+  --sidebar-primary: oklch(0.78 0.19 125);
+  --sidebar-ring: oklch(0.78 0.19 125);
+}
 
 /* Background presets (light mode only — dark mode keeps its own background) */
-html:not(.dark)[data-bg="cream"]    { --background: oklch(0.97 0.025 85); }
-html:not(.dark)[data-bg="mint"]     { --background: oklch(0.965 0.03 160); }
-html:not(.dark)[data-bg="sky"]      { --background: oklch(0.965 0.03 230); }
-html:not(.dark)[data-bg="lavender"] { --background: oklch(0.965 0.03 290); }
-html:not(.dark)[data-bg="peach"]    { --background: oklch(0.96 0.035 50); }
-html:not(.dark)[data-bg="blush"]    { --background: oklch(0.965 0.025 15); }
-html:not(.dark)[data-bg="sand"]     { --background: oklch(0.95 0.02 75); }
-html:not(.dark)[data-bg="gray"]     { --background: oklch(0.94 0 0); }
-html:not(.dark)[data-bg="paper"]    { --background: oklch(0.98 0.005 90); }
+html:not(.dark)[data-bg="cream"] {
+  --background: oklch(0.97 0.025 85);
+}
+html:not(.dark)[data-bg="mint"] {
+  --background: oklch(0.965 0.03 160);
+}
+html:not(.dark)[data-bg="sky"] {
+  --background: oklch(0.965 0.03 230);
+}
+html:not(.dark)[data-bg="lavender"] {
+  --background: oklch(0.965 0.03 290);
+}
+html:not(.dark)[data-bg="peach"] {
+  --background: oklch(0.96 0.035 50);
+}
+html:not(.dark)[data-bg="blush"] {
+  --background: oklch(0.965 0.025 15);
+}
+html:not(.dark)[data-bg="sand"] {
+  --background: oklch(0.95 0.02 75);
+}
+html:not(.dark)[data-bg="gray"] {
+  --background: oklch(0.94 0 0);
+}
+html:not(.dark)[data-bg="paper"] {
+  --background: oklch(0.98 0.005 90);
+}
 
 /* ── Accessibility signals ───────────────────────────────────────────────
    Three independent OS preferences, honoured independently. Reduced motion is
