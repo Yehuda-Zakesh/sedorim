@@ -14,12 +14,25 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
-  Wallet, ChevronRight, ChevronLeft, Info, AlertTriangle, TrendingDown,
-  TrendingUp, CalendarRange, X, ShieldCheck,
+  Wallet,
+  ChevronRight,
+  ChevronLeft,
+  Info,
+  AlertTriangle,
+  TrendingDown,
+  TrendingUp,
+  CalendarRange,
+  X,
+  ShieldCheck,
 } from "lucide-react";
 import { useSeder, useLearning } from "@/lib/kollel-store";
 import { useSettings, setMonthApproved } from "@/lib/settings-store";
-import { calcStipend, STIPEND_POLICY, type StipendBreakdown, type StipendLine } from "@/lib/stipend";
+import {
+  calcStipend,
+  STIPEND_POLICY,
+  type StipendBreakdown,
+  type StipendLine,
+} from "@/lib/stipend";
 import { currentMonthKey, monthKeyLabel, monthsWithData, shiftMonth } from "@/lib/month-nav";
 import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
 import { IconBadge, StatTile } from "@/components/ui/stat";
@@ -41,13 +54,14 @@ function StipendPage() {
   const approvedMonths = settings.stipend?.approvedMonths ?? [];
   const priorApproval = approvedMonths.includes(month);
   const result = useMemo(
-    () => calcStipend({
-      monthKey: month,
-      entries,
-      lessons,
-      shasChavura: settings.seder.shasChavura,
-      priorApproval,
-    }),
+    () =>
+      calcStipend({
+        monthKey: month,
+        entries,
+        lessons,
+        shasChavura: settings.seder.shasChavura,
+        priorApproval,
+      }),
     [month, entries, lessons, settings.seder.shasChavura, priorApproval],
   );
 
@@ -71,7 +85,9 @@ function StipendPage() {
         <div className="flex items-start gap-4 flex-wrap">
           <IconBadge icon={Wallet} size="lg" />
           <div className="min-w-0 flex-1">
-            <div className="text-xs text-muted-foreground">סה״כ מלגה משוערת · {monthKeyLabel(month)}</div>
+            <div className="text-xs text-muted-foreground">
+              סה״כ מלגה משוערת · {monthKeyLabel(month)}
+            </div>
             <div className="mt-1 text-4xl font-bold">{nis(result.totalNis)}</div>
             <div className="mt-1 text-xs text-muted-foreground">
               מלגת בסיס {nis(STIPEND_POLICY.baseNis)}
@@ -92,7 +108,9 @@ function StipendPage() {
           </p>
         </div>
         <ul className="divide-y divide-border">
-          {result.lines.map((line) => <LineRow key={line.id} line={line} />)}
+          {result.lines.map((line) => (
+            <LineRow key={line.id} line={line} />
+          ))}
         </ul>
         <div className="flex items-baseline gap-3 border-t-2 border-border bg-muted/30 px-5 py-4">
           <span className="text-sm font-semibold">סה״כ</span>
@@ -115,15 +133,23 @@ function StipendPage() {
 function LineRow({ line }: { line: StipendLine }) {
   const zero = line.nis === 0;
   const color =
-    line.kind === "base" ? "text-foreground"
-    : zero ? "text-muted-foreground"
-    : line.nis < 0 ? "text-destructive" : "text-success";
+    line.kind === "base"
+      ? "text-foreground"
+      : zero
+        ? "text-muted-foreground"
+        : line.nis < 0
+          ? "text-destructive"
+          : "text-success";
 
   return (
     <li className="flex items-start gap-3 px-5 py-3.5">
       {line.kind !== "base" && (
         <span className={`mt-0.5 shrink-0 ${zero ? "text-muted-foreground/50" : color}`}>
-          {line.kind === "debit" ? <TrendingDown className="size-4" /> : <TrendingUp className="size-4" />}
+          {line.kind === "debit" ? (
+            <TrendingDown className="size-4" />
+          ) : (
+            <TrendingUp className="size-4" />
+          )}
         </span>
       )}
       <span className="min-w-0 flex-1">
@@ -131,7 +157,9 @@ function LineRow({ line }: { line: StipendLine }) {
         <span className="block text-2xs text-muted-foreground">{line.detail}</span>
       </span>
       <span className={`shrink-0 text-base font-semibold tabular-nums ${color}`}>
-        {line.kind === "base" || zero ? nis(line.nis) : `${line.nis > 0 ? "+" : ""}${nis(line.nis)}`}
+        {line.kind === "base" || zero
+          ? nis(line.nis)
+          : `${line.nis > 0 ? "+" : ""}${nis(line.nis)}`}
       </span>
     </li>
   );
@@ -151,8 +179,8 @@ function Disclaimer() {
         <div className="min-w-0 text-sm">
           <div className="font-semibold">החישוב להמחשה בלבד</div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            הסכום מחושב מהרישומים שבתוכנה בלבד. אישורים חריגים מראש הכולל, זמנים חריגים
-            והחלטות של הנהלת הכולל אינם ידועים לתוכנה ואינם נכללים כאן. הקובע הוא תלוש המלגה.
+            הסכום מחושב מהרישומים שבתוכנה בלבד. אישורים חריגים מראש הכולל, זמנים חריגים והחלטות של
+            הנהלת הכולל אינם ידועים לתוכנה ואינם נכללים כאן. הקובע הוא תלוש המלגה.
           </p>
         </div>
       </div>
@@ -170,21 +198,31 @@ function Disclaimer() {
  * §3's ceiling on free excused minutes.
  */
 function ApprovalToggle({
-  month, checked, onChange,
+  month,
+  checked,
+  onChange,
 }: {
   month: string;
   checked: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className={`mt-4 card-surface p-4 flex items-start gap-3 cursor-pointer pressable transition ${
-      checked ? "border-s-4 border-s-success" : ""
-    }`}>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 size-4 shrink-0" />
+    <label
+      className={`mt-4 card-surface p-4 flex items-start gap-3 cursor-pointer pressable transition ${
+        checked ? "border-s-4 border-s-success" : ""
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 size-4 shrink-0"
+      />
       <div className="min-w-0 text-sm">
         <div className="font-semibold flex items-center gap-1.5">
-          <ShieldCheck className={`size-4 shrink-0 ${checked ? "text-success" : "text-muted-foreground"}`} />
+          <ShieldCheck
+            className={`size-4 shrink-0 ${checked ? "text-success" : "text-muted-foreground"}`}
+          />
           יש לי אישור מראש הכולל ל{monthKeyLabel(month)}
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -211,12 +249,22 @@ function ProportionSection({ result }: { result: StipendBreakdown }) {
           : "חודש לימודים מלא — הספים שנמדדים בדקות בתוקפם המלא."}
       </p>
       <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatTile label="ימי לימוד בפועל" value={result.sessionDays}
-          hint="ללא שישי־שבת, יו״ט, ערבי יו״ט ובין הזמנים" />
+        <StatTile
+          label="ימי לימוד בפועל"
+          value={result.sessionDays}
+          hint="ללא שישי־שבת, יו״ט, ערבי יו״ט ובין הזמנים"
+        />
         <StatTile label="בחודש מלא" value={result.fullMonthDays} hint="כל ימי א׳–ה׳ בחודש" />
-        <StatTile label="יחס" value={`${pct}%`} hint={partial ? "כל הספים מוקטנים ביחס זה" : "ללא הקטנה"} />
-        <StatTile label="סף החיסור החופשי" value={result.scaled.freeMissingMin}
-          hint={partial ? `במקום ${STIPEND_POLICY.freeMissingMin} דק׳` : "דקות"} />
+        <StatTile
+          label="יחס"
+          value={`${pct}%`}
+          hint={partial ? "כל הספים מוקטנים ביחס זה" : "ללא הקטנה"}
+        />
+        <StatTile
+          label="סף החיסור החופשי"
+          value={result.scaled.freeMissingMin}
+          hint={partial ? `במקום ${STIPEND_POLICY.freeMissingMin} דק׳` : "דקות"}
+        />
       </div>
     </section>
   );
@@ -232,18 +280,29 @@ function MissingMinutesSection({ result }: { result: StipendBreakdown }) {
     <section className="card-surface p-5">
       <h2 className="text-sm font-semibold">הדקות החסרות</h2>
       <p className="text-2xs text-muted-foreground mt-0.5">
-        {waived
-          ? "יש אישור מראש הכולל לחודש זה — דקות מוצדקות אינן מורידות מהמלגה, ללא תקרה."
-          : <>דקות מוצדקות אינן מורידות מהמלגה — עד {scaled.excusedFreeMin} דק׳. מעבר לכך, ובלי אישור מראש הכולל,
-             העודף נחשב כדקות רגילות.</>}
+        {waived ? (
+          "יש אישור מראש הכולל לחודש זה — דקות מוצדקות אינן מורידות מהמלגה, ללא תקרה."
+        ) : (
+          <>
+            דקות מוצדקות אינן מורידות מהמלגה — עד {scaled.excusedFreeMin} דק׳. מעבר לכך, ובלי אישור
+            מראש הכולל, העודף נחשב כדקות רגילות.
+          </>
+        )}
       </p>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
         <StatTile label="סה״כ נשמט" value={missing.total} hint="כולל מוצדקות" />
-        <StatTile label="מתוכן מוצדקות" value={missing.excused}
-          hint={waived ? `${missing.excusedWaived} דק׳ מעל התקרה — לא נספרו, יש אישור`
-            : excusedOver ? `${missing.excusedCharged} דק׳ מעל התקרה — נחשבות רגילות`
-            : "כולן בתוך התקרה"} />
+        <StatTile
+          label="מתוכן מוצדקות"
+          value={missing.excused}
+          hint={
+            waived
+              ? `${missing.excusedWaived} דק׳ מעל התקרה — לא נספרו, יש אישור`
+              : excusedOver
+                ? `${missing.excusedCharged} דק׳ מעל התקרה — נחשבות רגילות`
+                : "כולן בתוך התקרה"
+          }
+        />
         <StatTile label="חסר נטו" value={missing.net} hint="לא מוצדק, אחרי בונוס" />
         <StatTile label="נכנס לחישוב" value={missing.chargeable} hint="חסר נטו + מוצדק מעל התקרה" />
       </div>
@@ -251,7 +310,10 @@ function MissingMinutesSection({ result }: { result: StipendBreakdown }) {
       <h3 className="mt-5 text-xs font-semibold text-muted-foreground">מדרגות ההפחתה</h3>
       <ul className="mt-2 space-y-2">
         {charges.map((c, i) => (
-          <li key={i} className="flex items-baseline gap-2 rounded-lg border border-border px-3 py-2 text-xs">
+          <li
+            key={i}
+            className="flex items-baseline gap-2 rounded-lg border border-border px-3 py-2 text-xs"
+          >
             <span className="tabular-nums">
               {c.fromMin}–{Number.isFinite(c.toMin) ? c.toMin : "∞"} דק׳
             </span>
@@ -288,27 +350,32 @@ function LearningSection({ result }: { result: StipendBreakdown }) {
           <div className="flex items-baseline gap-2">
             <span className="text-sm font-medium">כולל ערב</span>
             <span className="flex-1" />
-            <span className={`text-base font-semibold tabular-nums ${l.kollelErevNis > 0 ? "text-success" : "text-muted-foreground"}`}>
+            <span
+              className={`text-base font-semibold tabular-nums ${l.kollelErevNis > 0 ? "text-success" : "text-muted-foreground"}`}
+            >
               {nis(l.kollelErevNis)}
             </span>
           </div>
           <div className="mt-1 text-2xs text-muted-foreground tabular-nums">
             {l.kollelErevCountedMin} דק׳ נספרות
-            {l.kollelErevRawMin !== l.kollelErevCountedMin && ` (מתוך ${l.kollelErevRawMin} שנרשמו)`}
-            {" · "}{p.kollelErev.nisPerHour} ₪ לשעה
+            {l.kollelErevRawMin !== l.kollelErevCountedMin &&
+              ` (מתוך ${l.kollelErevRawMin} שנרשמו)`}
+            {" · "}
+            {p.kollelErev.nisPerHour} ₪ לשעה
           </div>
           {l.kollelErevBelowMinimum && (
             <div className="mt-2 flex items-start gap-1.5 text-2xs text-warning-fg">
               <AlertTriangle className="size-3 mt-0.5 shrink-0" />
               <span>
-                המינימום למלגה על כולל ערב הוא {p.kollelErev.minMonthlyMin} דק׳ (10 שעות).
-                חסרות {p.kollelErev.minMonthlyMin - l.kollelErevCountedMin} דק׳.
+                המינימום למלגה על כולל ערב הוא {p.kollelErev.minMonthlyMin} דק׳ (10 שעות). חסרות{" "}
+                {p.kollelErev.minMonthlyMin - l.kollelErevCountedMin} דק׳.
               </span>
             </div>
           )}
           {l.kollelErevDaysOverCap > 0 && (
             <div className="mt-2 text-2xs text-muted-foreground">
-              ב־{l.kollelErevDaysOverCap} ימים נרשם מעל התקרה של {p.kollelErev.maxDailyMin} דק׳ ליום — העודף לא נספר.
+              ב־{l.kollelErevDaysOverCap} ימים נרשם מעל התקרה של {p.kollelErev.maxDailyMin} דק׳ ליום
+              — העודף לא נספר.
             </div>
           )}
         </div>
@@ -317,14 +384,17 @@ function LearningSection({ result }: { result: StipendBreakdown }) {
           <div className="flex items-baseline gap-2">
             <span className="text-sm font-medium">תורתו בידו</span>
             <span className="flex-1" />
-            <span className={`text-base font-semibold tabular-nums ${l.toratoNis > 0 ? "text-success" : "text-muted-foreground"}`}>
+            <span
+              className={`text-base font-semibold tabular-nums ${l.toratoNis > 0 ? "text-success" : "text-muted-foreground"}`}
+            >
               {nis(l.toratoNis)}
             </span>
           </div>
           <div className="mt-1 text-2xs text-muted-foreground tabular-nums">
             {l.toratoCountedMin} דק׳ נספרות
             {l.toratoCapped && ` (מתוך ${l.toratoRawMin} שנרשמו)`}
-            {" · "}{p.toratoBeyado.nisPerHour} ₪ לשעה · ללא מינימום
+            {" · "}
+            {p.toratoBeyado.nisPerHour} ₪ לשעה · ללא מינימום
           </div>
           {l.toratoCapped && (
             <div className="mt-2 text-2xs text-muted-foreground">
@@ -339,7 +409,10 @@ function LearningSection({ result }: { result: StipendBreakdown }) {
 
 /** The same two arrows and month list the History screen uses. */
 function MonthPicker({
-  value, months, hebrewLabel, onChange,
+  value,
+  months,
+  hebrewLabel,
+  onChange,
 }: {
   value: string;
   months: string[];
@@ -353,13 +426,18 @@ function MonthPicker({
     <div className="card-surface p-4">
       <div className="flex items-center gap-2">
         {/* Right arrow steps back in time: in an RTL layout, back is to the right. */}
-        <button onClick={() => onChange(shiftMonth(value, -1))} title="החודש הקודם"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition">
+        <button
+          onClick={() => onChange(shiftMonth(value, -1))}
+          title="החודש הקודם"
+          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition"
+        >
           <ChevronRight className="size-4" />
         </button>
 
-        <button onClick={() => setListOpen((v) => !v)}
-          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 pressable transition">
+        <button
+          onClick={() => setListOpen((v) => !v)}
+          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 pressable transition"
+        >
           <div className="flex items-center justify-center gap-2">
             <CalendarRange className="size-3.5 text-muted-foreground" />
             <span className="text-base font-semibold">{monthKeyLabel(value)}</span>
@@ -367,8 +445,12 @@ function MonthPicker({
           <div className="text-2xs text-muted-foreground">{hebrewLabel}</div>
         </button>
 
-        <button onClick={() => onChange(shiftMonth(value, 1))} disabled={isCurrent} title="החודש הבא"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition disabled:opacity-30">
+        <button
+          onClick={() => onChange(shiftMonth(value, 1))}
+          disabled={isCurrent}
+          title="החודש הבא"
+          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition disabled:opacity-30"
+        >
           <ChevronLeft className="size-4" />
         </button>
       </div>
@@ -377,17 +459,27 @@ function MonthPicker({
         <div className="mt-3 border-t border-border pt-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-muted-foreground">בחר חודש</span>
-            <button onClick={() => setListOpen(false)} className="text-muted-foreground hover:text-foreground">
+            <button
+              onClick={() => setListOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
               <X className="size-3.5" />
             </button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-auto">
             {months.map((key) => (
-              <button key={key}
-                onClick={() => { onChange(key); setListOpen(false); }}
+              <button
+                key={key}
+                onClick={() => {
+                  onChange(key);
+                  setListOpen(false);
+                }}
                 className={`rounded-md border px-2.5 py-2 text-xs pressable transition ${
-                  key === value ? "border-primary bg-primary/10 text-primary font-medium" : "border-border hover:bg-accent"
-                }`}>
+                  key === value
+                    ? "border-primary bg-primary/10 text-primary font-medium"
+                    : "border-border hover:bg-accent"
+                }`}
+              >
                 {monthKeyLabel(key)}
               </button>
             ))}
@@ -396,8 +488,10 @@ function MonthPicker({
       )}
 
       {!isCurrent && (
-        <button onClick={() => onChange(currentMonthKey())}
-          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-2xs text-muted-foreground hover:bg-accent pressable transition">
+        <button
+          onClick={() => onChange(currentMonthKey())}
+          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-2xs text-muted-foreground hover:bg-accent pressable transition"
+        >
           חזור לחודש הנוכחי
         </button>
       )}

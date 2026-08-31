@@ -18,15 +18,27 @@ vi.mock("./save-file", () => ({
 vi.mock("./pdf-fonts", async () => {
   const { bytesToBase64 } = await import("./base64");
   const read = (name: string) =>
-    bytesToBase64(new Uint8Array(readFileSync(fileURLToPath(new URL(`../../public/fonts/${name}`, import.meta.url)))));
+    bytesToBase64(
+      new Uint8Array(
+        readFileSync(fileURLToPath(new URL(`../../public/fonts/${name}`, import.meta.url))),
+      ),
+    );
   return {
-    loadHeeboFonts: async () => ({ regular: read("Heebo-Regular.ttf"), bold: read("Heebo-Bold.ttf") }),
+    loadHeeboFonts: async () => ({
+      regular: read("Heebo-Regular.ttf"),
+      bold: read("Heebo-Bold.ttf"),
+    }),
   };
 });
 
 import { RtlPdf, CONTENT_W } from "./pdf-doc";
 
-const BASE = { title: "דוח נוכחות חודשי", subtitle: "אוגוסט 2026", owner: "תלמיד הכולל", accent: "#1565C0" };
+const BASE = {
+  title: "דוח נוכחות חודשי",
+  subtitle: "אוגוסט 2026",
+  owner: "תלמיד הכולל",
+  accent: "#1565C0",
+};
 
 function asText(bytes: Uint8Array): string {
   return new TextDecoder("latin1").decode(bytes);
@@ -83,7 +95,10 @@ describe("RtlPdf", () => {
   it("keeps an empty table on one page and says so", async () => {
     const pdf = await RtlPdf.create(BASE);
     pdf.table({
-      columns: [{ header: "תאריך", width: 1 }, { header: "סדר", width: 1 }],
+      columns: [
+        { header: "תאריך", width: 1 },
+        { header: "סדר", width: 1 },
+      ],
       rows: [],
       emptyText: "אין רישומים",
     });
@@ -93,8 +108,14 @@ describe("RtlPdf", () => {
   it("draws a totals row without complaint", async () => {
     const pdf = await RtlPdf.create(BASE);
     pdf.table({
-      columns: [{ header: "חודש", width: 2 }, { header: "דקות", width: 1 }],
-      rows: [["אוגוסט 2026", 120], ["יולי 2026", 90]],
+      columns: [
+        { header: "חודש", width: 2 },
+        { header: "דקות", width: 1 },
+      ],
+      rows: [
+        ["אוגוסט 2026", 120],
+        ["יולי 2026", 90],
+      ],
       total: ["סה״כ", 210],
     });
     expect(pdf.pageCount()).toBe(1);
@@ -110,7 +131,9 @@ describe("RtlPdf", () => {
 
   it("lays out KPI boxes in rows of four", async () => {
     const pdf = await RtlPdf.create(BASE);
-    pdf.kpis(Array.from({ length: 8 }, (_, i) => ({ label: `מדד ארוך מאוד מספר ${i + 1}`, value: i * 7 })));
+    pdf.kpis(
+      Array.from({ length: 8 }, (_, i) => ({ label: `מדד ארוך מאוד מספר ${i + 1}`, value: i * 7 })),
+    );
     expect(pdf.pageCount()).toBe(1);
   });
 
@@ -129,7 +152,10 @@ describe("RtlPdf", () => {
     pdf.section("פילוח");
     pdf.bars([{ label: "בונוס", value: 30, color: "#2E9E58" }]);
     pdf.paragraph("פסקה עם מספר 142 ותאריך 20/08/2026 בתוכה.");
-    pdf.bullets(["פריט ראשון", "פריט שני ארוך יותר שנועד לגלוש לשורה נוספת ולכן הוא ארוך מאוד מאוד"]);
+    pdf.bullets([
+      "פריט ראשון",
+      "פריט שני ארוך יותר שנועד לגלוש לשורה נוספת ולכן הוא ארוך מאוד מאוד",
+    ]);
     pdf.facts([{ label: "כולל ערב", value: "120 דק׳" }]);
     pdf.note("הערה קטנה");
     pdf.spacer(6);

@@ -18,9 +18,16 @@ vi.mock("./save-file", () => ({
 vi.mock("./pdf-fonts", async () => {
   const { bytesToBase64 } = await import("./base64");
   const read = (name: string) =>
-    bytesToBase64(new Uint8Array(readFileSync(fileURLToPath(new URL(`../../public/fonts/${name}`, import.meta.url)))));
+    bytesToBase64(
+      new Uint8Array(
+        readFileSync(fileURLToPath(new URL(`../../public/fonts/${name}`, import.meta.url))),
+      ),
+    );
   return {
-    loadHeeboFonts: async () => ({ regular: read("Heebo-Regular.ttf"), bold: read("Heebo-Bold.ttf") }),
+    loadHeeboFonts: async () => ({
+      regular: read("Heebo-Regular.ttf"),
+      bold: read("Heebo-Bold.ttf"),
+    }),
   };
 });
 
@@ -299,19 +306,19 @@ describe("exportXlsxWorkbook", () => {
     // A perfect July next to a July-only absence in June: the two months must
     // not share a score. (The monthly figures used to be computed from the
     // whole store rather than the rows being exported.)
-    const wb = await workbookFor(
-      [entry("2026-07-08"), entry("2026-06-10", { absent: true })],
-      [],
-    );
+    const wb = await workbookFor([entry("2026-07-08"), entry("2026-06-10", { absent: true })], []);
     const rows = XLSX.utils.sheet_to_json<Record<string, number>>(wb.Sheets["סיכום חודשי"]);
-    expect(rows[0]["ציון"]).toBe(0);      // June — absent all month
+    expect(rows[0]["ציון"]).toBe(0); // June — absent all month
     expect(rows[1]["ציון"]).toBeGreaterThan(90); // July — full attendance
   });
 
   it("counts the month's extra learning minutes", async () => {
     const wb = await workbookFor(
       [entry("2026-07-08")],
-      [lesson({ date: "2026-07-09", minutes: 30 }), lesson({ id: "x", date: "2026-08-09", minutes: 90 })],
+      [
+        lesson({ date: "2026-07-09", minutes: 30 }),
+        lesson({ id: "x", date: "2026-08-09", minutes: 90 }),
+      ],
     );
     const rows = XLSX.utils.sheet_to_json<Record<string, number>>(wb.Sheets["סיכום חודשי"]);
     expect(rows[0]["לימוד נוסף"]).toBe(30);
@@ -388,7 +395,8 @@ describe("exportPdfReport", () => {
     await exportPdfReport({ ...base, entries: [entry("2026-07-08")] });
     const small = lastSaved().bytes.length;
     const many = Array.from({ length: 120 }, (_, i) =>
-      entry(`2026-07-${String((i % 28) + 1).padStart(2, "0")}`, { id: `e${i}` }));
+      entry(`2026-07-${String((i % 28) + 1).padStart(2, "0")}`, { id: `e${i}` }),
+    );
     await exportPdfReport({ ...base, entries: many });
     expect(lastSaved().bytes.length).toBeGreaterThan(small);
   });
@@ -397,7 +405,8 @@ describe("exportPdfReport", () => {
     const inside = [entry("2026-07-08"), entry("2026-07-09", { id: "b" })];
     const outside = [entry("2026-01-02", { id: "c" }), entry("2026-12-30", { id: "d" })];
     await exportPdfReport({
-      ...base, entries: [...inside, ...outside],
+      ...base,
+      entries: [...inside, ...outside],
       range: { from: "2026-07-01", to: "2026-07-31" },
     });
     const withRange = lastSaved().bytes.length;
@@ -422,7 +431,10 @@ describe("exportPdfReport", () => {
 
   it("survives records with awkward content", async () => {
     const nasty = [
-      entry("2026-07-08", { note: "הערה ארוכה מאוד ".repeat(20), excusedReason: "סיבה (מיוחדת) 50%" }),
+      entry("2026-07-08", {
+        note: "הערה ארוכה מאוד ".repeat(20),
+        excusedReason: "סיבה (מיוחדת) 50%",
+      }),
       entry("2026-07-09", { id: "z", absent: true, arrival: undefined, departure: undefined }),
     ];
     expect(await exportPdfReport({ ...base, entries: nasty })).toBe(true);
@@ -450,7 +462,9 @@ describe("exportMonthClosingsPdf", () => {
   });
 
   it("writes several months as one table", async () => {
-    const closings = ["2026-06", "2026-07", "2026-08"].map((k) => monthClosing(k, entries, lessons));
+    const closings = ["2026-06", "2026-07", "2026-08"].map((k) =>
+      monthClosing(k, entries, lessons),
+    );
     expect(await exportMonthClosingsPdf({ closings })).toBe(true);
     expect(lastSaved().name).toMatch(/^סיכומי_חודשים_/);
   });
@@ -487,7 +501,8 @@ describe("exportMonthClosingsPdf", () => {
 
   it("handles a year of months in one document", async () => {
     const closings = Array.from({ length: 12 }, (_, i) =>
-      monthClosing(`2026-${String(i + 1).padStart(2, "0")}`, entries, lessons));
+      monthClosing(`2026-${String(i + 1).padStart(2, "0")}`, entries, lessons),
+    );
     expect(await exportMonthClosingsPdf({ closings })).toBe(true);
     expect(asLatin1(lastSaved().bytes.subarray(0, 5))).toBe("%PDF-");
   });

@@ -32,7 +32,11 @@ function stamp(): string {
 export function describeError(err: unknown): string {
   if (err instanceof Error) return err.stack || `${err.name}: ${err.message}`;
   if (typeof err === "string") return err;
-  try { return JSON.stringify(err); } catch { return String(err); }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
 }
 
 function write(level: LogLevel, message: string) {
@@ -50,8 +54,12 @@ function write(level: LogLevel, message: string) {
   if (memory.length > MEMORY_MAX) memory.splice(0, memory.length - MEMORY_MAX);
 }
 
-export function logInfo(message: string) { write("info", message); }
-export function logWarn(message: string) { write("warn", message); }
+export function logInfo(message: string) {
+  write("info", message);
+}
+export function logWarn(message: string) {
+  write("warn", message);
+}
 
 /**
  * Records a failure, tagged with where it happened.
@@ -87,7 +95,10 @@ export async function openLogFolder(): Promise<boolean> {
 }
 
 export async function clearLog(): Promise<boolean> {
-  if (!isDesktop) { memory.length = 0; return true; }
+  if (!isDesktop) {
+    memory.length = 0;
+    return true;
+  }
   try {
     await invoke<void>("clear_log");
     return true;

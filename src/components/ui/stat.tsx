@@ -23,7 +23,10 @@ const BADGE_SIZES = {
 
 /** An icon in a tinted rounded square — the app's most repeated visual unit. */
 export function IconBadge({
-  icon: Icon, tone = "primary", size = "lg", className = "",
+  icon: Icon,
+  tone = "primary",
+  size = "lg",
+  className = "",
 }: {
   icon: LucideIcon;
   tone?: Tone;
@@ -32,14 +35,22 @@ export function IconBadge({
 }) {
   const iconSize = size === "lg" ? "size-5" : "size-4";
   return (
-    <div className={`${BADGE_SIZES[size]} grid place-items-center shrink-0 ${TONE_CLASSES[tone]} ${className}`}>
+    <div
+      className={`${BADGE_SIZES[size]} grid place-items-center shrink-0 ${TONE_CLASSES[tone]} ${className}`}
+    >
       <Icon className={iconSize} />
     </div>
   );
 }
 
 export function KpiCard({
-  label, value, icon, tone = "primary", hint, trend, compact = false,
+  label,
+  value,
+  icon,
+  tone = "primary",
+  hint,
+  trend,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -84,8 +95,11 @@ export function KpiCard({
           </div>
           {hint && <div className="mt-1 text-2xs text-muted-foreground">{hint}</div>}
           {trend && (
-            <div className={`mt-1 text-2xs inline-flex items-center gap-1 ${trend.up ? "text-success" : "text-destructive"}`}>
-              {trend.up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />} {trend.text}
+            <div
+              className={`mt-1 text-2xs inline-flex items-center gap-1 ${trend.up ? "text-success" : "text-destructive"}`}
+            >
+              {trend.up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}{" "}
+              {trend.text}
             </div>
           )}
         </div>
@@ -97,7 +111,10 @@ export function KpiCard({
 
 /** A bordered label/number tile — the building block of the summary grids. */
 export function StatTile({
-  label, value, dot, hint,
+  label,
+  value,
+  dot,
+  hint,
 }: {
   label: string;
   value: string | number;
@@ -108,7 +125,9 @@ export function StatTile({
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-center gap-2">
-        {dot && <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />}
+        {dot && (
+          <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+        )}
         <span className="text-xs text-muted-foreground truncate">{label}</span>
       </div>
       <div className="mt-2 text-2xl font-bold">{value}</div>

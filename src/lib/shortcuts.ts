@@ -7,18 +7,18 @@ export type Shortcut = { keys: string; label: string; to?: string; action?: () =
 // screen the same way. Every entry here has a matching sidebar item — see
 // NAV_GROUPS in src/components/app-sidebar.tsx.
 export const SHORTCUTS: Shortcut[] = [
-  { keys: "g d", label: "לוח בקרה",       to: "/" },
-  { keys: "g a", label: "נוכחות סדרים",   to: "/attendance" },
-  { keys: "g c", label: "לוח שנה",        to: "/calendar" },
-  { keys: "g h", label: "היסטוריה",       to: "/history" },
-  { keys: "g l", label: "לימוד נוסף",     to: "/learning" },
+  { keys: "g d", label: "לוח בקרה", to: "/" },
+  { keys: "g a", label: "נוכחות סדרים", to: "/attendance" },
+  { keys: "g c", label: "לוח שנה", to: "/calendar" },
+  { keys: "g h", label: "היסטוריה", to: "/history" },
+  { keys: "g l", label: "לימוד נוסף", to: "/learning" },
   { keys: "g s", label: "סטטיסטיקות ותובנות", to: "/statistics" },
-  { keys: "g m", label: "מחשבון מלגה",    to: "/stipend" },
-  { keys: "g r", label: "דוחות",          to: "/reports" },
-  { keys: "g b", label: "גיבוי ושחזור",   to: "/backup" },
-  { keys: "g ,", label: "הגדרות",         to: "/settings" },
-  { keys: "/",   label: "חיפוש",          to: "/search" },
-  { keys: "?",   label: "הצג קיצורי דרך" },
+  { keys: "g m", label: "מחשבון מלגה", to: "/stipend" },
+  { keys: "g r", label: "דוחות", to: "/reports" },
+  { keys: "g b", label: "גיבוי ושחזור", to: "/backup" },
+  { keys: "g ,", label: "הגדרות", to: "/settings" },
+  { keys: "/", label: "חיפוש", to: "/search" },
+  { keys: "?", label: "הצג קיצורי דרך" },
 ];
 
 export function useGlobalShortcuts(toggleHelp: () => void) {
@@ -26,7 +26,13 @@ export function useGlobalShortcuts(toggleHelp: () => void) {
   useEffect(() => {
     let chord: string | null = null;
     let chordTimer: number | null = null;
-    const clearChord = () => { chord = null; if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; } };
+    const clearChord = () => {
+      chord = null;
+      if (chordTimer) {
+        clearTimeout(chordTimer);
+        chordTimer = null;
+      }
+    };
 
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -34,16 +40,34 @@ export function useGlobalShortcuts(toggleHelp: () => void) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       const k = e.key;
-      if (k === "?" || (k === "/" && e.shiftKey)) { e.preventDefault(); toggleHelp(); return; }
-      if (k === "/") { e.preventDefault(); navigate({ to: "/search" }); return; }
+      if (k === "?" || (k === "/" && e.shiftKey)) {
+        e.preventDefault();
+        toggleHelp();
+        return;
+      }
+      if (k === "/") {
+        e.preventDefault();
+        navigate({ to: "/search" });
+        return;
+      }
 
       if (chord === "g") {
         const map: Record<string, string> = {
-          d: "/", a: "/attendance", c: "/calendar", h: "/history",
-          l: "/learning", s: "/statistics", m: "/stipend",
-          r: "/reports", b: "/backup", ",": "/settings",
+          d: "/",
+          a: "/attendance",
+          c: "/calendar",
+          h: "/history",
+          l: "/learning",
+          s: "/statistics",
+          m: "/stipend",
+          r: "/reports",
+          b: "/backup",
+          ",": "/settings",
         };
-        if (map[k]) { e.preventDefault(); navigate({ to: map[k] }); }
+        if (map[k]) {
+          e.preventDefault();
+          navigate({ to: map[k] });
+        }
         clearChord();
         return;
       }
@@ -54,6 +78,9 @@ export function useGlobalShortcuts(toggleHelp: () => void) {
     };
 
     window.addEventListener("keydown", onKey);
-    return () => { window.removeEventListener("keydown", onKey); clearChord(); };
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      clearChord();
+    };
   }, [navigate, toggleHelp]);
 }

@@ -52,16 +52,21 @@ export type UpdateInfo = {
 };
 
 function normalize(v: string): number[] {
-  return v.replace(/^v/i, "").split(/[.\-+]/).map((p) => {
-    const n = parseInt(p, 10);
-    return isNaN(n) ? 0 : n;
-  });
+  return v
+    .replace(/^v/i, "")
+    .split(/[.\-+]/)
+    .map((p) => {
+      const n = parseInt(p, 10);
+      return isNaN(n) ? 0 : n;
+    });
 }
 export function isVersionNewer(latest: string, current: string): boolean {
-  const a = normalize(latest), b = normalize(current);
+  const a = normalize(latest),
+    b = normalize(current);
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
-    const x = a[i] ?? 0, y = b[i] ?? 0;
+    const x = a[i] ?? 0,
+      y = b[i] ?? 0;
     if (x > y) return true;
     if (x < y) return false;
   }
@@ -71,7 +76,8 @@ export function isVersionNewer(latest: string, current: string): boolean {
 /** The installer asset, which is the only thing worth downloading. */
 export function pickInstaller(release: GithubRelease): string | null {
   const assets = release.assets ?? [];
-  const setup = assets.find((a) => /setup.*\.exe$/i.test(a.name)) ?? assets.find((a) => /\.exe$/i.test(a.name));
+  const setup =
+    assets.find((a) => /setup.*\.exe$/i.test(a.name)) ?? assets.find((a) => /\.exe$/i.test(a.name));
   return setup ? setup.browser_download_url : null;
 }
 
@@ -139,11 +145,17 @@ export function useAutoUpdateCheck() {
         if (alive && !dismissedThisLaunch && info?.isNewer) setUpdate(info);
       });
     }, 3000);
-    return () => { alive = false; clearTimeout(t); };
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
   }, []);
 
   return {
     update,
-    dismiss: () => { dismissedThisLaunch = true; setUpdate(null); },
+    dismiss: () => {
+      dismissedThisLaunch = true;
+      setUpdate(null);
+    },
   };
 }

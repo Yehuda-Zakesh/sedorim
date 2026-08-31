@@ -7,8 +7,18 @@
 // without a screen.
 
 const GREGORIAN_MONTHS_HE = [
-  "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
-  "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר",
+  "ינואר",
+  "פברואר",
+  "מרץ",
+  "אפריל",
+  "מאי",
+  "יוני",
+  "יולי",
+  "אוגוסט",
+  "ספטמבר",
+  "אוקטובר",
+  "נובמבר",
+  "דצמבר",
 ];
 
 /** The current month as YYYY-MM. */
@@ -35,9 +45,7 @@ export function monthKeyLabel(key: string): string {
  * The current month is always in the list even when empty — it is the month
  * the screen opens on, and an empty list with nowhere to go reads as a bug.
  */
-export function monthsWithData(
-  ...lists: { date: string }[][]
-): string[] {
+export function monthsWithData(...lists: { date: string }[][]): string[] {
   const keys = new Set<string>([currentMonthKey()]);
   for (const list of lists) {
     for (const item of list) {

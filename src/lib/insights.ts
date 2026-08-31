@@ -1,7 +1,14 @@
 import {
-  type SederEntry, type LearningEntry,
-  calcSeder, monthlySummary, attendanceScore, entriesInMonth, getSederSnapshot,
-  currentDayStreak, hhmmToMin, FRAMEWORK_LABELS,
+  type SederEntry,
+  type LearningEntry,
+  calcSeder,
+  monthlySummary,
+  attendanceScore,
+  entriesInMonth,
+  getSederSnapshot,
+  currentDayStreak,
+  hhmmToMin,
+  FRAMEWORK_LABELS,
 } from "./kollel-store";
 import { getSederTimesFor, getSettings } from "./settings-store";
 import { isLearningDay, isWeekend } from "./hebrew-calendar";
@@ -43,23 +50,32 @@ export const WEAK_DAY_MAX_RATE = 0.6;
  * the answer changes every time an entry is added. Expects `entries` newest
  * first, as the store keeps them.
  */
-export function weakestLearningWeekday(entries: SederEntry[]): { day: number; rate: number } | null {
+export function weakestLearningWeekday(
+  entries: SederEntry[],
+): { day: number; rate: number } | null {
   const recent = entries.slice(0, WEAK_DAY_WINDOW);
   if (recent.length < WEAK_DAY_MIN_SAMPLE) return null;
 
-  const stats: { good: number; total: number }[] = Array.from({ length: 7 }, () => ({ good: 0, total: 0 }));
+  const stats: { good: number; total: number }[] = Array.from({ length: 7 }, () => ({
+    good: 0,
+    total: 0,
+  }));
   for (const e of recent) {
-    if (!isLearningWeekday(e.date)) continue;   // שישי־שבת אינם ימי לימוד
+    if (!isLearningWeekday(e.date)) continue; // שישי־שבת אינם ימי לימוד
     const d = new Date(e.date).getDay();
     stats[d].total++;
     if (!e.absent && calcSeder(e).netMissingMin === 0) stats[d].good++;
   }
 
-  let day = -1, rate = 1;
+  let day = -1,
+    rate = 1;
   for (const i of LEARNING_WEEKDAYS) {
     if (stats[i].total < WEAK_DAY_MIN_PER_DAY) continue;
     const r = stats[i].good / stats[i].total;
-    if (r < rate) { rate = r; day = i; }
+    if (r < rate) {
+      rate = r;
+      day = i;
+    }
   }
   return day >= 0 && rate < WEAK_DAY_MAX_RATE ? { day, rate } : null;
 }
@@ -74,7 +90,8 @@ export type Insight = {
 
 export function fmtMin(m: number): string {
   if (m < 60) return `${m} דק׳`;
-  const h = Math.floor(m / 60), r = m % 60;
+  const h = Math.floor(m / 60),
+    r = m % 60;
   return r === 0 ? `${h} שע׳` : `${h}:${String(r).padStart(2, "0")} שע׳`;
 }
 
@@ -139,7 +156,8 @@ export function monthVerdict(f: {
  * arrival time are left out — they say nothing about punctuality.
  */
 export function averageArrivalOffsetMin(entries: SederEntry[]): number | null {
-  let total = 0, count = 0;
+  let total = 0,
+    count = 0;
   for (const e of entries) {
     if (e.absent) continue;
     const arrival = hhmmToMin(e.arrival);
@@ -177,8 +195,13 @@ export function bonusOpportunityMin(entries: SederEntry[], earlyBy: number): num
 }
 
 /** Net missing minutes over the last 7 days against the 7 before them. */
-export function weekOverWeek(entries: SederEntry[], now = new Date()): {
-  recent: number; previous: number; diff: number;
+export function weekOverWeek(
+  entries: SederEntry[],
+  now = new Date(),
+): {
+  recent: number;
+  previous: number;
+  diff: number;
 } | null {
   const iso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -187,11 +210,14 @@ export function weekOverWeek(entries: SederEntry[], now = new Date()): {
     d.setDate(d.getDate() - n);
     return iso(d);
   };
-  const recentFrom = dayBefore(6), recentTo = iso(now);
-  const prevFrom = dayBefore(13), prevTo = dayBefore(7);
+  const recentFrom = dayBefore(6),
+    recentTo = iso(now);
+  const prevFrom = dayBefore(13),
+    prevTo = dayBefore(7);
 
   const sum = (from: string, to: string) => {
-    let net = 0, count = 0;
+    let net = 0,
+      count = 0;
     for (const e of entries) {
       if (e.date < from || e.date > to) continue;
       net += calcSeder(e).netMissingMin;
@@ -223,7 +249,9 @@ export function generateInsights(
 
   if (cur.entries === 0) {
     out.push({
-      id: "no-data", tone: "info", category: "recommendation",
+      id: "no-data",
+      tone: "info",
+      category: "recommendation",
       title: "אין רישומים החודש",
       detail: "פתח את מסך הנוכחות ורשום את הסדרים של היום.",
     });
@@ -232,27 +260,37 @@ export function generateInsights(
 
   if (prev.entries >= 5) {
     const diff = score - prevScore;
-    if (diff >= 3) out.push({
-      id: "trend-up", tone: "success", category: "trend",
-      title: `שיפור של ${diff} נקודות בציון הנוכחות`,
-      detail: `החודש: ${score} · חודש קודם: ${prevScore}. המשך כך!`,
-    });
-    else if (diff <= -3) out.push({
-      id: "trend-down", tone: "warning", category: "trend",
-      title: `ירידה של ${Math.abs(diff)} נקודות בציון הנוכחות`,
-      detail: `החודש: ${score} · חודש קודם: ${prevScore}.`,
-    });
+    if (diff >= 3)
+      out.push({
+        id: "trend-up",
+        tone: "success",
+        category: "trend",
+        title: `שיפור של ${diff} נקודות בציון הנוכחות`,
+        detail: `החודש: ${score} · חודש קודם: ${prevScore}. המשך כך!`,
+      });
+    else if (diff <= -3)
+      out.push({
+        id: "trend-down",
+        tone: "warning",
+        category: "trend",
+        title: `ירידה של ${Math.abs(diff)} נקודות בציון הנוכחות`,
+        detail: `החודש: ${score} · חודש קודם: ${prevScore}.`,
+      });
   }
 
   if (score >= goals.monthlyTarget) {
     out.push({
-      id: "goal-met", tone: "success", category: "trend",
+      id: "goal-met",
+      tone: "success",
+      category: "trend",
       title: "היעד החודשי הושג",
       detail: `${score} מתוך יעד ${goals.monthlyTarget}.`,
     });
   } else if (cur.entries >= 5) {
     out.push({
-      id: "goal-gap", tone: "info", category: "opportunity",
+      id: "goal-gap",
+      tone: "info",
+      category: "opportunity",
       title: `${goals.monthlyTarget - score} נקודות עד היעד החודשי`,
       detail: `יעד: ${goals.monthlyTarget} · נוכחי: ${score}. הקפד על הגעה מוקדמת בימים הקרובים.`,
     });
@@ -260,13 +298,17 @@ export function generateInsights(
 
   if (cur.lateCount >= goals.maxLatePerMonth) {
     out.push({
-      id: "late-limit", tone: "destructive", category: "recommendation",
+      id: "late-limit",
+      tone: "destructive",
+      category: "recommendation",
       title: "מכסת איחורים חודשית נחצתה",
       detail: `${cur.lateCount} איחורים מתוך ${goals.maxLatePerMonth} מותרים.`,
     });
   } else if (cur.lateCount === goals.maxLatePerMonth - 1) {
     out.push({
-      id: "late-warn", tone: "warning", category: "opportunity",
+      id: "late-warn",
+      tone: "warning",
+      category: "opportunity",
       title: "מתקרב למכסת איחורים",
       detail: `${cur.lateCount} מתוך ${goals.maxLatePerMonth}. הימנע מאיחור נוסף.`,
     });
@@ -274,7 +316,9 @@ export function generateInsights(
 
   if (cur.netMissing >= goals.alertMissingMinPerMonth) {
     out.push({
-      id: "missing-alert", tone: "destructive", category: "recommendation",
+      id: "missing-alert",
+      tone: "destructive",
+      category: "recommendation",
       title: `${fmtMin(cur.netMissing)} חסרים החודש (נטו)`,
       detail: `סף ההתראה: ${fmtMin(goals.alertMissingMinPerMonth)}. שקול תכנון מחדש לשבוע הקרוב.`,
     });
@@ -282,7 +326,9 @@ export function generateInsights(
 
   if (cur.bonus >= 60) {
     out.push({
-      id: "bonus-great", tone: "success", category: "trend",
+      id: "bonus-great",
+      tone: "success",
+      category: "trend",
       title: `${fmtMin(cur.bonus)} דקות בונוס נצברו`,
       detail: "הגעות מוקדמות עוזרות להקטין דקות חסרות.",
     });
@@ -290,7 +336,9 @@ export function generateInsights(
 
   if (cur.oheveiCount >= 5) {
     out.push({
-      id: "ohevei", tone: "success", category: "trend",
+      id: "ohevei",
+      tone: "success",
+      category: "trend",
       title: `${cur.oheveiCount} סדרים של "אוהבי ה׳"`,
       detail: "השקעה משמעותית — כל הכבוד.",
     });
@@ -298,7 +346,9 @@ export function generateInsights(
 
   if (cur.absenceCount >= 3) {
     out.push({
-      id: "absences", tone: "warning", category: "opportunity",
+      id: "absences",
+      tone: "warning",
+      category: "opportunity",
       title: `${cur.absenceCount} היעדרויות החודש`,
       detail: "סמן היעדרויות כמוצדקות כשהן זכאיות לכך.",
     });
@@ -309,13 +359,17 @@ export function generateInsights(
     .reduce((s, l) => s + l.minutes, 0);
   if (learnMinThisMonth >= 300) {
     out.push({
-      id: "learn-good", tone: "success", category: "trend",
+      id: "learn-good",
+      tone: "success",
+      category: "trend",
       title: `${(learnMinThisMonth / 60).toFixed(1)} שעות לימוד נוסף החודש`,
       detail: "מעבר לסדרים הקבועים.",
     });
   } else if (learnMinThisMonth < 60 && lessons.length > 0) {
     out.push({
-      id: "learn-low", tone: "info", category: "recommendation",
+      id: "learn-low",
+      tone: "info",
+      category: "recommendation",
       title: "מעט שעות לימוד נוסף החודש",
       detail: "הוסף רישום קצר השבוע כדי לשמור על קצב.",
     });
@@ -328,7 +382,9 @@ export function generateInsights(
   const streak = currentDayStreak();
   if (streak >= 3) {
     out.push({
-      id: "streak", tone: "success", category: "trend",
+      id: "streak",
+      tone: "success",
+      category: "trend",
       title: `רצף של ${streak} ימים רצופים של סדר מלא`,
       detail: "המשך לשמור על הרצף — עקביות היא הכל.",
     });
@@ -339,7 +395,9 @@ export function generateInsights(
   const weak = weakestLearningWeekday(entries);
   if (weak) {
     out.push({
-      id: "weak-day", tone: "info", category: "opportunity",
+      id: "weak-day",
+      tone: "info",
+      category: "opportunity",
       title: `יום ${WEEKDAY_NAMES[weak.day]} הוא היום החלש שלך`,
       detail: `רק ${Math.round(weak.rate * 100)}% מהסדרים ביום זה מלאים. תכנן מראש להגעה בזמן.`,
     });
@@ -350,13 +408,17 @@ export function generateInsights(
     const s1 = monthEntries.filter((e) => e.seder === 1);
     const s2 = monthEntries.filter((e) => e.seder === 2);
     if (s1.length >= 3 && s2.length >= 3) {
-      const avg = (list: SederEntry[]) => list.reduce((s, e) => s + calcSeder(e).netMissingMin, 0) / list.length;
-      const a1 = avg(s1), a2 = avg(s2);
+      const avg = (list: SederEntry[]) =>
+        list.reduce((s, e) => s + calcSeder(e).netMissingMin, 0) / list.length;
+      const a1 = avg(s1),
+        a2 = avg(s2);
       const diff = Math.abs(a1 - a2);
       if (diff >= 5) {
         const weaker = a1 > a2 ? "א׳" : "ב׳";
         out.push({
-          id: "seder-gap", tone: "info", category: "opportunity",
+          id: "seder-gap",
+          tone: "info",
+          category: "opportunity",
           title: `סדר ${weaker} חלש יותר החודש`,
           detail: `פער של ${Math.round(diff)} דק׳ ממוצע לחסר. מיקוד בסדר זה ישפר את הציון.`,
         });
@@ -371,7 +433,9 @@ export function generateInsights(
     const d = Math.round(avgLatePrev - avgLateCur);
     if (d >= 3) {
       out.push({
-        id: "punctual-up", tone: "success", category: "trend",
+        id: "punctual-up",
+        tone: "success",
+        category: "trend",
         title: `שיפור בממוצע האיחור: ${d} דק׳ פחות`,
         detail: "מגמת דיוק חיובית — כל דקה נחשבת.",
       });
@@ -380,9 +444,15 @@ export function generateInsights(
 
   // Forecast-based warning
   const forecast = forecastMonthlyNetMissing();
-  if (forecast !== null && forecast >= goals.alertMissingMinPerMonth && cur.netMissing < goals.alertMissingMinPerMonth) {
+  if (
+    forecast !== null &&
+    forecast >= goals.alertMissingMinPerMonth &&
+    cur.netMissing < goals.alertMissingMinPerMonth
+  ) {
     out.push({
-      id: "forecast-alert", tone: "warning", category: "recommendation",
+      id: "forecast-alert",
+      tone: "warning",
+      category: "recommendation",
       title: `תחזית: ${fmtMin(forecast)} חסר עד סוף החודש`,
       detail: `אם הקצב יימשך, תחצה את סף ההתראה (${fmtMin(goals.alertMissingMinPerMonth)}).`,
     });
@@ -393,13 +463,17 @@ export function generateInsights(
     const excusedPct = Math.round((cur.excused / cur.totalMissing) * 100);
     if (excusedPct >= 70) {
       out.push({
-        id: "excused-high", tone: "info", category: "trend",
+        id: "excused-high",
+        tone: "info",
+        category: "trend",
         title: `${excusedPct}% מהחסר החודש מוצדק`,
         detail: "רוב ההיעדרויות מסומנות כמוצדקות — תיעוד טוב.",
       });
     } else if (excusedPct < 20 && cur.entries >= 8) {
       out.push({
-        id: "excused-low", tone: "info", category: "opportunity",
+        id: "excused-low",
+        tone: "info",
+        category: "opportunity",
         title: "מעט חסר מסומן כמוצדק",
         detail: "אם היו סיבות מוצדקות, סמן אותן כדי לקבל תמונה מדויקת.",
       });
@@ -415,7 +489,9 @@ export function generateInsights(
     const top = Object.entries(byFw).sort((a, b) => b[1] - a[1])[0];
     if (top) {
       out.push({
-        id: "learn-top-fw", tone: "info", category: "trend",
+        id: "learn-top-fw",
+        tone: "info",
+        category: "trend",
         title: `המסגרת המובילה: ${FRAMEWORK_LABELS[top[0] as keyof typeof FRAMEWORK_LABELS]}`,
         detail: `${fmtMin(top[1])} החודש במסגרת זו.`,
       });
@@ -428,13 +504,17 @@ export function generateInsights(
   if (offset !== null && monthEntries.length >= 6) {
     if (offset <= -3) {
       out.push({
-        id: "arrive-early", tone: "success", category: "trend",
+        id: "arrive-early",
+        tone: "success",
+        category: "trend",
         title: `אתה מגיע בממוצע ${Math.abs(offset)} דק׳ לפני תחילת הסדר`,
         detail: "הגעה מוקדמת צוברת דקות בונוס שמקטינות את החסר.",
       });
     } else if (offset >= 4) {
       out.push({
-        id: "arrive-late", tone: "warning", category: "opportunity",
+        id: "arrive-late",
+        tone: "warning",
+        category: "opportunity",
         title: `אתה מגיע בממוצע ${offset} דק׳ אחרי תחילת הסדר`,
         detail: "יציאה מהבית עשר דקות מוקדם יותר מבטלת כמעט את כל החסר הזה.",
       });
@@ -446,7 +526,9 @@ export function generateInsights(
   const opportunity = bonusOpportunityMin(monthEntries, 10);
   if (opportunity >= 60) {
     out.push({
-      id: "bonus-opportunity", tone: "info", category: "recommendation",
+      id: "bonus-opportunity",
+      tone: "info",
+      category: "recommendation",
       title: `הגעה 10 דק׳ מוקדם יותר הייתה שווה ${fmtMin(opportunity)} החודש`,
       detail: "כל הגעה לפני תחילת הסדר נצברת כבונוס, עד לגובה הסף שבהגדרות.",
     });
@@ -456,17 +538,23 @@ export function generateInsights(
   // week that has just gone wrong.
   const week = weekOverWeek(entries, now);
   if (week && Math.abs(week.diff) >= 20) {
-    out.push(week.diff < 0
-      ? {
-          id: "week-better", tone: "success", category: "trend",
-          title: `השבוע האחרון טוב ב-${fmtMin(Math.abs(week.diff))} מקודמו`,
-          detail: `${fmtMin(week.recent)} חסרות בשבוע האחרון, מול ${fmtMin(week.previous)} בשבוע שלפניו.`,
-        }
-      : {
-          id: "week-worse", tone: "warning", category: "opportunity",
-          title: `השבוע האחרון חלש ב-${fmtMin(week.diff)} מקודמו`,
-          detail: `${fmtMin(week.recent)} חסרות בשבוע האחרון, מול ${fmtMin(week.previous)} בשבוע שלפניו.`,
-        });
+    out.push(
+      week.diff < 0
+        ? {
+            id: "week-better",
+            tone: "success",
+            category: "trend",
+            title: `השבוע האחרון טוב ב-${fmtMin(Math.abs(week.diff))} מקודמו`,
+            detail: `${fmtMin(week.recent)} חסרות בשבוע האחרון, מול ${fmtMin(week.previous)} בשבוע שלפניו.`,
+          }
+        : {
+            id: "week-worse",
+            tone: "warning",
+            category: "opportunity",
+            title: `השבוע האחרון חלש ב-${fmtMin(week.diff)} מקודמו`,
+            detail: `${fmtMin(week.recent)} חסרות בשבוע האחרון, מול ${fmtMin(week.previous)} בשבוע שלפניו.`,
+          },
+    );
   }
 
   // Missing entries — detect gap
@@ -480,7 +568,9 @@ export function generateInsights(
     const missingCount = Math.max(0, expectedEntries - monthEntries.length);
     if (missingCount >= 4) {
       out.push({
-        id: "gaps", tone: "warning", category: "recommendation",
+        id: "gaps",
+        tone: "warning",
+        category: "recommendation",
         title: `${missingCount} סדרים ללא רישום החודש`,
         detail: "השלם את הרישומים החסרים לתמונה מדויקת של המצב.",
       });
@@ -493,12 +583,14 @@ export function generateInsights(
 export function forecastMonthlyNetMissing(): number | null {
   const all = getSederSnapshot();
   const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
+  const y = now.getFullYear(),
+    m = now.getMonth();
   const list = entriesInMonth(all, y, m);
   if (list.length < 3) return null;
   const daysInMonth = new Date(y, m + 1, 0).getDate();
 
-  let learningDaysElapsed = 0, learningDaysTotal = 0;
+  let learningDaysElapsed = 0,
+    learningDaysTotal = 0;
   for (let d = 1; d <= daysInMonth; d++) {
     const dt = new Date(y, m, d);
     if (!isLearningDay(dt)) continue;

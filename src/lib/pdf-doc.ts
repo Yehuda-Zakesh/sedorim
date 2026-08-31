@@ -108,7 +108,11 @@ export class RtlPdf {
     // Hebrew, RTL — declared so a reader announces the document correctly.
     doc.setLanguage("he");
     if (typeof doc.setProperties === "function") {
-      doc.setProperties({ title: opts.title, creator: "סדר פלוס", author: opts.owner || "סדר פלוס" });
+      doc.setProperties({
+        title: opts.title,
+        creator: "סדר פלוס",
+        author: opts.owner || "סדר פלוס",
+      });
     }
 
     const pdf = new RtlPdf(doc, opts);
@@ -119,8 +123,12 @@ export class RtlPdf {
   // ---- primitives ---------------------------------------------------------
 
   /** The x of the right margin — where a right-aligned line starts. */
-  private get right() { return PAGE.w - MARGIN.x; }
-  private get left() { return MARGIN.x; }
+  private get right() {
+    return PAGE.w - MARGIN.x;
+  }
+  private get left() {
+    return MARGIN.x;
+  }
 
   private setFont(size: number, weight: Weight = "normal") {
     this.doc.setFont("Heebo", weight);
@@ -158,7 +166,8 @@ export class RtlPdf {
     this.setFont(size, o.weight);
     const lines = wrapVisual(text, width, (s) => this.doc.getTextWidth(s));
     lines.forEach((l, i) => {
-      const x = o.align === "center" ? xRight - width / 2 : o.align === "left" ? xRight - width : xRight;
+      const x =
+        o.align === "center" ? xRight - width / 2 : o.align === "left" ? xRight - width : xRight;
       this.line(l, x, this.y + lh * (i + 1) - lh * 0.28, { ...o, size });
     });
     return lh * lines.length;
@@ -190,7 +199,12 @@ export class RtlPdf {
     this.y = MARGIN.top + 2;
 
     // Brand block on the left, so the title has the whole right side.
-    this.line(toVisual("סדר פלוס"), this.left, this.y + 5, { size: 12, weight: "bold", color: accent, align: "left" });
+    this.line(toVisual("סדר פלוס"), this.left, this.y + 5, {
+      size: 12,
+      weight: "bold",
+      color: accent,
+      align: "left",
+    });
     if (owner) {
       this.line(toVisual(owner), this.left, this.y + 9.6, { size: 8, color: MUTED, align: "left" });
     }
@@ -208,8 +222,17 @@ export class RtlPdf {
 
   private drawRunningHeader() {
     const { title, accent } = this.opts;
-    this.line(toVisual(title), this.right, this.y + 3.4, { size: 8.6, weight: "bold", color: MUTED });
-    this.line(toVisual("סדר פלוס"), this.left, this.y + 3.4, { size: 8.6, weight: "bold", color: accent, align: "left" });
+    this.line(toVisual(title), this.right, this.y + 3.4, {
+      size: 8.6,
+      weight: "bold",
+      color: MUTED,
+    });
+    this.line(toVisual("סדר פלוס"), this.left, this.y + 3.4, {
+      size: 8.6,
+      weight: "bold",
+      color: accent,
+      align: "left",
+    });
     this.y += 5.2;
     this.rule(this.y, LINE, 0.3);
     this.y += 5;
@@ -227,9 +250,20 @@ export class RtlPdf {
       this.doc.setDrawColor(LINE_SOFT);
       this.doc.setLineWidth(0.2);
       this.doc.line(this.left, y - 4, this.right, y - 4);
-      this.line(toVisual(this.opts.footerNote || "דוח אישי — מסמך פנימי"), this.right, y, { size: 7.6, color: FAINT });
-      this.line(toVisual(`עמוד ${page} מתוך ${total}`), PAGE.w / 2, y, { size: 7.6, color: FAINT, align: "center" });
-      this.line(toVisual("הופק אוטומטית · סדר פלוס"), this.left, y, { size: 7.6, color: FAINT, align: "left" });
+      this.line(toVisual(this.opts.footerNote || "דוח אישי — מסמך פנימי"), this.right, y, {
+        size: 7.6,
+        color: FAINT,
+      });
+      this.line(toVisual(`עמוד ${page} מתוך ${total}`), PAGE.w / 2, y, {
+        size: 7.6,
+        color: FAINT,
+        align: "center",
+      });
+      this.line(toVisual("הופק אוטומטית · סדר פלוס"), this.left, y, {
+        size: 7.6,
+        color: FAINT,
+        align: "left",
+      });
     }
   }
 
@@ -299,12 +333,20 @@ export class RtlPdf {
 
         const labelSize = 7.4;
         this.setFont(labelSize);
-        const labelLines = wrapVisual(item.label, boxW - 5, (s) => this.doc.getTextWidth(s)).slice(0, 2);
+        const labelLines = wrapVisual(item.label, boxW - 5, (s) => this.doc.getTextWidth(s)).slice(
+          0,
+          2,
+        );
         labelLines.forEach((l, k) => {
-          this.line(l, xRight - 2.5, this.y + 4.4 + k * this.lineHeight(labelSize), { size: labelSize, color: MUTED });
+          this.line(l, xRight - 2.5, this.y + 4.4 + k * this.lineHeight(labelSize), {
+            size: labelSize,
+            color: MUTED,
+          });
         });
         this.line(toVisual(String(item.value)), xRight - 2.5, this.y + boxH - 4.2, {
-          size: 15, weight: "bold", color: this.opts.accent,
+          size: 15,
+          weight: "bold",
+          color: this.opts.accent,
         });
       });
       this.y += boxH + gap;
@@ -335,7 +377,9 @@ export class RtlPdf {
         this.doc.roundedRect(trackRight - fill, mid - 2.1, fill, 4.2, 2.1, 2.1, "F");
       }
       this.line(toVisual(String(r.value)), trackRight - trackW - 2.5, mid + 1.1, {
-        size: 8.4, weight: "bold", align: "left",
+        size: 8.4,
+        weight: "bold",
+        align: "left",
       });
       this.y += rowH;
     }
@@ -361,11 +405,16 @@ export class RtlPdf {
     // Right edge of each column, walking leftwards from the page's right edge.
     const rightEdges: number[] = [];
     let cursor = this.right;
-    for (const w of widths) { rightEdges.push(cursor); cursor -= w; }
+    for (const w of widths) {
+      rightEdges.push(cursor);
+      cursor -= w;
+    }
 
     const cellLines = (text: string, colIndex: number, fontSize: number) => {
       this.setFont(fontSize);
-      return wrapVisual(String(text ?? ""), widths[colIndex] - padX * 2, (s) => this.doc.getTextWidth(s));
+      return wrapVisual(String(text ?? ""), widths[colIndex] - padX * 2, (s) =>
+        this.doc.getTextWidth(s),
+      );
     };
 
     const drawRow = (
@@ -392,12 +441,17 @@ export class RtlPdf {
         const align = columns[i]?.align ?? (i === 0 ? "right" : "center");
         const xRight = rightEdges[i];
         const x =
-          align === "center" ? xRight - widths[i] / 2
-          : align === "left" ? xRight - widths[i] + padX
-          : xRight - padX;
+          align === "center"
+            ? xRight - widths[i] / 2
+            : align === "left"
+              ? xRight - widths[i] + padX
+              : xRight - padX;
         cell.forEach((l, k) => {
           this.line(l, x, this.y + padY + lh * (k + 1) - lh * 0.28, {
-            size: o.fontSize, weight: o.weight, color: o.color ?? INK, align,
+            size: o.fontSize,
+            weight: o.weight,
+            color: o.color ?? INK,
+            align,
           });
         });
       });
@@ -409,9 +463,15 @@ export class RtlPdf {
     };
 
     const drawHeader = () => {
-      drawRow(columns.map((c) => c.header), {
-        fontSize: headSize, weight: "bold", fill: FILL_HEAD, color: "#3A4761",
-      });
+      drawRow(
+        columns.map((c) => c.header),
+        {
+          fontSize: headSize,
+          weight: "bold",
+          fill: FILL_HEAD,
+          color: "#3A4761",
+        },
+      );
     };
 
     this.ensure(24); // don't start a table at the very bottom of a page
@@ -419,7 +479,9 @@ export class RtlPdf {
 
     if (!rows.length) {
       drawRow([spec.emptyText || "אין נתונים בטווח", ...columns.slice(1).map(() => "")], {
-        fontSize: size, weight: "normal", color: FAINT,
+        fontSize: size,
+        weight: "normal",
+        color: FAINT,
       });
     } else {
       rows.forEach((row, i) => {
@@ -442,7 +504,11 @@ export class RtlPdf {
     for (const item of items) {
       this.ensure(lh + 1.2);
       this.line(toVisual(item.label), this.right, this.y + lh * 0.78, { size, color: MUTED });
-      this.line(toVisual(item.value), this.left, this.y + lh * 0.78, { size, weight: "bold", align: "left" });
+      this.line(toVisual(item.value), this.left, this.y + lh * 0.78, {
+        size,
+        weight: "bold",
+        align: "left",
+      });
       this.y += lh + 0.8;
     }
     this.y += 1.6;

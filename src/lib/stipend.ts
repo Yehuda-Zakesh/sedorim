@@ -25,8 +25,10 @@
 // is that approval, set per month from the checkbox on the stipend screen —
 // see settings-store.ts's `stipend.approvedMonths`. Today only §3 reads it.
 import {
-  effectiveLearningMin, summarizeEntries,
-  type LearningEntry, type SederEntry,
+  effectiveLearningMin,
+  summarizeEntries,
+  type LearningEntry,
+  type SederEntry,
 } from "./kollel-store";
 import { fullMonthLearningDays, kollelSessionDaysInMonth } from "./hebrew-calendar";
 import { SHAS_ARRIVAL_DEADLINE } from "./settings-store";
@@ -102,7 +104,7 @@ export function proportionalRatio(sessionDays: number, fullMonthDays: number): n
 }
 
 function scaleMinutes(min: number, ratio: number): number {
-  if (!Number.isFinite(min)) return min;   // the last tier has no ceiling
+  if (!Number.isFinite(min)) return min; // the last tier has no ceiling
   return Math.round(min * ratio);
 }
 
@@ -145,7 +147,8 @@ function cappedKollelErev(lessons: LearningEntry[], maxDailyMin: number) {
     if (l.framework !== "kollel-erev") continue;
     perDay.set(l.date, (perDay.get(l.date) ?? 0) + effectiveLearningMin(l));
   }
-  let raw = 0, counted = 0;
+  let raw = 0,
+    counted = 0;
   for (const minutes of perDay.values()) {
     raw += minutes;
     counted += Math.min(minutes, maxDailyMin);
@@ -274,9 +277,8 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
   // against the same scaled threshold as §1. Unlike the base, the bonus
   // itself is prorated too: a partial month gets its proportional share of
   // the 150 ₪, not the full sum.
-  const shortfallBonusNis = s.totalMissing < scaled.freeMissingMin
-    ? Math.round(p.shortfallBonusNis * ratio)
-    : 0;
+  const shortfallBonusNis =
+    s.totalMissing < scaled.freeMissingMin ? Math.round(p.shortfallBonusNis * ratio) : 0;
 
   const oheveiNis = s.oheveiCount * p.oheveiNisPerSeder;
   const shasCount = shasChavura ? s.shasCount : 0;
@@ -302,19 +304,23 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
     {
       id: "deduction",
       label: "הפחתה על דקות חסרות",
-      detail: (chargeable <= scaled.freeMissingMin
-        ? `${chargeable} דק׳ לחיוב — מתחת לסף ${scaled.freeMissingMin} דק׳, אין הפחתה`
-        : `${chargeable} דק׳ לחיוב, מתוכן ${chargeable - scaled.freeMissingMin} דק׳ מעל הסף`)
-        + (excusedWaived > 0 ? ` (${excusedWaived} דק׳ מוצדקות מעל התקרה לא נספרו — אישור מראש הכולל)` : ""),
+      detail:
+        (chargeable <= scaled.freeMissingMin
+          ? `${chargeable} דק׳ לחיוב — מתחת לסף ${scaled.freeMissingMin} דק׳, אין הפחתה`
+          : `${chargeable} דק׳ לחיוב, מתוכן ${chargeable - scaled.freeMissingMin} דק׳ מעל הסף`) +
+        (excusedWaived > 0
+          ? ` (${excusedWaived} דק׳ מוצדקות מעל התקרה לא נספרו — אישור מראש הכולל)`
+          : ""),
       nis: -deductionNis,
       kind: "debit",
     },
     {
       id: "shortfall-bonus",
       label: "תוספת לחיסור נמוך",
-      detail: shortfallBonusNis > 0
-        ? `סה״כ ${s.totalMissing} דק׳ נשמטו — פחות מ־${scaled.freeMissingMin}`
-        : `סה״כ ${s.totalMissing} דק׳ נשמטו — ${scaled.freeMissingMin} ומעלה, אין תוספת`,
+      detail:
+        shortfallBonusNis > 0
+          ? `סה״כ ${s.totalMissing} דק׳ נשמטו — פחות מ־${scaled.freeMissingMin}`
+          : `סה״כ ${s.totalMissing} דק׳ נשמטו — ${scaled.freeMissingMin} ומעלה, אין תוספת`,
       nis: shortfallBonusNis,
       kind: "credit",
     },
@@ -326,13 +332,15 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
       kind: "credit",
     },
     ...(shasChavura
-      ? [{
-          id: "shas",
-          label: 'חבורת ש"ס',
-          detail: `${shasCount} הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE} × ${p.shasNisPerArrival} ₪`,
-          nis: shasNis,
-          kind: "credit" as const,
-        }]
+      ? [
+          {
+            id: "shas",
+            label: 'חבורת ש"ס',
+            detail: `${shasCount} הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE} × ${p.shasNisPerArrival} ₪`,
+            nis: shasNis,
+            kind: "credit" as const,
+          },
+        ]
       : []),
     {
       id: "kollel-erev",
@@ -346,15 +354,19 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
     {
       id: "torato-beyado",
       label: "תורתו בידו",
-      detail: torato.counted > 0
-        ? `${torato.counted} דק׳ × ${p.toratoBeyado.nisPerHour} ₪ לשעה`
-        : "לא נרשמו דקות החודש",
+      detail:
+        torato.counted > 0
+          ? `${torato.counted} דק׳ × ${p.toratoBeyado.nisPerHour} ₪ לשעה`
+          : "לא נרשמו דקות החודש",
       nis: toratoNis,
       kind: "credit",
     },
   ];
 
-  const totalNis = Math.max(0, lines.reduce((sum, l) => sum + l.nis, 0));
+  const totalNis = Math.max(
+    0,
+    lines.reduce((sum, l) => sum + l.nis, 0),
+  );
 
   return {
     monthKey,
@@ -392,4 +404,3 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
     totalNis,
   };
 }
-

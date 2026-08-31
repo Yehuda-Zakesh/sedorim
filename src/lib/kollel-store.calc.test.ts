@@ -792,7 +792,7 @@ describe("replaceAllData", () => {
 // חבורת ש"ס — calcSeder().isShasArrival
 // ============================================================================
 
-describe("calcSeder — חבורת ש\"ס", () => {
+describe('calcSeder — חבורת ש"ס', () => {
   const at = (hhmmStr: string, overrides: Partial<SederEntry> = {}) =>
     calcSeder(entry({ seder: 2, arrival: hhmmStr, departure: s2End, ...overrides }));
 
@@ -815,7 +815,9 @@ describe("calcSeder — חבורת ש\"ס", () => {
   });
 
   it("never counts seder א׳, whatever the hour", () => {
-    expect(calcSeder(entry({ seder: 1, arrival: "08:00", departure: s1End })).isShasArrival).toBe(false);
+    expect(calcSeder(entry({ seder: 1, arrival: "08:00", departure: s1End })).isShasArrival).toBe(
+      false,
+    );
   });
 
   it("does not count an absence", () => {
@@ -823,7 +825,9 @@ describe("calcSeder — חבורת ש\"ס", () => {
   });
 
   it("does not count a row with no arrival time", () => {
-    expect(calcSeder(entry({ seder: 2, arrival: undefined, departure: s2End })).isShasArrival).toBe(false);
+    expect(calcSeder(entry({ seder: 2, arrival: undefined, departure: s2End })).isShasArrival).toBe(
+      false,
+    );
   });
 
   it("counts an early arrival even when the seder was left early", () => {

@@ -60,7 +60,9 @@ export function verifySnapshot(snap: BackupSnapshot): boolean {
   return checksum(JSON.stringify(snap.payload)) === snap.checksum;
 }
 
-export function listSnapshots(): readonly BackupSnapshot[] { return store.get(); }
+export function listSnapshots(): readonly BackupSnapshot[] {
+  return store.get();
+}
 
 export function deleteSnapshot(id: string) {
   store.set(store.get().filter((s) => s.id !== id));
@@ -74,7 +76,9 @@ export function useSnapshots(): readonly BackupSnapshot[] {
   return store.use();
 }
 
-export function getLastAutoBackupTs(): number { return lastAutoBackup.get(); }
+export function getLastAutoBackupTs(): number {
+  return lastAutoBackup.get();
+}
 
 export function maybeAutoBackup(data: { attendance: unknown; learning: unknown }) {
   const s = getSettings();

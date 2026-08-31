@@ -77,8 +77,19 @@ describe("DEFAULT_SETTINGS", () => {
   it("uses only values the types allow", () => {
     expect(["off", "daily", "weekly"]).toContain(DEFAULT_SETTINGS.data.autoBackup);
     expect(["small", "normal", "large", "xlarge"]).toContain(DEFAULT_SETTINGS.appearance.fontSize);
-    expect(["blue", "emerald", "violet", "rose", "amber", "teal", "pink", "slate", "crimson", "indigo", "lime"])
-      .toContain(DEFAULT_SETTINGS.appearance.colorTheme);
+    expect([
+      "blue",
+      "emerald",
+      "violet",
+      "rose",
+      "amber",
+      "teal",
+      "pink",
+      "slate",
+      "crimson",
+      "indigo",
+      "lime",
+    ]).toContain(DEFAULT_SETTINGS.appearance.colorTheme);
   });
 
   it("starts with no schedule changes and no overrides", () => {
@@ -341,7 +352,9 @@ describe("setSederTimesFromToday", () => {
   it("leaves the other seder settings alone", () => {
     setSederTimesFromToday(times("10:00", "14:00"), "2026-07-01");
     expect(getSettings().seder.bonusThresholdMin).toBe(DEFAULT_SETTINGS.seder.bonusThresholdMin);
-    expect(getSettings().seder.alertMissingMinPerMonth).toBe(DEFAULT_SETTINGS.seder.alertMissingMinPerMonth);
+    expect(getSettings().seder.alertMissingMinPerMonth).toBe(
+      DEFAULT_SETTINGS.seder.alertMissingMinPerMonth,
+    );
   });
 
   it("defaults its effective date to today", () => {
@@ -500,7 +513,12 @@ describe("sederTimesError", () => {
   });
 
   it("reports the first problem it finds, naming the seder", () => {
-    const err = sederTimesError({ s1Start: "13:00", s1End: "09:00", s2Start: "19:00", s2End: "15:00" });
+    const err = sederTimesError({
+      s1Start: "13:00",
+      s1End: "09:00",
+      s2Start: "19:00",
+      s2End: "15:00",
+    });
     expect(err).toContain("סדר א׳");
   });
 

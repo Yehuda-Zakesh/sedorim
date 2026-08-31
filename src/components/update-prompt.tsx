@@ -2,7 +2,13 @@
 // exists. There is no "check for updates" button anywhere in the app and no
 // setting behind this — see src/lib/updater.ts.
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2, Sparkles } from "lucide-react";
 import type { UpdateInfo } from "@/lib/updater";
@@ -28,7 +34,12 @@ export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () 
   };
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && !installing) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o && !installing) onClose();
+      }}
+    >
       <DialogContent dir="rtl" className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -38,7 +49,9 @@ export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () 
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs">מותקנת: גרסה {info.current}</span>
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs">
+              מותקנת: גרסה {info.current}
+            </span>
             <span className="rounded-full bg-primary/15 text-primary px-2.5 py-0.5 text-xs font-medium">
               חדשה: {info.latest}
             </span>
@@ -56,7 +69,11 @@ export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () 
         <DialogFooter className="flex-row-reverse gap-2 sm:justify-start">
           {info.canInstall ? (
             <Button onClick={install} disabled={installing}>
-              {installing ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              {installing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
               {installing ? "מתקין..." : "עדכן עכשיו"}
             </Button>
           ) : (
@@ -64,13 +81,20 @@ export function UpdatePrompt({ info, onClose }: { info: UpdateInfo; onClose: () 
               /* Opens in the user's real browser, not the app window — a
                  WebView ignores target="_blank", so an <a> would do nothing.
                  See open_external_url in src-tauri/core. */
-              <Button onClick={() => { openExternal(info.downloadUrl!); onClose(); }}>
+              <Button
+                onClick={() => {
+                  openExternal(info.downloadUrl!);
+                  onClose();
+                }}
+              >
                 <Download className="size-4" />
                 הורדה
               </Button>
             )
           )}
-          <Button variant="ghost" disabled={installing} onClick={onClose}>מאוחר יותר</Button>
+          <Button variant="ghost" disabled={installing} onClick={onClose}>
+            מאוחר יותר
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

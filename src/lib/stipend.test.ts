@@ -3,8 +3,12 @@
 // thing under test.
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  calcStipend, proportionalRatio, scaleTiers, tierCharges,
-  STIPEND_POLICY, type DeductionTier,
+  calcStipend,
+  proportionalRatio,
+  scaleTiers,
+  tierCharges,
+  STIPEND_POLICY,
+  type DeductionTier,
 } from "./stipend";
 import { hhmmToMin, type SederEntry, type LearningEntry } from "./kollel-store";
 import { DEFAULT_SETTINGS, resetSettings } from "./settings-store";
@@ -45,11 +49,15 @@ function lesson(overrides: Partial<LearningEntry> = {}): LearningEntry {
 
 /** A seder א׳ arrived at `minutes` late. */
 const late = (date: string, minutes: number) =>
-  entry({ date, seder: 1, arrival: hhmm(hhmmToMin(DEFAULT_SETTINGS.seder.s1Start)! + minutes), departure: s1End });
+  entry({
+    date,
+    seder: 1,
+    arrival: hhmm(hhmmToMin(DEFAULT_SETTINGS.seder.s1Start)! + minutes),
+    departure: s1End,
+  });
 
 /** A seder ב׳ counted by חבורת ש"ס. */
-const shas = (date: string) =>
-  entry({ date, seder: 2, arrival: "14:30", departure: s2End });
+const shas = (date: string) => entry({ date, seder: 2, arrival: "14:30", departure: s2End });
 
 /**
  * The `n`-th day of July 2026 the kollel could have sat on — Sunday to
@@ -223,8 +231,8 @@ describe("the §9 rates", () => {
     // Five full absences — 1200 minutes: 300 in band one, 400 in band two.
     const r = run({ entries: [1, 2, 3, 4, 5].map((d) => entry({ date: july(d), absent: true })) });
     expect(r.missing.chargeable).toBe(1200);
-    expect(r.charges[0].nis).toBe(60);    // 30 × 2 ₪
-    expect(r.charges[1].nis).toBe(120);   // 40 × 3 ₪
+    expect(r.charges[0].nis).toBe(60); // 30 × 2 ₪
+    expect(r.charges[1].nis).toBe(120); // 40 × 3 ₪
     expect(r.deductionNis).toBe(180);
   });
 
@@ -286,7 +294,7 @@ describe("calcStipend — §1/§2, the 500-minute line", () => {
       sessionDays: 11,
       fullMonthDays: 22,
     });
-    expect(r.shortfallBonusNis).toBe(75);   // round(150 × 11/22)
+    expect(r.shortfallBonusNis).toBe(75); // round(150 × 11/22)
   });
 });
 
@@ -329,7 +337,7 @@ describe("calcStipend — §3, excused minutes", () => {
       fullMonthDays: 22,
     });
     expect(r.scaled.excusedFreeMin).toBe(300);
-    expect(r.missing.excusedCharged).toBe(180);   // 480 − 300
+    expect(r.missing.excusedCharged).toBe(180); // 480 − 300
   });
 });
 
@@ -385,20 +393,28 @@ describe("calcStipend — §4, אוהבי ה׳", () => {
   it("pays 20 ₪ for each qualifying seder", () => {
     const r = run({
       entries: [1, 2, 3].map((d) =>
-        entry({ date: july(d), arrival: DEFAULT_SETTINGS.seder.s1Start, departure: s1End, ohevei: true })),
+        entry({
+          date: july(d),
+          arrival: DEFAULT_SETTINGS.seder.s1Start,
+          departure: s1End,
+          ohevei: true,
+        }),
+      ),
     });
     expect(r.oheveiCount).toBe(3);
     expect(r.oheveiNis).toBe(60);
   });
 
   it("pays nothing for a seder marked אוהבי ה׳ that does not qualify", () => {
-    const r = run({ entries: [entry({ date: july(1), arrival: "09:30", departure: s1End, ohevei: true })] });
+    const r = run({
+      entries: [entry({ date: july(1), arrival: "09:30", departure: s1End, ohevei: true })],
+    });
     expect(r.oheveiCount).toBe(0);
     expect(r.oheveiNis).toBe(0);
   });
 });
 
-describe("calcStipend — §5, חבורת ש\"ס", () => {
+describe('calcStipend — §5, חבורת ש"ס', () => {
   it("pays 5 ₪ for each arrival by the deadline, for a member", () => {
     const r = run({ entries: [shas(july(1)), shas(july(2)), shas(july(3))], shasChavura: true });
     expect(r.shasCount).toBe(3);
@@ -413,7 +429,9 @@ describe("calcStipend — §5, חבורת ש\"ס", () => {
 
   it("leaves the line out of the breakdown entirely for a non-member", () => {
     expect(run({ entries: [shas(july(1))] }).lines.some((l) => l.id === "shas")).toBe(false);
-    expect(run({ entries: [shas(july(1))], shasChavura: true }).lines.some((l) => l.id === "shas")).toBe(true);
+    expect(
+      run({ entries: [shas(july(1))], shasChavura: true }).lines.some((l) => l.id === "shas"),
+    ).toBe(true);
   });
 
   it("does not count a seder ב׳ arrived at after the deadline", () => {
@@ -452,10 +470,7 @@ describe("calcStipend — §6/§7/§8, the learning frameworks", () => {
 
   it("applies the daily cap to the day's total, not to each record", () => {
     const r = run({
-      lessons: [
-        lesson({ date: july(1), minutes: 60 }),
-        lesson({ date: july(1), minutes: 60 }),
-      ],
+      lessons: [lesson({ date: july(1), minutes: 60 }), lesson({ date: july(1), minutes: 60 })],
     });
     expect(r.learning.kollelErevRawMin).toBe(120);
     expect(r.learning.kollelErevCountedMin).toBe(90);
@@ -468,7 +483,9 @@ describe("calcStipend — §6/§7/§8, the learning frameworks", () => {
   });
 
   it("pays 25 ₪ an hour for תורתו בידו, with no minimum", () => {
-    const r = run({ lessons: [lesson({ framework: "torato-beyado", date: july(1), minutes: 60 })] });
+    const r = run({
+      lessons: [lesson({ framework: "torato-beyado", date: july(1), minutes: 60 })],
+    });
     expect(r.learning.toratoCountedMin).toBe(60);
     expect(r.learning.toratoNis).toBe(25);
   });
@@ -476,7 +493,8 @@ describe("calcStipend — §6/§7/§8, the learning frameworks", () => {
   it("caps תורתו בידו at 20 hours a month", () => {
     const r = run({
       lessons: Array.from({ length: 20 }, (_, i) =>
-        lesson({ framework: "torato-beyado", date: july(i + 1), minutes: 75 })),
+        lesson({ framework: "torato-beyado", date: july(i + 1), minutes: 75 }),
+      ),
     });
     expect(r.learning.toratoRawMin).toBe(1500);
     expect(r.learning.toratoCountedMin).toBe(1200);
@@ -485,12 +503,16 @@ describe("calcStipend — §6/§7/§8, the learning frameworks", () => {
   });
 
   it("has no daily cap on תורתו בידו — only the monthly one", () => {
-    const r = run({ lessons: [lesson({ framework: "torato-beyado", date: july(1), minutes: 300 })] });
+    const r = run({
+      lessons: [lesson({ framework: "torato-beyado", date: july(1), minutes: 300 })],
+    });
     expect(r.learning.toratoCountedMin).toBe(300);
   });
 
   it("ignores ישיבת בין הזמנים, which carries no stipend", () => {
-    const r = run({ lessons: [lesson({ framework: "bein-hazmanim", date: july(1), minutes: 600 })] });
+    const r = run({
+      lessons: [lesson({ framework: "bein-hazmanim", date: july(1), minutes: 600 })],
+    });
     expect(r.learning.kollelErevCountedMin).toBe(0);
     expect(r.learning.toratoCountedMin).toBe(0);
   });
@@ -514,7 +536,13 @@ describe("calcStipend — the month it is asked about", () => {
     const r = run({
       entries: [
         ...[1, 2, 3].map((d) =>
-          entry({ date: july(d), arrival: DEFAULT_SETTINGS.seder.s1Start, departure: s1End, ohevei: true })),
+          entry({
+            date: july(d),
+            arrival: DEFAULT_SETTINGS.seder.s1Start,
+            departure: s1End,
+            ohevei: true,
+          }),
+        ),
         shas(july(4)),
       ],
       lessons: Array.from({ length: 10 }, (_, i) => lesson({ date: july(i + 1) })),
@@ -530,7 +558,7 @@ describe("calcStipend — the month it is asked about", () => {
     expect(r.sessionDays).toBe(12);
     expect(r.fullMonthDays).toBe(22);
     expect(r.ratio).toBeCloseTo(12 / 22);
-    expect(r.scaled.freeMissingMin).toBe(273);   // round(500 × 12/22)
+    expect(r.scaled.freeMissingMin).toBe(273); // round(500 × 12/22)
   });
 
   it("derives the day counts from the calendar when it is not told them", () => {

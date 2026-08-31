@@ -20,7 +20,9 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const raw = process.argv[2];
 if (!/^\d+$/.test(raw ?? "")) {
-  console.error("usage: node scripts/set-version.mjs <whole number>\n  e.g. node scripts/set-version.mjs 3");
+  console.error(
+    "usage: node scripts/set-version.mjs <whole number>\n  e.g. node scripts/set-version.mjs 3",
+  );
   process.exit(1);
 }
 const major = Number(raw);

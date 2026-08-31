@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 
-import { loadStore, saveStoreKey, storeStamp, type StoreKey, type StoreShape } from "./store-bridge";
+import {
+  loadStore,
+  saveStoreKey,
+  storeStamp,
+  type StoreKey,
+  type StoreShape,
+} from "./store-bridge";
 
 // Everything that both EXEs must agree on lives in the one shared data file,
 // not in localStorage.

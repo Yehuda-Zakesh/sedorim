@@ -24,12 +24,7 @@ const FIELDS: Field[] = [
 /** Only meaningful to a member of the חבורה, so only shown to one. */
 const SHAS_FIELD: Field = { key: "shasCount", label: "חבורת ש״ס", dot: "var(--status-present)" };
 
-export function MonthSummaryCard({
-  title, summary,
-}: {
-  title: string;
-  summary: MonthlySummary;
-}) {
+export function MonthSummaryCard({ title, summary }: { title: string; summary: MonthlySummary }) {
   const { settings } = useSettings();
   const fields = settings.seder.shasChavura ? [...FIELDS, SHAS_FIELD] : FIELDS;
 

@@ -29,9 +29,7 @@ describe("toVisual", () => {
   });
 
   it("puts the words of a sentence right to left but each number forward", () => {
-    expect(toVisual("סדר א׳ — 09:00 עד 13:00")).toBe(
-      `13:00 ${rev("עד")} 09:00 — ${rev("סדר א׳")}`,
-    );
+    expect(toVisual("סדר א׳ — 09:00 עד 13:00")).toBe(`13:00 ${rev("עד")} 09:00 — ${rev("סדר א׳")}`);
   });
 
   it("keeps a Latin word in its own reading order", () => {
@@ -96,10 +94,7 @@ describe("wrapVisual", () => {
   });
 
   it("honours explicit newlines", () => {
-    expect(wrapVisual("אחד\nשתיים", 100, measure)).toEqual([
-      toVisual("אחד"),
-      toVisual("שתיים"),
-    ]);
+    expect(wrapVisual("אחד\nשתיים", 100, measure)).toEqual([toVisual("אחד"), toVisual("שתיים")]);
   });
 
   it("collapses runs of whitespace", () => {

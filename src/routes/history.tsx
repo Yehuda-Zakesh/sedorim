@@ -12,12 +12,28 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
-  Search, Trash2, History as HistoryIcon, BookOpen, FileDown, Loader2, Lock,
-  LockOpen, ChevronRight, ChevronLeft, CalendarRange, X,
+  Search,
+  Trash2,
+  History as HistoryIcon,
+  BookOpen,
+  FileDown,
+  Loader2,
+  Lock,
+  LockOpen,
+  ChevronRight,
+  ChevronLeft,
+  CalendarRange,
+  X,
 } from "lucide-react";
 import {
-  useSeder, useLearning, calcSeder, monthClosing,
-  FRAMEWORK_LABELS, type MonthClosing, type LearningEntry, type SederEntry,
+  useSeder,
+  useLearning,
+  calcSeder,
+  monthClosing,
+  FRAMEWORK_LABELS,
+  type MonthClosing,
+  type LearningEntry,
+  type SederEntry,
 } from "@/lib/kollel-store";
 import { exportMonthClosingsPdf } from "@/lib/exporters";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
@@ -43,9 +59,18 @@ function HistoryPage() {
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
 
   const months = useMemo(() => monthsWithData(entries, learning.items), [entries, learning.items]);
-  const monthEntries = useMemo(() => entries.filter((e) => e.date.startsWith(month)), [entries, month]);
-  const monthLessons = useMemo(() => learning.items.filter((l) => l.date.startsWith(month)), [learning.items, month]);
-  const closing = useMemo(() => monthClosing(month, monthEntries, monthLessons), [month, monthEntries, monthLessons]);
+  const monthEntries = useMemo(
+    () => entries.filter((e) => e.date.startsWith(month)),
+    [entries, month],
+  );
+  const monthLessons = useMemo(
+    () => learning.items.filter((l) => l.date.startsWith(month)),
+    [learning.items, month],
+  );
+  const closing = useMemo(
+    () => monthClosing(month, monthEntries, monthLessons),
+    [month, monthEntries, monthLessons],
+  );
 
   const exportClosings = async (closings: MonthClosing[], busyKey: string) => {
     setPdfBusy(busyKey);
@@ -55,19 +80,30 @@ function HistoryPage() {
     } catch (e) {
       logProblem("ייצוא סיכום חודשי", e);
       toast.error("הייצוא נכשל");
-    } finally { setPdfBusy(null); }
+    } finally {
+      setPdfBusy(null);
+    }
   };
 
   const exportAllMonths = () => {
     const all = months
-      .filter((key) => entries.some((e) => e.date.startsWith(key)) || learning.items.some((l) => l.date.startsWith(key)))
+      .filter(
+        (key) =>
+          entries.some((e) => e.date.startsWith(key)) ||
+          learning.items.some((l) => l.date.startsWith(key)),
+      )
       .sort()
-      .map((key) => monthClosing(
-        key,
-        entries.filter((e) => e.date.startsWith(key)),
-        learning.items.filter((l) => l.date.startsWith(key)),
-      ));
-    if (!all.length) { toast.error("אין נתונים לייצוא"); return; }
+      .map((key) =>
+        monthClosing(
+          key,
+          entries.filter((e) => e.date.startsWith(key)),
+          learning.items.filter((l) => l.date.startsWith(key)),
+        ),
+      );
+    if (!all.length) {
+      toast.error("אין נתונים לייצוא");
+      return;
+    }
     void exportClosings(all, "__all");
   };
 
@@ -76,10 +112,17 @@ function HistoryPage() {
       title="היסטוריה"
       subtitle={`${entries.length} רישומי סדר · ${learning.items.length} רישומי לימוד`}
       actions={
-        <button onClick={exportAllMonths} disabled={pdfBusy !== null}
+        <button
+          onClick={exportAllMonths}
+          disabled={pdfBusy !== null}
           title="ייצוא שורת סיכום לכל החודשים"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent disabled:opacity-50">
-          {pdfBusy === "__all" ? <Loader2 className="size-4 animate-spin" /> : <CalendarRange className="size-4" />}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent disabled:opacity-50"
+        >
+          {pdfBusy === "__all" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <CalendarRange className="size-4" />
+          )}
           <span className="hidden sm:inline">סיכום כל החודשים</span>
         </button>
       }
@@ -87,12 +130,16 @@ function HistoryPage() {
       <MonthPicker value={month} months={months} onChange={setMonth} closing={closing} />
 
       <div className="mt-4 mb-4 inline-flex rounded-lg border border-border bg-card p-1">
-        <button onClick={() => setTab("list")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium pressable transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+        <button
+          onClick={() => setTab("list")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium pressable transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
           <HistoryIcon className="size-3.5" /> נוכחות ({monthEntries.length})
         </button>
-        <button onClick={() => setTab("learning")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium pressable transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+        <button
+          onClick={() => setTab("learning")}
+          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium pressable transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
           <BookOpen className="size-3.5" /> לימוד נוסף ({monthLessons.length})
         </button>
       </div>
@@ -127,7 +174,10 @@ function HistoryPage() {
 
 /** Arrows for the month either side, and a list for anything further away. */
 function MonthPicker({
-  value, months, onChange, closing,
+  value,
+  months,
+  onChange,
+  closing,
 }: {
   value: string;
   months: string[];
@@ -141,17 +191,24 @@ function MonthPicker({
     <div className="card-surface p-4">
       <div className="flex items-center gap-2">
         {/* Right arrow steps back in time: in an RTL layout, back is to the right. */}
-        <button onClick={() => onChange(shiftMonth(value, -1))} title="החודש הקודם"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition">
+        <button
+          onClick={() => onChange(shiftMonth(value, -1))}
+          title="החודש הקודם"
+          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition"
+        >
           <ChevronRight className="size-4" />
         </button>
 
-        <button onClick={() => setListOpen((v) => !v)}
-          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 pressable transition">
+        <button
+          onClick={() => setListOpen((v) => !v)}
+          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 pressable transition"
+        >
           <div className="flex items-center justify-center gap-2">
-            {closing.closed
-              ? <Lock className="size-3.5 text-muted-foreground" />
-              : <LockOpen className="size-3.5 text-primary" />}
+            {closing.closed ? (
+              <Lock className="size-3.5 text-muted-foreground" />
+            ) : (
+              <LockOpen className="size-3.5 text-primary" />
+            )}
             <span className="text-base font-semibold">{closing.gregorianLabel}</span>
           </div>
           <div className="text-2xs text-muted-foreground">
@@ -160,8 +217,12 @@ function MonthPicker({
           </div>
         </button>
 
-        <button onClick={() => onChange(shiftMonth(value, 1))} disabled={isCurrent} title="החודש הבא"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition disabled:opacity-30">
+        <button
+          onClick={() => onChange(shiftMonth(value, 1))}
+          disabled={isCurrent}
+          title="החודש הבא"
+          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition disabled:opacity-30"
+        >
           <ChevronLeft className="size-4" />
         </button>
       </div>
@@ -170,17 +231,27 @@ function MonthPicker({
         <div className="mt-3 border-t border-border pt-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-muted-foreground">בחר חודש</span>
-            <button onClick={() => setListOpen(false)} className="text-muted-foreground hover:text-foreground">
+            <button
+              onClick={() => setListOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
               <X className="size-3.5" />
             </button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-auto">
             {months.map((key) => (
-              <button key={key}
-                onClick={() => { onChange(key); setListOpen(false); }}
+              <button
+                key={key}
+                onClick={() => {
+                  onChange(key);
+                  setListOpen(false);
+                }}
                 className={`rounded-md border px-2.5 py-2 text-xs pressable transition ${
-                  key === value ? "border-primary bg-primary/10 text-primary font-medium" : "border-border hover:bg-accent"
-                }`}>
+                  key === value
+                    ? "border-primary bg-primary/10 text-primary font-medium"
+                    : "border-border hover:bg-accent"
+                }`}
+              >
                 {monthKeyLabel(key)}
               </button>
             ))}
@@ -189,8 +260,10 @@ function MonthPicker({
       )}
 
       {!isCurrent && (
-        <button onClick={() => onChange(currentMonthKey())}
-          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-2xs text-muted-foreground hover:bg-accent pressable transition">
+        <button
+          onClick={() => onChange(currentMonthKey())}
+          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-2xs text-muted-foreground hover:bg-accent pressable transition"
+        >
           חזור לחודש הנוכחי
         </button>
       )}
@@ -199,7 +272,8 @@ function MonthPicker({
 }
 
 function AttendanceHistory({
-  entries, onRemove,
+  entries,
+  onRemove,
 }: {
   entries: SederEntry[];
   onRemove: (e: SederEntry) => void;
@@ -219,30 +293,49 @@ function AttendanceHistory({
     if (typeFilter === "bonus" && c.bonusMin === 0) return false;
     if (excusedFilter === "excused" && c.excusedMin === 0) return false;
     if (excusedFilter === "non-excused" && c.excusedMin > 0) return false;
-    if (q && !(e.date.includes(q) || (e.note || "").includes(q) || (e.excusedReason || "").includes(q) || (e.tags || []).some((t) => t.includes(q)))) return false;
+    if (
+      q &&
+      !(
+        e.date.includes(q) ||
+        (e.note || "").includes(q) ||
+        (e.excusedReason || "").includes(q) ||
+        (e.tags || []).some((t) => t.includes(q))
+      )
+    )
+      return false;
     return true;
   });
 
-  const filtersOn = q !== "" || sederFilter !== "all" || typeFilter !== "all" || excusedFilter !== "all";
+  const filtersOn =
+    q !== "" || sederFilter !== "all" || typeFilter !== "all" || excusedFilter !== "all";
 
   return (
     <>
       <div className="card-surface p-4 mb-4 space-y-3">
         <div className="relative">
           <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <input value={q} onChange={(e) => setQ(e.target.value)}
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
             placeholder="חיפוש לפי תאריך, הערה, סיבה או תגית..."
-            className="w-full rounded-md border border-input bg-card ps-9 pe-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            className="w-full rounded-md border border-input bg-card ps-9 pe-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-          <select value={sederFilter} onChange={(e) => setSederFilter(e.target.value as "all" | "1" | "2")}
-            className="field-input-sm">
+          <select
+            value={sederFilter}
+            onChange={(e) => setSederFilter(e.target.value as "all" | "1" | "2")}
+            className="field-input-sm"
+          >
             <option value="all">כל הסדרים</option>
             <option value="1">סדר א׳</option>
             <option value="2">סדר ב׳</option>
           </select>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-            className="field-input-sm">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+            className="field-input-sm"
+          >
             <option value="all">כל הסוגים</option>
             <option value="late">איחור</option>
             <option value="absent">היעדרות</option>
@@ -250,8 +343,11 @@ function AttendanceHistory({
             <option value="ohevei">אוהבי ה׳</option>
             <option value="bonus">בונוס</option>
           </select>
-          <select value={excusedFilter} onChange={(e) => setExcusedFilter(e.target.value as ExcusedFilter)}
-            className="field-input-sm">
+          <select
+            value={excusedFilter}
+            onChange={(e) => setExcusedFilter(e.target.value as ExcusedFilter)}
+            className="field-input-sm"
+          >
             <option value="all">מוצדק ולא מוצדק</option>
             <option value="excused">מוצדק בלבד</option>
             <option value="non-excused">לא מוצדק בלבד</option>
@@ -259,9 +355,20 @@ function AttendanceHistory({
         </div>
         {filtersOn && (
           <div className="flex items-center justify-between text-2xs text-muted-foreground">
-            <span>{filtered.length} מתוך {entries.length} רישומי החודש</span>
-            <button onClick={() => { setQ(""); setSederFilter("all"); setTypeFilter("all"); setExcusedFilter("all"); }}
-              className="hover:text-foreground">נקה סינון</button>
+            <span>
+              {filtered.length} מתוך {entries.length} רישומי החודש
+            </span>
+            <button
+              onClick={() => {
+                setQ("");
+                setSederFilter("all");
+                setTypeFilter("all");
+                setExcusedFilter("all");
+              }}
+              className="hover:text-foreground"
+            >
+              נקה סינון
+            </button>
           </div>
         )}
       </div>
@@ -291,17 +398,24 @@ function AttendanceHistory({
               if (c.isOhevei) tags.push("אוהבי ה׳");
               return (
                 <tr key={e.id} className="border-t border-border hover:bg-accent/40">
-                  <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(e.date))}>{e.date}</td>
+                  <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(e.date))}>
+                    {e.date}
+                  </td>
                   <td className="px-3 py-3">{e.seder === 1 ? "א׳" : "ב׳"}</td>
-                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.arrival || "—")}</td>
-                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : (e.departure || "—")}</td>
+                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : e.arrival || "—"}</td>
+                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : e.departure || "—"}</td>
                   <td className="px-3 py-3 tabular-nums">{c.netMissingMin}</td>
                   <td className="px-3 py-3 tabular-nums">{c.bonusMin}</td>
                   <td className="px-3 py-3 tabular-nums">{c.excusedMin}</td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground">{tags.join(", ") || "מלא"}</td>
+                  <td className="px-3 py-3 text-xs text-muted-foreground">
+                    {tags.join(", ") || "מלא"}
+                  </td>
                   <td className="px-3 py-3">
-                    <button title="מחק רישום" onClick={() => onRemove(e)}
-                      className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
+                    <button
+                      title="מחק רישום"
+                      onClick={() => onRemove(e)}
+                      className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center"
+                    >
                       <Trash2 className="size-3.5" />
                     </button>
                   </td>
@@ -322,7 +436,10 @@ function AttendanceHistory({
 
 /** The month's closing line: seder totals plus the learning minutes in it. */
 function MonthClosingCard({
-  closing, busy, disabled, onExport,
+  closing,
+  busy,
+  disabled,
+  onExport,
 }: {
   closing: MonthClosing;
   busy: boolean;
@@ -332,9 +449,10 @@ function MonthClosingCard({
   const { seder, learning } = closing;
   const { settings } = useSettings();
   const shasChavura = settings.seder.shasChavura;
-  const erevTitle = learning.kollelErev !== learning.kollelErevRaw
-    ? `${learning.kollelErevRaw} דק׳ בפועל · תענית דיבור נספרת כפול`
-    : undefined;
+  const erevTitle =
+    learning.kollelErev !== learning.kollelErevRaw
+      ? `${learning.kollelErevRaw} דק׳ בפועל · תענית דיבור נספרת כפול`
+      : undefined;
 
   return (
     <div className="mt-4 card-surface border-t-2 border-t-primary/40 p-5">
@@ -348,8 +466,11 @@ function MonthClosingCard({
             {!closing.closed && " · החודש טרם הסתיים"}
           </p>
         </div>
-        <button onClick={onExport} disabled={disabled}
-          className="inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-2 text-xs font-medium hover:bg-accent disabled:opacity-50">
+        <button
+          onClick={onExport}
+          disabled={disabled}
+          className="inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-2 text-xs font-medium hover:bg-accent disabled:opacity-50"
+        >
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />}
           ייצוא סיכום החודש ל-PDF
         </button>
@@ -364,14 +485,21 @@ function MonthClosingCard({
         <ClosingStat label="אוהבי ה׳" value={seder.oheveiCount} />
         <ClosingStat label="כולל ערב" value={learning.kollelErev} title={erevTitle} />
         {shasChavura && (
-          <ClosingStat label="חבורת ש״ס" value={seder.shasCount}
-            title={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`} />
+          <ClosingStat
+            label="חבורת ש״ס"
+            value={seder.shasCount}
+            title={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`}
+          />
         )}
       </div>
       {learning.toratoBeyado > 0 || learning.beinHazmanim > 0 ? (
         <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {learning.toratoBeyado > 0 && <ClosingStat label="תורתו בידו" value={learning.toratoBeyado} />}
-          {learning.beinHazmanim > 0 && <ClosingStat label="בין הזמנים" value={learning.beinHazmanim} />}
+          {learning.toratoBeyado > 0 && (
+            <ClosingStat label="תורתו בידו" value={learning.toratoBeyado} />
+          )}
+          {learning.beinHazmanim > 0 && (
+            <ClosingStat label="בין הזמנים" value={learning.beinHazmanim} />
+          )}
         </div>
       ) : null}
     </div>
@@ -387,13 +515,27 @@ function ClosingStat({ label, value, title }: { label: string; value: number; ti
   );
 }
 
-function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove: (item: LearningEntry) => void }) {
+function LearningHistory({
+  items,
+  onRemove,
+}: {
+  items: LearningEntry[];
+  onRemove: (item: LearningEntry) => void;
+}) {
   const [q, setQ] = useState("");
   const [framework, setFramework] = useState<string>("all");
 
   const filtered = items.filter((i) => {
     if (framework !== "all" && i.framework !== framework) return false;
-    if (q && !(i.date.includes(q) || (i.note || "").includes(q) || FRAMEWORK_LABELS[i.framework].includes(q))) return false;
+    if (
+      q &&
+      !(
+        i.date.includes(q) ||
+        (i.note || "").includes(q) ||
+        FRAMEWORK_LABELS[i.framework].includes(q)
+      )
+    )
+      return false;
     return true;
   });
 
@@ -404,20 +546,27 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
       <div className="card-surface p-4 mb-4 space-y-3">
         <div className="relative">
           <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <input value={q} onChange={(e) => setQ(e.target.value)}
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
             placeholder="חיפוש לפי תאריך, מסגרת או הערה..."
-            className="w-full rounded-md border border-input bg-card ps-9 pe-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            className="w-full rounded-md border border-input bg-card ps-9 pe-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-          <select value={framework} onChange={(e) => setFramework(e.target.value)}
-            className="field-input-sm">
+          <select
+            value={framework}
+            onChange={(e) => setFramework(e.target.value)}
+            className="field-input-sm"
+          >
             <option value="all">כל המסגרות</option>
             <option value="kollel-erev">כולל ערב</option>
             <option value="torato-beyado">תורתו בידו</option>
             <option value="bein-hazmanim">ישיבת בין הזמנים</option>
           </select>
           <div className="rounded-md border border-border px-2 py-1.5 text-center">
-            סה״כ: <span className="font-semibold tabular-nums">{totalMin}</span> דק׳ · {filtered.length} רישומים
+            סה״כ: <span className="font-semibold tabular-nums">{totalMin}</span> דק׳ ·{" "}
+            {filtered.length} רישומים
           </div>
         </div>
       </div>
@@ -438,17 +587,28 @@ function LearningHistory({ items, onRemove }: { items: LearningEntry[]; onRemove
           <tbody>
             {filtered.map((i) => (
               <tr key={i.id} className="border-t border-border hover:bg-accent/40">
-                <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(i.date))}>{i.date}</td>
+                <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(i.date))}>
+                  {i.date}
+                </td>
                 <td className="px-3 py-3">{FRAMEWORK_LABELS[i.framework]}</td>
                 <td className="px-3 py-3 tabular-nums">{i.minutes}</td>
                 <td className="px-3 py-3 tabular-nums">
-                  {i.tanitDibur ? <span className="text-primary">{i.minutes * 2} ×2</span> : i.minutes}
+                  {i.tanitDibur ? (
+                    <span className="text-primary">{i.minutes * 2} ×2</span>
+                  ) : (
+                    i.minutes
+                  )}
                 </td>
-                <td className="px-3 py-3 text-xs text-muted-foreground">{i.source === "timer" ? "טיימר" : i.source === "range" ? "טווח שעות" : "ידני"}</td>
+                <td className="px-3 py-3 text-xs text-muted-foreground">
+                  {i.source === "timer" ? "טיימר" : i.source === "range" ? "טווח שעות" : "ידני"}
+                </td>
                 <td className="px-3 py-3 text-xs text-muted-foreground">{i.note || "—"}</td>
                 <td className="px-3 py-3">
-                  <button onClick={() => onRemove(i)} title="מחק רישום"
-                    className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center">
+                  <button
+                    onClick={() => onRemove(i)}
+                    title="מחק רישום"
+                    className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center"
+                  >
                     <Trash2 className="size-3.5" />
                   </button>
                 </td>

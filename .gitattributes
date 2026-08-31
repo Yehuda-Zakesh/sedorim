@@ -1,0 +1,26 @@
+# Git already stores every text file in this repo with LF. Check them out with
+# LF too, on every platform, so the working tree matches the index.
+#
+# Without this, core.autocrlf=true on Windows rewrites the working tree to CRLF
+# on checkout, and Prettier (endOfLine defaults to "lf") then reports a
+# "Delete `CR`" error on every line of every file — ~11,700 phantom lint errors
+# that do not exist in the repository and never appear on Linux or in CI.
+* text=auto eol=lf
+
+# Binary: never apply end-of-line conversion. These all contain CR bytes as
+# part of their payload, so an accidental conversion would corrupt them.
+*.ico  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ttf  binary
+*.otf  binary
+*.woff  binary
+*.woff2 binary
+*.pdf  binary
+*.xlsx binary
+*.exe  binary
+*.dll  binary
+*.zip  binary

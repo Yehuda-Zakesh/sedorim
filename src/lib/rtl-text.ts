@@ -27,12 +27,18 @@ function classify(ch: string): Dir {
 
 /** Brackets and friends flip when they sit in right-to-left text. */
 const MIRROR: Record<string, string> = {
-  "(": ")", ")": "(",
-  "[": "]", "]": "[",
-  "{": "}", "}": "{",
-  "<": ">", ">": "<",
-  "«": "»", "»": "«",
-  "‹": "›", "›": "‹",
+  "(": ")",
+  ")": "(",
+  "[": "]",
+  "]": "[",
+  "{": "}",
+  "}": "{",
+  "<": ">",
+  ">": "<",
+  "«": "»",
+  "»": "«",
+  "‹": "›",
+  "›": "‹",
 };
 
 /**
@@ -58,9 +64,17 @@ export function toVisual(text: string): string {
   const resolved: ("R" | "L")[] = classes.map((c, i) => {
     if (c !== "N") return c;
     let prev: Dir = "R";
-    for (let j = i - 1; j >= 0; j--) if (classes[j] !== "N") { prev = classes[j]; break; }
+    for (let j = i - 1; j >= 0; j--)
+      if (classes[j] !== "N") {
+        prev = classes[j];
+        break;
+      }
     let next: Dir = "R";
-    for (let j = i + 1; j < classes.length; j++) if (classes[j] !== "N") { next = classes[j]; break; }
+    for (let j = i + 1; j < classes.length; j++)
+      if (classes[j] !== "N") {
+        next = classes[j];
+        break;
+      }
     return prev === "L" && next === "L" ? "L" : "R";
   });
 
@@ -81,7 +95,9 @@ export function toVisual(text: string): string {
     // space after a number — would otherwise be reversed on its own; that is
     // harmless (a space reversed is a space) and keeps this loop simple.
     for (let a = i, b = j; a < b; a++, b--) {
-      const t = out[a]; out[a] = out[b]; out[b] = t;
+      const t = out[a];
+      out[a] = out[b];
+      out[b] = t;
     }
     i = j;
   }
@@ -107,7 +123,10 @@ export function wrapVisual(
 
   for (const paragraph of paragraphs) {
     const words = paragraph.split(/\s+/).filter((w) => w.length > 0);
-    if (words.length === 0) { lines.push(""); continue; }
+    if (words.length === 0) {
+      lines.push("");
+      continue;
+    }
 
     let current = "";
     for (const word of words) {

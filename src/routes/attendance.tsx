@@ -3,8 +3,12 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Save, CalendarDays, AlertTriangle, Check, X, FileText } from "lucide-react";
 import {
-  useSeder, todayISO, calcSeder, newId,
-  type SederEntry, type SederNum,
+  useSeder,
+  todayISO,
+  calcSeder,
+  newId,
+  type SederEntry,
+  type SederNum,
 } from "@/lib/kollel-store";
 import { useSettings, getSederTimesFor } from "@/lib/settings-store";
 import { formatHebrewDate, fastDayName, hasNoSederB } from "@/lib/hebrew-calendar";
@@ -18,10 +22,15 @@ export const Route = createFileRoute("/attendance")({
 });
 
 type SederFormState = {
-  arrival: string; departure: string;
-  absent: boolean; ohevei: boolean;
-  excusedAll: boolean; excusedMinutes: number; excusedReason: string;
-  manualAdjustMin: number; note: string;
+  arrival: string;
+  departure: string;
+  absent: boolean;
+  ohevei: boolean;
+  excusedAll: boolean;
+  excusedMinutes: number;
+  excusedReason: string;
+  manualAdjustMin: number;
+  note: string;
 };
 
 function defaultsFor(seder: SederNum, date: string): SederFormState {
@@ -29,9 +38,13 @@ function defaultsFor(seder: SederNum, date: string): SederFormState {
   return {
     arrival: seder === 1 ? t.s1Start : t.s2Start,
     departure: seder === 1 ? t.s1End : t.s2End,
-    absent: false, ohevei: false,
-    excusedAll: false, excusedMinutes: 0, excusedReason: "",
-    manualAdjustMin: 0, note: "",
+    absent: false,
+    ohevei: false,
+    excusedAll: false,
+    excusedMinutes: 0,
+    excusedReason: "",
+    manualAdjustMin: 0,
+    note: "",
   };
 }
 
@@ -39,22 +52,35 @@ function fromEntry(e: SederEntry): SederFormState {
   return {
     arrival: e.arrival || "",
     departure: e.departure || "",
-    absent: e.absent, ohevei: e.ohevei,
-    excusedAll: e.excusedAll, excusedMinutes: e.excusedMinutes, excusedReason: e.excusedReason || "",
-    manualAdjustMin: e.manualAdjustMin, note: e.note || "",
+    absent: e.absent,
+    ohevei: e.ohevei,
+    excusedAll: e.excusedAll,
+    excusedMinutes: e.excusedMinutes,
+    excusedReason: e.excusedReason || "",
+    manualAdjustMin: e.manualAdjustMin,
+    note: e.note || "",
   };
 }
 
 function SederCard({
-  num, date, existing, onSaved,
-}: { num: SederNum; date: string; existing?: SederEntry; onSaved: () => void }) {
+  num,
+  date,
+  existing,
+  onSaved,
+}: {
+  num: SederNum;
+  date: string;
+  existing?: SederEntry;
+  onSaved: () => void;
+}) {
   const { upsert, remove } = useSeder();
   useSettings();
   const dayDate = new Date(date);
   const fastName = fastDayName(dayDate);
   const skipSederB = num === 2 && hasNoSederB(dayDate);
   const [form, setForm] = useState<SederFormState>(() =>
-    existing ? fromEntry(existing) : defaultsFor(num, date));
+    existing ? fromEntry(existing) : defaultsFor(num, date),
+  );
 
   useEffect(() => {
     setForm(existing ? fromEntry(existing) : defaultsFor(num, date));
@@ -62,11 +88,14 @@ function SederCard({
 
   const preview: SederEntry = {
     id: existing?.id || newId(),
-    date, seder: num,
+    date,
+    seder: num,
     arrival: form.absent ? undefined : form.arrival || undefined,
     departure: form.absent ? undefined : form.departure || undefined,
-    absent: form.absent, ohevei: form.ohevei,
-    excusedAll: form.excusedAll, excusedMinutes: form.excusedMinutes,
+    absent: form.absent,
+    ohevei: form.ohevei,
+    excusedAll: form.excusedAll,
+    excusedMinutes: form.excusedMinutes,
     excusedReason: form.excusedReason || undefined,
     manualAdjustMin: form.manualAdjustMin,
     tags: existing?.tags || [],
@@ -75,8 +104,13 @@ function SederCard({
   const calc = calcSeder(preview);
 
   const save = () => {
-    try { upsert(preview); toast.success(`סדר ${num === 1 ? "א׳" : "ב׳"} נשמר`); onSaved(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : "שגיאה"); }
+    try {
+      upsert(preview);
+      toast.success(`סדר ${num === 1 ? "א׳" : "ב׳"} נשמר`);
+      onSaved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה");
+    }
   };
 
   const times = getSederTimesFor(date);
@@ -103,7 +137,12 @@ function SederCard({
   return (
     <div className="card-surface p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold">סדר {num === 1 ? "א׳" : "ב׳"} <span className="text-xs text-muted-foreground font-normal">({startStr}–{endStr})</span></h2>
+        <h2 className="text-base font-semibold">
+          סדר {num === 1 ? "א׳" : "ב׳"}{" "}
+          <span className="text-xs text-muted-foreground font-normal">
+            ({startStr}–{endStr})
+          </span>
+        </h2>
         <div className="flex items-center gap-2">
           {existing && (
             <button
@@ -112,10 +151,15 @@ function SederCard({
                 toastUndo("הרישום נמחק", () => upsert(existing));
                 onSaved();
               }}
-              className="pressable rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive">מחק</button>
+              className="pressable rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            >
+              מחק
+            </button>
           )}
-          <button onClick={save}
-            className="pressable inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90">
+          <button
+            onClick={save}
+            className="pressable inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
             <Save className="size-3.5" /> שמור
           </button>
         </div>
@@ -133,30 +177,44 @@ function SederCard({
 
       <div className="grid grid-cols-2 gap-3">
         <StackedField label="שעת הגעה">
-          <input type="time" disabled={form.absent} value={form.arrival}
+          <input
+            type="time"
+            disabled={form.absent}
+            value={form.arrival}
             onChange={(e) => setForm({ ...form, arrival: e.target.value })}
-            className="field-input w-full tabular-nums" />
+            className="field-input w-full tabular-nums"
+          />
         </StackedField>
         <StackedField label="שעת יציאה">
-          <input type="time" disabled={form.absent} value={form.departure}
+          <input
+            type="time"
+            disabled={form.absent}
+            value={form.departure}
             onChange={(e) => setForm({ ...form, departure: e.target.value })}
-            className="field-input w-full tabular-nums" />
+            className="field-input w-full tabular-nums"
+          />
         </StackedField>
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <button onClick={() => setForm({ ...form, absent: !form.absent, ohevei: false })}
-          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition ${form.absent ? "bg-status-absent/15 border-status-absent text-status-absent-fg" : "border-border hover:border-status-absent"}`}>
+        <button
+          onClick={() => setForm({ ...form, absent: !form.absent, ohevei: false })}
+          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition ${form.absent ? "bg-status-absent/15 border-status-absent text-status-absent-fg" : "border-border hover:border-status-absent"}`}
+        >
           <X className="size-3.5 inline me-1" /> היעדרות
         </button>
-        <button onClick={() => setForm({ ...form, excusedAll: !form.excusedAll })}
-          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition ${form.excusedAll ? "bg-status-excused/15 border-status-excused text-status-excused-fg" : "border-border hover:border-status-excused"}`}>
+        <button
+          onClick={() => setForm({ ...form, excusedAll: !form.excusedAll })}
+          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition ${form.excusedAll ? "bg-status-excused/15 border-status-excused text-status-excused-fg" : "border-border hover:border-status-excused"}`}
+        >
           <FileText className="size-3.5 inline me-1" /> כל המוצדק
         </button>
-        <button onClick={toggleOhevei}
+        <button
+          onClick={toggleOhevei}
           aria-pressed={form.ohevei}
           disabled={form.absent}
-          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition disabled:opacity-50 ${form.ohevei ? "bg-status-present/15 border-status-present text-status-present-fg" : "border-border hover:border-status-present"}`}>
+          className={`rounded-md border-2 px-3 py-2 text-xs font-medium pressable transition disabled:opacity-50 ${form.ohevei ? "bg-status-present/15 border-status-present text-status-present-fg" : "border-border hover:border-status-present"}`}
+        >
           <Check className="size-3.5 inline me-1" /> אוהבי ה׳
         </button>
       </div>
@@ -164,28 +222,48 @@ function SederCard({
       {!form.excusedAll && (
         <div className="mt-3 grid grid-cols-2 gap-3">
           <StackedField label="דקות מוצדקות (חלקי)">
-            <input type="number" min={0} value={form.excusedMinutes}
-              onChange={(e) => setForm({ ...form, excusedMinutes: Math.max(0, +e.target.value || 0) })}
-              className="field-input w-full" />
+            <input
+              type="number"
+              min={0}
+              value={form.excusedMinutes}
+              onChange={(e) =>
+                setForm({ ...form, excusedMinutes: Math.max(0, +e.target.value || 0) })
+              }
+              className="field-input w-full"
+            />
           </StackedField>
           <StackedField label="סיבה (אופציונלי)">
-            <input value={form.excusedReason} maxLength={100}
+            <input
+              value={form.excusedReason}
+              maxLength={100}
               onChange={(e) => setForm({ ...form, excusedReason: e.target.value })}
-              className="field-input w-full" />
+              className="field-input w-full"
+            />
           </StackedField>
         </div>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-3">
         <StackedField label="התאמה ידנית (דק׳, חתום)">
-          <input type="number" value={form.manualAdjustMin}
-            onChange={(e) => setForm({ ...form, manualAdjustMin: Math.max(-1440, Math.min(1440, +e.target.value || 0)) })}
-            className="field-input w-full" />
+          <input
+            type="number"
+            value={form.manualAdjustMin}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                manualAdjustMin: Math.max(-1440, Math.min(1440, +e.target.value || 0)),
+              })
+            }
+            className="field-input w-full"
+          />
         </StackedField>
         <StackedField label="הערה">
-          <input value={form.note} maxLength={200}
+          <input
+            value={form.note}
+            maxLength={200}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
-            className="field-input w-full" />
+            className="field-input w-full"
+          />
         </StackedField>
       </div>
 
@@ -198,7 +276,8 @@ function SederCard({
 
       {form.ohevei && !calc.isOhevei && !form.absent && (
         <div className="mt-3 text-xs text-warning-fg flex items-center gap-1">
-          <AlertTriangle className="size-3.5" /> אוהבי ה׳ לא יוחל — שעת ההגעה/יציאה לא תואמות את גבולות הסדר.
+          <AlertTriangle className="size-3.5" /> אוהבי ה׳ לא יוחל — שעת ההגעה/יציאה לא תואמות את
+          גבולות הסדר.
         </div>
       )}
     </div>
@@ -227,8 +306,12 @@ function AttendancePage() {
     <AppShell title="נוכחות סדרים" subtitle={heDate}>
       <div className="card-surface p-4 mb-4 flex items-center gap-3">
         <CalendarDays className="size-4 text-muted-foreground" />
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="field-input" />
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="field-input"
+        />
         <span className="text-xs text-muted-foreground">{heDate}</span>
         {fastName && (
           <span className="ms-auto inline-flex items-center gap-1 rounded-full bg-warning/10 border border-warning/30 px-2.5 py-1 text-2xs text-warning-fg font-medium">

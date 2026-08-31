@@ -5,8 +5,7 @@
 // save-file.ts. Anything that can only work on the desktop should check
 // `isDesktop` rather than calling invoke() and catching the failure.
 
-export const isDesktop =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+export const isDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 // Loaded on first use rather than imported at the top: the Node-based unit
 // tests import modules that reach this file, and @tauri-apps/api is a

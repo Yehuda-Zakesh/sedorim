@@ -2,8 +2,14 @@
 // file — vitest hands each test file a fresh copy of the module.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
-  startTimer, stopTimer, cancelTimer, getTimer,
-  pauseTimer, resumeTimer, timerElapsedMs, isTimerPaused,
+  startTimer,
+  stopTimer,
+  cancelTimer,
+  getTimer,
+  pauseTimer,
+  resumeTimer,
+  timerElapsedMs,
+  isTimerPaused,
 } from "./kollel-store";
 
 beforeEach(() => {
@@ -174,7 +180,7 @@ describe("pauseTimer / resumeTimer", () => {
     startTimer("kollel-erev");
     vi.advanceTimersByTime(20 * 60_000);
     pauseTimer();
-    vi.advanceTimersByTime(90 * 60_000);   // a long break
+    vi.advanceTimersByTime(90 * 60_000); // a long break
     resumeTimer();
     vi.advanceTimersByTime(10 * 60_000);
     expect(stopTimer()?.minutes).toBe(30);
@@ -214,7 +220,11 @@ describe("pauseTimer / resumeTimer", () => {
     vi.advanceTimersByTime(5 * 60_000);
     pauseTimer();
     resumeTimer();
-    expect(getTimer()).toMatchObject({ framework: "kollel-erev", limitMinutes: 45, tanitDibur: true });
+    expect(getTimer()).toMatchObject({
+      framework: "kollel-erev",
+      limitMinutes: 45,
+      tanitDibur: true,
+    });
   });
 
   it("still caps at the limit when the break is longer than the limit", () => {

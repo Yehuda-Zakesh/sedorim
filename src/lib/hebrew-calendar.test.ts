@@ -797,15 +797,16 @@ describe("fullMonthLearningDays", () => {
 
   it("takes no notice of Yom Tov — that is the other function's job", () => {
     // Whatever falls inside it, the reference month is the plain weekday count.
-    expect(fullMonthLearningDays(2026, 8)).toBe(22);   // ספטמבר 2026, חודש תשרי
+    expect(fullMonthLearningDays(2026, 8)).toBe(22); // ספטמבר 2026, חודש תשרי
   });
 });
 
 describe("kollelSessionDaysInMonth", () => {
   it("never exceeds the month's weekday count", () => {
     for (let m = 0; m < 12; m++) {
-      expect(kollelSessionDaysInMonth(2026, m), `month ${m + 1}`)
-        .toBeLessThanOrEqual(fullMonthLearningDays(2026, m));
+      expect(kollelSessionDaysInMonth(2026, m), `month ${m + 1}`).toBeLessThanOrEqual(
+        fullMonthLearningDays(2026, m),
+      );
     }
   });
 

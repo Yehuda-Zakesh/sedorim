@@ -7,10 +7,22 @@
 import * as XLSX from "xlsx";
 import { saveBinaryFile } from "./save-file";
 import {
-  type SederEntry, type LearningEntry, type MonthClosing, type MonthlySummary,
-  calcSeder, summarizeEntries, scoreEntries, effectiveLearningMin, FRAMEWORK_LABELS,
+  type SederEntry,
+  type LearningEntry,
+  type MonthClosing,
+  type MonthlySummary,
+  calcSeder,
+  summarizeEntries,
+  scoreEntries,
+  effectiveLearningMin,
+  FRAMEWORK_LABELS,
 } from "./kollel-store";
-import { formatHebrewDate, hebrewDayLetters, hebrewFromGregorian, hebrewMonthName } from "./hebrew-calendar";
+import {
+  formatHebrewDate,
+  hebrewDayLetters,
+  hebrewFromGregorian,
+  hebrewMonthName,
+} from "./hebrew-calendar";
 import { getSettings, SHAS_ARRIVAL_DEADLINE } from "./settings-store";
 import { colorThemeHex } from "./theme-colors";
 import { RtlPdf } from "./pdf-doc";
@@ -27,8 +39,13 @@ export type ReportSections = {
 };
 
 export const DEFAULT_SECTIONS: ReportSections = {
-  kpis: true, monthlyTable: true, yearlyBreakdown: true,
-  learning: true, charts: true, excusedSummary: true, oheveiList: true,
+  kpis: true,
+  monthlyTable: true,
+  yearlyBreakdown: true,
+  learning: true,
+  charts: true,
+  excusedSummary: true,
+  oheveiList: true,
 };
 
 /** How many rows of each detail table a report will carry. */
@@ -46,8 +63,18 @@ function shasEnabled(): boolean {
 }
 
 const GREGORIAN_MONTHS_HE = [
-  "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
-  "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר",
+  "ינואר",
+  "פברואר",
+  "מרץ",
+  "אפריל",
+  "מאי",
+  "יוני",
+  "יולי",
+  "אוגוסט",
+  "ספטמבר",
+  "אוקטובר",
+  "נובמבר",
+  "דצמבר",
 ];
 const WEEKDAY_LETTERS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 
@@ -99,14 +126,17 @@ function groupByMonth<T extends { date: string }>(list: T[]): Map<string, T[]> {
   for (const item of list) {
     const key = item.date.slice(0, 7);
     const bucket = out.get(key);
-    if (bucket) bucket.push(item); else out.set(key, [item]);
+    if (bucket) bucket.push(item);
+    else out.set(key, [item]);
   }
   return new Map([...out.entries()].sort(([a], [b]) => (a < b ? -1 : 1)));
 }
 
 function ownerLine(): string {
   const s = getSettings();
-  return [s.profile?.name, s.profile?.classroom].filter((v) => v && v.trim()).join(" · ") || "המעקב שלי";
+  return (
+    [s.profile?.name, s.profile?.classroom].filter((v) => v && v.trim()).join(" · ") || "המעקב שלי"
+  );
 }
 
 function accentColor(): string {
@@ -123,7 +153,8 @@ type LearningTotals = { total: number; effective: number; byFramework: Map<strin
 
 function learningTotals(lessons: LearningEntry[]): LearningTotals {
   const byFramework = new Map<string, number>();
-  let total = 0, effective = 0;
+  let total = 0,
+    effective = 0;
   for (const l of lessons) {
     total += l.minutes;
     const eff = effectiveLearningMin(l);
@@ -143,11 +174,13 @@ function writeKpis(pdf: RtlPdf, s: MonthlySummary, learn: LearningTotals, score:
     { label: "מספר איחורים", value: s.lateCount },
     { label: "מספר היעדרויות", value: s.absenceCount },
     { label: "סדרי אוהבי ה׳", value: s.oheveiCount },
-    ...(shasEnabled() ? [{ label: `חבורת ש״ס — הגעות עד ${SHAS_ARRIVAL_DEADLINE}`, value: s.shasCount }] : []),
+    ...(shasEnabled()
+      ? [{ label: `חבורת ש״ס — הגעות עד ${SHAS_ARRIVAL_DEADLINE}`, value: s.shasCount }]
+      : []),
   ]);
   pdf.note(
     `${s.entries} רישומי סדר · יציאה מוקדמת ${s.earlyDepCount} · ` +
-    `חסר נטו ${fmtHours(s.netMissing)} · לימוד נוסף ${fmtHours(learn.effective)}`,
+      `חסר נטו ${fmtHours(s.netMissing)} · לימוד נוסף ${fmtHours(learn.effective)}`,
   );
 }
 
@@ -161,7 +194,11 @@ function writeBars(pdf: RtlPdf, s: MonthlySummary) {
   pdf.note("הבונוס מקטין את החסר נטו עד לגובה הסף שהוגדר בהגדרות.");
 }
 
-function writeMonthlyBreakdown(pdf: RtlPdf, byMonth: Map<string, SederEntry[]>, lessons: LearningEntry[]) {
+function writeMonthlyBreakdown(
+  pdf: RtlPdf,
+  byMonth: Map<string, SederEntry[]>,
+  lessons: LearningEntry[],
+) {
   pdf.section("סיכום לפי חודש");
   const shas = shasEnabled();
   const rows: (string | number)[][] = [];
@@ -169,17 +206,29 @@ function writeMonthlyBreakdown(pdf: RtlPdf, byMonth: Map<string, SederEntry[]>, 
 
   for (const [monthKey, entries] of byMonth) {
     const s = summarizeEntries(entries);
-    const learn = lessons.filter((l) => l.date.startsWith(monthKey))
+    const learn = lessons
+      .filter((l) => l.date.startsWith(monthKey))
       .reduce((sum, l) => sum + effectiveLearningMin(l), 0);
     rows.push([
-      monthLabel(monthKey), s.entries, s.lateCount, s.absenceCount,
-      s.netMissing, s.bonus, s.oheveiCount,
+      monthLabel(monthKey),
+      s.entries,
+      s.lateCount,
+      s.absenceCount,
+      s.netMissing,
+      s.bonus,
+      s.oheveiCount,
       ...(shas ? [s.shasCount] : []),
-      learn, scoreEntries(entries),
+      learn,
+      scoreEntries(entries),
     ]);
-    totals.entries += s.entries; totals.late += s.lateCount; totals.absent += s.absenceCount;
-    totals.net += s.netMissing; totals.bonus += s.bonus; totals.ohevei += s.oheveiCount;
-    totals.shas += s.shasCount; totals.learn += learn;
+    totals.entries += s.entries;
+    totals.late += s.lateCount;
+    totals.absent += s.absenceCount;
+    totals.net += s.netMissing;
+    totals.bonus += s.bonus;
+    totals.ohevei += s.oheveiCount;
+    totals.shas += s.shasCount;
+    totals.learn += learn;
   }
 
   pdf.table({
@@ -196,12 +245,21 @@ function writeMonthlyBreakdown(pdf: RtlPdf, byMonth: Map<string, SederEntry[]>, 
       { header: "ציון", width: 0.8 },
     ],
     rows,
-    total: rows.length > 1
-      ? [`סה״כ (${rows.length} חודשים)`, totals.entries, totals.late, totals.absent,
-         totals.net, totals.bonus, totals.ohevei,
-         ...(shas ? [totals.shas] : []),
-         totals.learn, ""]
-      : undefined,
+    total:
+      rows.length > 1
+        ? [
+            `סה״כ (${rows.length} חודשים)`,
+            totals.entries,
+            totals.late,
+            totals.absent,
+            totals.net,
+            totals.bonus,
+            totals.ohevei,
+            ...(shas ? [totals.shas] : []),
+            totals.learn,
+            "",
+          ]
+        : undefined,
     emptyText: "אין רישומים בטווח שנבחר",
   });
 }
@@ -231,18 +289,29 @@ function writeSederDetail(pdf: RtlPdf, entries: SederEntry[]) {
         c.isLate ? "איחור" : "",
         c.isEarlyDeparture ? "יצא מוקדם" : "",
         c.isOhevei ? "אוהבי ה׳" : "",
-      ].filter(Boolean).join(", ");
+      ]
+        .filter(Boolean)
+        .join(", ");
       return [
-        fmtDate(e.date), weekdayLetter(e.date), shortHebrewDate(e.date), sederLetter(e.seder),
-        e.absent ? "—" : (e.arrival || "—"), e.absent ? "—" : (e.departure || "—"),
-        c.missingMin, c.bonusMin, c.excusedMin, c.netMissingMin,
+        fmtDate(e.date),
+        weekdayLetter(e.date),
+        shortHebrewDate(e.date),
+        sederLetter(e.seder),
+        e.absent ? "—" : e.arrival || "—",
+        e.absent ? "—" : e.departure || "—",
+        c.missingMin,
+        c.bonusMin,
+        c.excusedMin,
+        c.netMissingMin,
         [marks, e.note].filter(Boolean).join(" · ") || "—",
       ];
     }),
     emptyText: "אין רישומי סדר בטווח שנבחר",
   });
   if (entries.length > shown.length) {
-    pdf.note(`מוצגים ${shown.length} רישומים מתוך ${entries.length}. לרשימה המלאה השתמש בייצוא לאקסל.`);
+    pdf.note(
+      `מוצגים ${shown.length} רישומים מתוך ${entries.length}. לרשימה המלאה השתמש בייצוא לאקסל.`,
+    );
   }
 }
 
@@ -260,7 +329,8 @@ function writeExcused(pdf: RtlPdf, entries: SederEntry[], excusedTotal: number) 
       { header: "סיבה", width: 3, align: "right" },
     ],
     rows: shown.map((e) => [
-      fmtDate(e.date), sederLetter(e.seder),
+      fmtDate(e.date),
+      sederLetter(e.seder),
       e.excusedAll ? "כל הסדר" : "חלקי",
       calcSeder(e).excusedMin,
       e.excusedReason || "—",
@@ -285,8 +355,12 @@ function writeOhevei(pdf: RtlPdf, entries: SederEntry[]) {
       { header: "בונוס", width: 0.8 },
     ],
     rows: shown.map((e) => [
-      fmtDate(e.date), shortHebrewDate(e.date), sederLetter(e.seder),
-      e.arrival || "—", e.departure || "—", calcSeder(e).bonusMin,
+      fmtDate(e.date),
+      shortHebrewDate(e.date),
+      sederLetter(e.seder),
+      e.arrival || "—",
+      e.departure || "—",
+      calcSeder(e).bonusMin,
     ]),
     emptyText: "אין סדרי אוהבי ה׳ בטווח",
   });
@@ -297,17 +371,22 @@ function writeLearning(pdf: RtlPdf, lessons: LearningEntry[], learn: LearningTot
   pdf.section("לימוד נוסף");
   pdf.facts([
     { label: "סה״כ דקות שנרשמו", value: `${learn.total} (${fmtHours(learn.total)})` },
-    { label: "דקות אפקטיביות (תענית דיבור נספרת כפול)", value: `${learn.effective} (${fmtHours(learn.effective)})` },
+    {
+      label: "דקות אפקטיביות (תענית דיבור נספרת כפול)",
+      value: `${learn.effective} (${fmtHours(learn.effective)})`,
+    },
     { label: "מספר רישומים", value: String(lessons.length) },
   ]);
 
   if (learn.byFramework.size) {
     const max = Math.max(...learn.byFramework.values());
-    pdf.bars([...learn.byFramework.entries()].map(([fw, minutes]) => ({
-      label: FRAMEWORK_LABELS[fw as keyof typeof FRAMEWORK_LABELS] ?? fw,
-      value: minutes,
-      color: minutes === max ? BAR_COLORS.bonus : BAR_COLORS.excused,
-    })));
+    pdf.bars(
+      [...learn.byFramework.entries()].map(([fw, minutes]) => ({
+        label: FRAMEWORK_LABELS[fw as keyof typeof FRAMEWORK_LABELS] ?? fw,
+        value: minutes,
+        color: minutes === max ? BAR_COLORS.bonus : BAR_COLORS.excused,
+      })),
+    );
   }
 
   const shown = lessons.slice(0, ROW_CAPS.learning);
@@ -321,13 +400,17 @@ function writeLearning(pdf: RtlPdf, lessons: LearningEntry[], learn: LearningTot
       { header: "הערה", width: 2, align: "right" },
     ],
     rows: shown.map((l) => [
-      fmtDate(l.date), FRAMEWORK_LABELS[l.framework], l.minutes, effectiveLearningMin(l),
+      fmtDate(l.date),
+      FRAMEWORK_LABELS[l.framework],
+      l.minutes,
+      effectiveLearningMin(l),
       l.source === "timer" ? "טיימר" : l.source === "range" ? "טווח שעות" : "ידני",
       [l.tanitDibur ? "תענית דיבור" : "", l.note].filter(Boolean).join(" · ") || "—",
     ]),
     emptyText: "אין רישומי לימוד בטווח",
   });
-  if (lessons.length > shown.length) pdf.note(`מוצגים ${shown.length} מתוך ${lessons.length} רישומים.`);
+  if (lessons.length > shown.length)
+    pdf.note(`מוצגים ${shown.length} מתוך ${lessons.length} רישומים.`);
 }
 
 /**
@@ -410,7 +493,8 @@ export async function exportMonthClosingsPdf(opts: {
   const { closings } = opts;
   if (!closings.length) return false;
   const single = closings.length === 1;
-  const title = opts.title || (single ? `סיכום חודש ${closings[0].gregorianLabel}` : "סיכומי חודשים");
+  const title =
+    opts.title || (single ? `סיכום חודש ${closings[0].gregorianLabel}` : "סיכומי חודשים");
 
   try {
     const pdf = await RtlPdf.create({
@@ -435,13 +519,21 @@ export async function exportMonthClosingsPdf(opts: {
         { label: "מספר איחורים", value: c.seder.lateCount },
         { label: "מספר היעדרויות", value: c.seder.absenceCount },
         { label: "סדרי אוהבי ה׳", value: c.seder.oheveiCount },
-        ...(shasEnabled() ? [{ label: `חבורת ש״ס — הגעות עד ${SHAS_ARRIVAL_DEADLINE}`, value: c.seder.shasCount }] : []),
+        ...(shasEnabled()
+          ? [{ label: `חבורת ש״ס — הגעות עד ${SHAS_ARRIVAL_DEADLINE}`, value: c.seder.shasCount }]
+          : []),
         { label: "רישומי סדר", value: c.seder.entries },
       ]);
       pdf.section("לימוד נוסף בחודש");
       pdf.facts([
-        { label: "כולל ערב", value: `${c.learning.kollelErev} דק׳${
-          c.learning.kollelErev !== c.learning.kollelErevRaw ? ` (${c.learning.kollelErevRaw} בפועל)` : ""}` },
+        {
+          label: "כולל ערב",
+          value: `${c.learning.kollelErev} דק׳${
+            c.learning.kollelErev !== c.learning.kollelErevRaw
+              ? ` (${c.learning.kollelErevRaw} בפועל)`
+              : ""
+          }`,
+        },
         { label: "תורתו בידו", value: `${c.learning.toratoBeyado} דק׳` },
         { label: "ישיבת בין הזמנים", value: `${c.learning.beinHazmanim} דק׳` },
       ]);
@@ -450,19 +542,34 @@ export async function exportMonthClosingsPdf(opts: {
       }
     } else {
       const shas = shasEnabled();
-      const t = closings.reduce((a, c) => ({
-        entries: a.entries + c.seder.entries,
-        totalMissing: a.totalMissing + c.seder.totalMissing,
-        excused: a.excused + c.seder.excused,
-        bonus: a.bonus + c.seder.bonus,
-        net: a.net + c.seder.netMissing,
-        ohevei: a.ohevei + c.seder.oheveiCount,
-        shas: a.shas + c.seder.shasCount,
-        late: a.late + c.seder.lateCount,
-        absent: a.absent + c.seder.absenceCount,
-        erev: a.erev + c.learning.kollelErev,
-        torato: a.torato + c.learning.toratoBeyado,
-      }), { entries: 0, totalMissing: 0, excused: 0, bonus: 0, net: 0, ohevei: 0, shas: 0, late: 0, absent: 0, erev: 0, torato: 0 });
+      const t = closings.reduce(
+        (a, c) => ({
+          entries: a.entries + c.seder.entries,
+          totalMissing: a.totalMissing + c.seder.totalMissing,
+          excused: a.excused + c.seder.excused,
+          bonus: a.bonus + c.seder.bonus,
+          net: a.net + c.seder.netMissing,
+          ohevei: a.ohevei + c.seder.oheveiCount,
+          shas: a.shas + c.seder.shasCount,
+          late: a.late + c.seder.lateCount,
+          absent: a.absent + c.seder.absenceCount,
+          erev: a.erev + c.learning.kollelErev,
+          torato: a.torato + c.learning.toratoBeyado,
+        }),
+        {
+          entries: 0,
+          totalMissing: 0,
+          excused: 0,
+          bonus: 0,
+          net: 0,
+          ohevei: 0,
+          shas: 0,
+          late: 0,
+          absent: 0,
+          erev: 0,
+          torato: 0,
+        },
+      );
 
       pdf.table({
         compact: true,
@@ -482,9 +589,21 @@ export async function exportMonthClosingsPdf(opts: {
           { header: "תורתו בידו", width: 1.05 },
         ],
         rows: closings.map((c) => closingRow(c, shas)),
-        total: [`סה״כ (${closings.length} חודשים)`, "", t.entries, t.totalMissing, t.excused,
-                t.bonus, t.net, t.ohevei, ...(shas ? [t.shas] : []),
-                t.late, t.absent, t.erev, t.torato],
+        total: [
+          `סה״כ (${closings.length} חודשים)`,
+          "",
+          t.entries,
+          t.totalMissing,
+          t.excused,
+          t.bonus,
+          t.net,
+          t.ohevei,
+          ...(shas ? [t.shas] : []),
+          t.late,
+          t.absent,
+          t.erev,
+          t.torato,
+        ],
       });
       pdf.note("דקות כולל ערב ותורתו בידו — דקות אפקטיביות, כאשר לימוד בתענית דיבור נספר כפול.");
     }
@@ -513,68 +632,90 @@ export async function exportXlsxWorkbook(opts: {
     const sederRows = entries.map((e) => {
       const c = calcSeder(e);
       return {
-        "תאריך": e.date,
-        "יום": weekdayLetter(e.date),
+        תאריך: e.date,
+        יום: weekdayLetter(e.date),
         "תאריך עברי": shortHebrewDate(e.date),
-        "סדר": sederLetter(e.seder),
-        "הגעה": e.arrival || "",
-        "יציאה": e.departure || "",
-        "היעדרות": e.absent ? "כן" : "",
+        סדר: sederLetter(e.seder),
+        הגעה: e.arrival || "",
+        יציאה: e.departure || "",
+        היעדרות: e.absent ? "כן" : "",
         "חסר (דק׳)": c.missingMin,
-        "בונוס": c.bonusMin,
-        "מוצדק": c.excusedMin,
+        בונוס: c.bonusMin,
+        מוצדק: c.excusedMin,
         "חסר נטו": c.netMissingMin,
         "אוהבי ה׳": c.isOhevei ? "כן" : "",
         ...(shas ? { "חבורת ש״ס": c.isShasArrival ? "כן" : "" } : {}),
-        "סיבה": e.excusedReason || "",
-        "תגיות": (e.tags || []).join(", "),
-        "הערה": e.note || "",
+        סיבה: e.excusedReason || "",
+        תגיות: (e.tags || []).join(", "),
+        הערה: e.note || "",
       };
     });
     const wsSed = XLSX.utils.json_to_sheet(sederRows);
     // Positional — must track the key order of `sederRows` above, including
     // the optional חבורת ש"ס column.
     wsSed["!cols"] = [
-      { wch: 12 }, { wch: 5 }, { wch: 16 }, { wch: 6 }, { wch: 7 }, { wch: 7 }, { wch: 8 },
-      { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 9 },
+      { wch: 12 },
+      { wch: 5 },
+      { wch: 16 },
+      { wch: 6 },
+      { wch: 7 },
+      { wch: 7 },
+      { wch: 8 },
+      { wch: 10 },
+      { wch: 8 },
+      { wch: 8 },
+      { wch: 10 },
+      { wch: 9 },
       ...(shas ? [{ wch: 11 }] : []),
-      { wch: 18 }, { wch: 16 }, { wch: 24 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 24 },
     ];
     XLSX.utils.book_append_sheet(wb, wsSed, "סדרים");
 
     const lrnRows = lessons.map((l) => ({
-      "תאריך": l.date,
-      "מסגרת": FRAMEWORK_LABELS[l.framework],
-      "דקות": l.minutes,
-      "נחשב": effectiveLearningMin(l),
-      "שעות": +(l.minutes / 60).toFixed(2),
+      תאריך: l.date,
+      מסגרת: FRAMEWORK_LABELS[l.framework],
+      דקות: l.minutes,
+      נחשב: effectiveLearningMin(l),
+      שעות: +(l.minutes / 60).toFixed(2),
       "תענית דיבור": l.tanitDibur ? "כן" : "",
-      "מקור": l.source === "timer" ? "טיימר" : l.source === "range" ? "טווח שעות" : "ידני",
-      "הערה": l.note || "",
+      מקור: l.source === "timer" ? "טיימר" : l.source === "range" ? "טווח שעות" : "ידני",
+      הערה: l.note || "",
     }));
     const wsLrn = XLSX.utils.json_to_sheet(lrnRows);
-    wsLrn["!cols"] = [{ wch: 12 }, { wch: 20 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 24 }];
+    wsLrn["!cols"] = [
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 8 },
+      { wch: 8 },
+      { wch: 8 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 24 },
+    ];
     XLSX.utils.book_append_sheet(wb, wsLrn, "לימוד נוסף");
 
     const monthRows = [...groupByMonth(entries).entries()].map(([monthKey, list]) => {
       const s = summarizeEntries(list);
-      const learn = lessons.filter((l) => l.date.startsWith(monthKey))
+      const learn = lessons
+        .filter((l) => l.date.startsWith(monthKey))
         .reduce((sum, l) => sum + effectiveLearningMin(l), 0);
       return {
-        "חודש": monthKey,
+        חודש: monthKey,
         "שם החודש": monthLabel(monthKey),
-        "רישומים": s.entries,
-        "איחור": s.lateCount,
-        "היעדרות": s.absenceCount,
+        רישומים: s.entries,
+        איחור: s.lateCount,
+        היעדרות: s.absenceCount,
         "יציאה מוקדמת": s.earlyDepCount,
-        "חסר": s.totalMissing,
-        "מוצדק": s.excused,
-        "בונוס": s.bonus,
+        חסר: s.totalMissing,
+        מוצדק: s.excused,
+        בונוס: s.bonus,
         "חסר נטו": s.netMissing,
         "אוהבי ה׳": s.oheveiCount,
         ...(shas ? { "חבורת ש״ס": s.shasCount } : {}),
         "לימוד נוסף": learn,
-        "ציון": scoreEntries(list),
+        ציון: scoreEntries(list),
       };
     });
     const wsMon = XLSX.utils.json_to_sheet(monthRows);
@@ -583,7 +724,9 @@ export async function exportXlsxWorkbook(opts: {
     const fname = opts.filename || `סדר_פלוס_${new Date().toISOString().slice(0, 10)}.xlsx`;
     // Not XLSX.writeFile(): like jsPDF's save() it relies on `<a download>`,
     // which a WebView ignores. Serialize here and save through Rust instead.
-    const bytes = new Uint8Array(XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer);
+    const bytes = new Uint8Array(
+      XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer,
+    );
     return await saveBinaryFile(fname, bytes);
   } catch (err) {
     logProblem("ייצוא לאקסל", err);

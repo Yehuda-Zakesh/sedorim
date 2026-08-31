@@ -95,9 +95,7 @@ export function arrivalEntry(opts: {
   };
 }
 
-export type ExcusedChoice =
-  | { kind: "all" }
-  | { kind: "partial"; minutes: number };
+export type ExcusedChoice = { kind: "all" } | { kind: "partial"; minutes: number };
 
 /** Applies a justification to a record without touching anything else on it. */
 export function withExcused(entry: SederEntry, choice: ExcusedChoice): SederEntry {

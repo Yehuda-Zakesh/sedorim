@@ -13,16 +13,34 @@ import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   TrendingUp,
-  Lightbulb, CheckCircle2, AlertTriangle, Target, BarChart3, ChevronDown, Users,
+  Lightbulb,
+  CheckCircle2,
+  AlertTriangle,
+  Target,
+  BarChart3,
+  ChevronDown,
+  Users,
 } from "lucide-react";
 import {
-  useSeder, useLearning, summarizeEntries, entriesInMonth, scoreEntries,
-  attendanceScore, calcSeder, currentDayStreak, effectiveLearningMin,
+  useSeder,
+  useLearning,
+  summarizeEntries,
+  entriesInMonth,
+  scoreEntries,
+  attendanceScore,
+  calcSeder,
+  currentDayStreak,
+  effectiveLearningMin,
 } from "@/lib/kollel-store";
 import { useSettings, SHAS_ARRIVAL_DEADLINE } from "@/lib/settings-store";
 import {
-  generateInsights, forecastMonthlyNetMissing, consistencyScore, monthVerdict,
-  averageArrivalOffsetMin, fmtMin, type Insight,
+  generateInsights,
+  forecastMonthlyNetMissing,
+  consistencyScore,
+  monthVerdict,
+  averageArrivalOffsetMin,
+  fmtMin,
+  type Insight,
 } from "@/lib/insights";
 import { hebrewFromGregorian, formatHebrewMonthYear, isWeekend } from "@/lib/hebrew-calendar";
 import { StatTile, IconBadge, type Tone } from "@/components/ui/stat";
@@ -37,10 +55,13 @@ export const Route = createFileRoute("/statistics")({
 // nothing recorded — they are not days the breakdown has anything to say about.
 const LEARNING_WEEKDAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי"];
 
-const VERDICT_STYLES: Record<Insight["tone"], { border: string; badge: Tone; icon: typeof CheckCircle2 }> = {
-  success:     { border: "border-s-success",     badge: "success",     icon: CheckCircle2 },
-  info:        { border: "border-s-info",        badge: "info",        icon: Lightbulb },
-  warning:     { border: "border-s-warning",     badge: "warning",     icon: AlertTriangle },
+const VERDICT_STYLES: Record<
+  Insight["tone"],
+  { border: string; badge: Tone; icon: typeof CheckCircle2 }
+> = {
+  success: { border: "border-s-success", badge: "success", icon: CheckCircle2 },
+  info: { border: "border-s-info", badge: "info", icon: Lightbulb },
+  warning: { border: "border-s-warning", badge: "warning", icon: AlertTriangle },
   destructive: { border: "border-s-destructive", badge: "destructive", icon: AlertTriangle },
 };
 
@@ -57,7 +78,8 @@ function StatisticsPage() {
   const { settings } = useSettings();
 
   const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
+  const y = now.getFullYear(),
+    m = now.getMonth();
   const monthEntries = entriesInMonth(entries, y, m);
   const summary = summarizeEntries(monthEntries);
   const score = scoreEntries(monthEntries);
@@ -80,7 +102,11 @@ function StatisticsPage() {
     maxLatePerMonth: settings.goals.maxLatePerMonth,
     alertMissingMinPerMonth: settings.seder.alertMissingMinPerMonth,
   });
-  const grouped: Record<Insight["category"], Insight[]> = { trend: [], opportunity: [], recommendation: [] };
+  const grouped: Record<Insight["category"], Insight[]> = {
+    trend: [],
+    opportunity: [],
+    recommendation: [],
+  };
   for (const i of insights) grouped[i.category].push(i);
 
   const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
@@ -106,14 +132,29 @@ function StatisticsPage() {
 
       {/* 2 — the figures behind it, each with its unit spelled out. */}
       <section className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile label="דקות שחסרות החודש" value={summary.netMissing}
-          hint={summary.excused > 0 ? `${summary.excused} דק׳ נוספות מוצדקות` : "אחרי הפחתת הבונוס"} />
-        <StatTile label="איחורים" value={summary.lateCount}
-          dot="var(--status-late)" hint={`מכסה חודשית: ${settings.goals.maxLatePerMonth}`} />
-        <StatTile label="היעדרויות" value={summary.absenceCount}
-          dot="var(--status-absent)" hint={`${summary.entries} סדרים נרשמו`} />
-        <StatTile label="סדרי אוהבי ה׳" value={summary.oheveiCount}
-          dot="var(--status-present)" hint="סדר מתחילתו ועד סופו" />
+        <StatTile
+          label="דקות שחסרות החודש"
+          value={summary.netMissing}
+          hint={summary.excused > 0 ? `${summary.excused} דק׳ נוספות מוצדקות` : "אחרי הפחתת הבונוס"}
+        />
+        <StatTile
+          label="איחורים"
+          value={summary.lateCount}
+          dot="var(--status-late)"
+          hint={`מכסה חודשית: ${settings.goals.maxLatePerMonth}`}
+        />
+        <StatTile
+          label="היעדרויות"
+          value={summary.absenceCount}
+          dot="var(--status-absent)"
+          hint={`${summary.entries} סדרים נרשמו`}
+        />
+        <StatTile
+          label="סדרי אוהבי ה׳"
+          value={summary.oheveiCount}
+          dot="var(--status-present)"
+          hint="סדר מתחילתו ועד סופו"
+        />
       </section>
 
       {/* One figure, so a row rather than a lone tile marooned in a
@@ -123,21 +164,29 @@ function StatisticsPage() {
           <IconBadge icon={Users} tone="success" size="md" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">חבורת ש״ס</div>
-            <div className="text-2xs text-muted-foreground">הגעות לסדר ב׳ עד {SHAS_ARRIVAL_DEADLINE}, החודש</div>
+            <div className="text-2xs text-muted-foreground">
+              הגעות לסדר ב׳ עד {SHAS_ARRIVAL_DEADLINE}, החודש
+            </div>
           </div>
           <div className="text-2xl font-bold tabular-nums">{summary.shasCount}</div>
         </section>
       )}
 
       <section className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile label="רצף ימים" value={streak} hint={streak > 0 ? "ימים ללא חיסור" : "מתחילים היום"} />
+        <StatTile
+          label="רצף ימים"
+          value={streak}
+          hint={streak > 0 ? "ימים ללא חיסור" : "מתחילים היום"}
+        />
         <StatTile
           label="הרגל ההגעה"
           value={arrivalOffset === null ? "—" : `${arrivalOffset <= 0 ? "" : "+"}${arrivalOffset}`}
           hint={
-            arrivalOffset === null ? "אין מספיק רישומים"
-            : arrivalOffset <= 0 ? `דק׳ לפני תחילת הסדר, בממוצע`
-            : "דק׳ אחרי תחילת הסדר, בממוצע"
+            arrivalOffset === null
+              ? "אין מספיק רישומים"
+              : arrivalOffset <= 0
+                ? `דק׳ לפני תחילת הסדר, בממוצע`
+                : "דק׳ אחרי תחילת הסדר, בממוצע"
           }
         />
         <StatTile
@@ -145,7 +194,11 @@ function StatisticsPage() {
           value={forecast === null ? "—" : forecast}
           hint={forecast === null ? "אין מספיק נתונים החודש" : "דק׳ חסרות, לפי הקצב הנוכחי"}
         />
-        <StatTile label="לימוד נוסף החודש" value={learnMin} hint={`${(learnMin / 60).toFixed(1)} שעות`} />
+        <StatTile
+          label="לימוד נוסף החודש"
+          value={learnMin}
+          hint={`${(learnMin / 60).toFixed(1)} שעות`}
+        />
       </section>
 
       {/* 3 — what to do about it. */}
@@ -190,7 +243,9 @@ function StatisticsPage() {
 /** The month's score as a ring — one glance instead of a number to interpret. */
 function ScoreRing({ score, target }: { score: number; target: number }) {
   const ok = score >= target;
-  const size = 78, stroke = 7, r = (size - stroke) / 2;
+  const size = 78,
+    stroke = 7,
+    r = (size - stroke) / 2;
   const c = size / 2;
   const circumference = 2 * Math.PI * r;
 
@@ -208,19 +263,35 @@ function ScoreRing({ score, target }: { score: number; target: number }) {
   const outer = tick(r + stroke / 2 + 1);
 
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}
-      title={`ציון ${score} מתוך 100 · יעד ${target}`}>
+    <div
+      className="relative shrink-0"
+      style={{ width: size, height: size }}
+      title={`ציון ${score} מתוך 100 · יעד ${target}`}
+    >
       <svg width={size} height={size} aria-hidden="true">
         <g transform={`rotate(-90 ${c} ${c})`}>
           <circle cx={c} cy={c} r={r} fill="none" strokeWidth={stroke} className="stroke-muted" />
-          <circle cx={c} cy={c} r={r} fill="none" strokeWidth={stroke}
+          <circle
+            cx={c}
+            cy={c}
+            r={r}
+            fill="none"
+            strokeWidth={stroke}
             strokeLinecap="round"
             className={ok ? "stroke-success" : "stroke-primary"}
             strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - Math.max(0, Math.min(100, score)) / 100)} />
+            strokeDashoffset={circumference * (1 - Math.max(0, Math.min(100, score)) / 100)}
+          />
         </g>
-        <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y}
-          strokeWidth={2} strokeLinecap="round" className="stroke-foreground/45" />
+        <line
+          x1={inner.x}
+          y1={inner.y}
+          x2={outer.x}
+          y2={outer.y}
+          strokeWidth={2}
+          strokeLinecap="round"
+          className="stroke-foreground/45"
+        />
       </svg>
       <div className="absolute inset-0 grid place-items-center">
         <div className="text-center leading-none">
@@ -243,7 +314,8 @@ type ChartProps = {
 function Charts({ entries, lessons, consistency }: ChartProps) {
   const [open, setOpen] = useState(false);
   const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
+  const y = now.getFullYear(),
+    m = now.getMonth();
 
   // Twelve months of score, each computed over that month's own rows.
   const months = Array.from({ length: 12 }, (_, i) => {
@@ -251,7 +323,9 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
     const list = entriesInMonth(entries, d.getFullYear(), d.getMonth());
     return {
       label: d.toLocaleDateString("he-IL", { month: "short" }),
-      hebLabel: formatHebrewMonthYear(hebrewFromGregorian(new Date(d.getFullYear(), d.getMonth(), 15))),
+      hebLabel: formatHebrewMonthYear(
+        hebrewFromGregorian(new Date(d.getFullYear(), d.getMonth(), 15)),
+      ),
       score: scoreEntries(list),
       net: summarizeEntries(list).netMissing,
       entries: list.length,
@@ -265,7 +339,7 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
   const weekday = LEARNING_WEEKDAY_NAMES.map((d) => ({ d, net: 0, count: 0 }));
   for (const e of entries) {
     const wd = new Date(e.date).getDay();
-    if (Number.isNaN(wd) || wd > 4) continue;   // שישי־שבת אינם ימי לימוד
+    if (Number.isNaN(wd) || wd > 4) continue; // שישי־שבת אינם ימי לימוד
     weekday[wd].net += calcSeder(e).netMissingMin;
     weekday[wd].count++;
   }
@@ -278,12 +352,17 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
     Math.ceil(Math.max(0, ...weekday.map((w) => (w.count ? w.net / w.count : 0))) / 10) * 10,
   );
 
-  const totalLearnHours = (lessons.reduce((s, l) => s + effectiveLearningMin(l), 0) / 60).toFixed(1);
+  const totalLearnHours = (lessons.reduce((s, l) => s + effectiveLearningMin(l), 0) / 60).toFixed(
+    1,
+  );
 
   return (
     <div className="mt-5 card-surface overflow-hidden">
-      <button onClick={() => setOpen((v) => !v)} aria-expanded={open}
-        className="w-full flex items-center gap-3 px-5 py-4 text-start hover:bg-accent/40 pressable transition">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-3 px-5 py-4 text-start hover:bg-accent/40 pressable transition"
+      >
         <IconBadge icon={BarChart3} size="md" />
         <span className="flex-1">
           <span className="block text-sm font-semibold">גרפים ומגמות</span>
@@ -291,17 +370,29 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
             12 חודשים אחרונים, חלוקה לפי יום בשבוע, ומפת נוכחות
           </span>
         </span>
-        <ChevronDown className={`size-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`size-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {open && (
         <div className="border-t border-border p-5 space-y-5">
           <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatTile label="ציון החודש" value={curScore}
-              hint={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`} />
-            <StatTile label="החודש המצטיין" value={best?.score ?? "—"} hint={best?.hebLabel || "אין נתונים"} />
-            <StatTile label="ציון עקביות" value={consistency === 0 ? "—" : consistency}
-              hint={consistency === 0 ? "אין מספיק חודשים" : "יציבות מחודש לחודש"} />
+            <StatTile
+              label="ציון החודש"
+              value={curScore}
+              hint={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`}
+            />
+            <StatTile
+              label="החודש המצטיין"
+              value={best?.score ?? "—"}
+              hint={best?.hebLabel || "אין נתונים"}
+            />
+            <StatTile
+              label="ציון עקביות"
+              value={consistency === 0 ? "—" : consistency}
+              hint={consistency === 0 ? "אין מספיק חודשים" : "יציבות מחודש לחודש"}
+            />
             <StatTile label="שעות לימוד נוסף" value={totalLearnHours} hint="מאז ההתחלה" />
           </section>
 
@@ -318,8 +409,11 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
                 const isBest = best && mo.hebLabel === best.hebLabel;
                 const labelled = mo.entries > 0 && (isCurrent || isBest);
                 return (
-                  <div key={i} className="flex-1 h-full flex flex-col justify-end gap-1.5"
-                    title={`${mo.hebLabel} · ${mo.entries ? `ציון ${mo.score} · ${fmtMin(mo.net)} דק׳ חסרות` : "אין רישומים"}`}>
+                  <div
+                    key={i}
+                    className="flex-1 h-full flex flex-col justify-end gap-1.5"
+                    title={`${mo.hebLabel} · ${mo.entries ? `ציון ${mo.score} · ${fmtMin(mo.net)} דק׳ חסרות` : "אין רישומים"}`}
+                  >
                     <div className="text-2xs tabular-nums text-center text-muted-foreground h-4">
                       {labelled ? mo.score : ""}
                     </div>
@@ -330,8 +424,10 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
                         picture. */}
                     <div className="flex-1 flex items-end rounded-md bg-muted/50">
                       {mo.entries > 0 && (
-                        <div className={`w-full rounded-md ${isBest ? "bg-primary" : "bg-primary/70"}`}
-                          style={{ height: `${mo.score}%`, minHeight: mo.score > 0 ? 2 : 0 }} />
+                        <div
+                          className={`w-full rounded-md ${isBest ? "bg-primary" : "bg-primary/70"}`}
+                          style={{ height: `${mo.score}%`, minHeight: mo.score > 0 ? 2 : 0 }}
+                        />
                       )}
                     </div>
                     <div className="text-2xs text-center text-muted-foreground">{mo.label}</div>
@@ -353,12 +449,19 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
                   return (
                     <li key={w.d}>
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span>{w.d}{w.count === 0 && <span className="text-muted-foreground"> — אין רישומים</span>}</span>
+                        <span>
+                          {w.d}
+                          {w.count === 0 && (
+                            <span className="text-muted-foreground"> — אין רישומים</span>
+                          )}
+                        </span>
                         <span className="tabular-nums font-medium">{w.count ? avg : "—"}</span>
                       </div>
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full bg-primary"
-                          style={{ width: `${Math.min(100, (avg / weekdayScaleMax) * 100)}%` }} />
+                        <div
+                          className="h-full rounded-full bg-primary"
+                          style={{ width: `${Math.min(100, (avg / weekdayScaleMax) * 100)}%` }}
+                        />
                       </div>
                     </li>
                   );
@@ -402,29 +505,46 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
     const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
     const offDay = isWeekend(dt);
     const list = entries.filter((e) => e.date === iso);
-    if (!list.length) { cells.push({ iso, level: -1, net: 0, offDay }); continue; }
+    if (!list.length) {
+      cells.push({ iso, level: -1, net: 0, offDay });
+      continue;
+    }
     const net = list.reduce((s, e) => s + calcSeder(e).netMissingMin, 0);
-    cells.push({ iso, net, offDay, level: net === 0 ? 4 : net < 15 ? 3 : net < 30 ? 2 : net < 60 ? 1 : 0 });
+    cells.push({
+      iso,
+      net,
+      offDay,
+      level: net === 0 ? 4 : net < 15 ? 3 : net < 30 ? 2 : net < 60 ? 1 : 0,
+    });
   }
 
   return (
     <div>
       <h3 className="text-sm font-semibold">ששת השבועות האחרונים</h3>
-      <p className="text-xs text-muted-foreground mb-3">ככל שהריבוע ירוק יותר — נשמט פחות באותו יום</p>
+      <p className="text-xs text-muted-foreground mb-3">
+        ככל שהריבוע ירוק יותר — נשמט פחות באותו יום
+      </p>
       <div className="grid grid-cols-7 gap-1.5 max-w-xs">
         {cells.map((c) => (
-          <div key={c.iso}
+          <div
+            key={c.iso}
             title={
-              c.offDay ? `${c.iso} — שישי/שבת, אינו יום לימודים`
-              : c.level < 0 ? `${c.iso} — אין רישום`
-              : `${c.iso} · ${c.net} דק׳ חסרות`
+              c.offDay
+                ? `${c.iso} — שישי/שבת, אינו יום לימודים`
+                : c.level < 0
+                  ? `${c.iso} — אין רישום`
+                  : `${c.iso} · ${c.net} דק׳ חסרות`
             }
             className={`aspect-square rounded ${c.offDay && c.level < 0 ? "border border-dashed border-border" : ""}`}
             style={{
-              backgroundColor: c.offDay && c.level < 0 ? "transparent"
-                : c.level < 0 ? "var(--color-muted)"
-                : levelFill(c.level),
-            }} />
+              backgroundColor:
+                c.offDay && c.level < 0
+                  ? "transparent"
+                  : c.level < 0
+                    ? "var(--color-muted)"
+                    : levelFill(c.level),
+            }}
+          />
         ))}
       </div>
 
@@ -444,7 +564,12 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
         </span>
         <span className="inline-flex items-center gap-1">
           {LEVELS.map((l, i) => (
-            <span key={i} title={l.label} className="size-3 rounded" style={{ backgroundColor: levelFill(i) }} />
+            <span
+              key={i}
+              title={l.label}
+              className="size-3 rounded"
+              style={{ backgroundColor: levelFill(i) }}
+            />
           ))}
         </span>
         <span>הרבה חסר ← סדר שלם</span>

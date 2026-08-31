@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { currentMonthKey, shiftMonth, monthKeyLabel, monthsWithData } from "./month-nav";
 
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function pinTo(y: number, monthIdx: number, day = 15) {
   vi.useFakeTimers();
@@ -57,7 +59,11 @@ describe("monthsWithData", () => {
 
   it("lists newest first", () => {
     pinTo(2026, 7);
-    const out = monthsWithData([{ date: "2026-06-10" }, { date: "2026-07-01" }, { date: "2025-12-31" }]);
+    const out = monthsWithData([
+      { date: "2026-06-10" },
+      { date: "2026-07-01" },
+      { date: "2025-12-31" },
+    ]);
     expect(out).toEqual(["2026-08", "2026-07", "2026-06", "2025-12"]);
   });
 

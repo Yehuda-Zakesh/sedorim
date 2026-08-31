@@ -2,17 +2,25 @@
 // branch of that guess is pinned here.
 import { describe, it, expect } from "vitest";
 import {
-  detectSeder, canBeOhevei, sederBounds, sederEndTime, blankEntry,
-  arrivalEntry, absenceEntry, withExcused, hhmmOf, parseLooseTime,
+  detectSeder,
+  canBeOhevei,
+  sederBounds,
+  sederEndTime,
+  blankEntry,
+  arrivalEntry,
+  absenceEntry,
+  withExcused,
+  hhmmOf,
+  parseLooseTime,
 } from "./quick-entry";
 import { calcSeder, hhmmToMin, type SederEntry } from "./kollel-store";
 import { DEFAULT_SETTINGS, type SederTimes } from "./settings-store";
 
 const TIMES: SederTimes = {
   s1Start: DEFAULT_SETTINGS.seder.s1Start, // 09:00
-  s1End: DEFAULT_SETTINGS.seder.s1End,     // 13:00
+  s1End: DEFAULT_SETTINGS.seder.s1End, // 13:00
   s2Start: DEFAULT_SETTINGS.seder.s2Start, // 15:45
-  s2End: DEFAULT_SETTINGS.seder.s2End,     // 19:30
+  s2End: DEFAULT_SETTINGS.seder.s2End, // 19:30
 };
 const at = (hhmm: string) => hhmmToMin(hhmm)!;
 
@@ -52,7 +60,12 @@ describe("detectSeder", () => {
   });
 
   it("still answers when the two sedarim touch", () => {
-    const back2back: SederTimes = { s1Start: "09:00", s1End: "13:00", s2Start: "13:00", s2End: "17:00" };
+    const back2back: SederTimes = {
+      s1Start: "09:00",
+      s1End: "13:00",
+      s2Start: "13:00",
+      s2End: "17:00",
+    };
     expect(detectSeder(at("12:59"), back2back)).toBe(1);
     expect(detectSeder(at("13:00"), back2back)).toBe(1);
     expect(detectSeder(at("13:01"), back2back)).toBe(2);
@@ -81,8 +94,14 @@ describe("blankEntry", () => {
   it("starts with nothing recorded", () => {
     const e = blankEntry("2026-08-20", 2);
     expect(e).toMatchObject({
-      date: "2026-08-20", seder: 2, absent: false, ohevei: false,
-      excusedAll: false, excusedMinutes: 0, manualAdjustMin: 0, tags: [],
+      date: "2026-08-20",
+      seder: 2,
+      absent: false,
+      ohevei: false,
+      excusedAll: false,
+      excusedMinutes: 0,
+      manualAdjustMin: 0,
+      tags: [],
     });
     expect(e.arrival).toBeUndefined();
     expect(e.id).toBeTruthy();
@@ -128,7 +147,10 @@ describe("arrivalEntry", () => {
   });
 
   it("keeps a justification entered earlier", () => {
-    const excused = withExcused(arrivalEntry({ ...base, time: "09:20" }), { kind: "partial", minutes: 15 });
+    const excused = withExcused(arrivalEntry({ ...base, time: "09:20" }), {
+      kind: "partial",
+      minutes: 15,
+    });
     const again = arrivalEntry({ ...base, existing: excused, time: "09:20" });
     expect(again.excusedMinutes).toBe(15);
   });
@@ -143,7 +165,13 @@ describe("arrivalEntry", () => {
 });
 
 describe("withExcused", () => {
-  const late: SederEntry = arrivalEntry({ date: "2026-08-20", seder: 1, times: TIMES, ohevei: false, time: "09:30" });
+  const late: SederEntry = arrivalEntry({
+    date: "2026-08-20",
+    seder: 1,
+    times: TIMES,
+    ohevei: false,
+    time: "09:30",
+  });
 
   it("justifies the whole of the missing time", () => {
     const e = withExcused(late, { kind: "all" });
@@ -188,7 +216,13 @@ describe("absenceEntry", () => {
   });
 
   it("clears any times left over from an earlier arrival", () => {
-    const present = arrivalEntry({ date: "2026-08-20", seder: 1, times: TIMES, ohevei: true, time: "09:00" });
+    const present = arrivalEntry({
+      date: "2026-08-20",
+      seder: 1,
+      times: TIMES,
+      ohevei: true,
+      time: "09:00",
+    });
     const e = absenceEntry({ date: "2026-08-20", seder: 1, existing: present, excused: null });
     expect(e.arrival).toBeUndefined();
     expect(e.departure).toBeUndefined();
@@ -202,7 +236,11 @@ describe("absenceEntry", () => {
   });
 
   it("justifies part of an absence", () => {
-    const e = absenceEntry({ date: "2026-08-20", seder: 1, excused: { kind: "partial", minutes: 60 } });
+    const e = absenceEntry({
+      date: "2026-08-20",
+      seder: 1,
+      excused: { kind: "partial", minutes: 60 },
+    });
     const c = calcSeder(e);
     expect(c.excusedMin).toBe(60);
     expect(c.nonExcusedMin).toBe(c.missingMin - 60);

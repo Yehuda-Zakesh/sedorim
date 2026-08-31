@@ -6,8 +6,16 @@
 // and above all what brings it straight back.
 import { describe, it, expect } from "vitest";
 import {
-  settle, gate, markDelivered, memoryFor, cooldownFor, parseLearningState,
-  EMPTY_MEMORY, IGNORE_THRESHOLD, MAX_COOLDOWN, type KindMemory,
+  settle,
+  gate,
+  markDelivered,
+  memoryFor,
+  cooldownFor,
+  parseLearningState,
+  EMPTY_MEMORY,
+  IGNORE_THRESHOLD,
+  MAX_COOLDOWN,
+  type KindMemory,
 } from "./notification-learning";
 
 const KINDS = ["daily-reminder", "weekly-summary"] as const;
@@ -83,7 +91,12 @@ describe("settle", () => {
   });
 
   it("clears the streak and any outstanding silence on one answer", () => {
-    const before = mem({ pendingToken: "2026-07-07", ignoredStreak: 5, cooldown: 3, cooldownToken: "2026-07-06" });
+    const before = mem({
+      pendingToken: "2026-07-07",
+      ignoredStreak: 5,
+      cooldown: 3,
+      cooldownToken: "2026-07-06",
+    });
     const after = settle(before, true, "2026-07-08");
     expect(after.ignoredStreak).toBe(0);
     expect(after.cooldown).toBe(0);
@@ -176,7 +189,9 @@ function nextDay(iso: string): string {
 
 describe("parseLearningState", () => {
   it("reads back what it stored", () => {
-    const state = { "daily-reminder": mem({ ignoredStreak: 2, cooldown: 1, delivered: 5, engaged: 3 }) };
+    const state = {
+      "daily-reminder": mem({ ignoredStreak: 2, cooldown: 1, delivered: 5, engaged: 3 }),
+    };
     expect(parseLearningState(JSON.parse(JSON.stringify(state)), KINDS)).toEqual(state);
   });
 

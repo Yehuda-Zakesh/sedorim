@@ -26,9 +26,11 @@ export function hebrewMonthsInYear(y: number): number {
 }
 
 function elapsedDays(y: number): number {
-  const monthsElapsed = 235 * quot(y - 1, 19) + 12 * mod(y - 1, 19) + quot(7 * mod(y - 1, 19) + 1, 19);
+  const monthsElapsed =
+    235 * quot(y - 1, 19) + 12 * mod(y - 1, 19) + quot(7 * mod(y - 1, 19) + 1, 19);
   const partsElapsed = 204 + 793 * mod(monthsElapsed, 1080);
-  const hoursElapsed = 5 + 12 * monthsElapsed + 793 * quot(monthsElapsed, 1080) + quot(partsElapsed, 1080);
+  const hoursElapsed =
+    5 + 12 * monthsElapsed + 793 * quot(monthsElapsed, 1080) + quot(partsElapsed, 1080);
   const day = 1 + 29 * monthsElapsed + quot(hoursElapsed, 24);
   const parts = 1080 * mod(hoursElapsed, 24) + mod(partsElapsed, 1080);
   let altDay: number;
@@ -36,15 +38,25 @@ function elapsedDays(y: number): number {
     parts >= 19440 ||
     (mod(day, 7) === 2 && parts >= 9924 && !isHebrewLeap(y)) ||
     (mod(day, 7) === 1 && parts >= 16789 && isHebrewLeap(y - 1))
-  ) altDay = day + 1; else altDay = day;
+  )
+    altDay = day + 1;
+  else altDay = day;
   if (mod(altDay, 7) === 0 || mod(altDay, 7) === 3 || mod(altDay, 7) === 5) return altDay + 1;
   return altDay;
 }
 
-function hebrewNewYear(y: number): number { return HEBREW_EPOCH + elapsedDays(y); }
-function hebrewDaysInYear(y: number): number { return hebrewNewYear(y + 1) - hebrewNewYear(y); }
-function longCheshvan(y: number): boolean { return mod(hebrewDaysInYear(y), 10) === 5; }
-function shortKislev(y: number): boolean { return mod(hebrewDaysInYear(y), 10) === 3; }
+function hebrewNewYear(y: number): number {
+  return HEBREW_EPOCH + elapsedDays(y);
+}
+function hebrewDaysInYear(y: number): number {
+  return hebrewNewYear(y + 1) - hebrewNewYear(y);
+}
+function longCheshvan(y: number): boolean {
+  return mod(hebrewDaysInYear(y), 10) === 5;
+}
+function shortKislev(y: number): boolean {
+  return mod(hebrewDaysInYear(y), 10) === 3;
+}
 
 export function hebrewLastDayOfMonth(month: number, year: number): number {
   if ([2, 4, 6, 10, 13].includes(month)) return 29;
@@ -82,18 +94,25 @@ function isGregorianLeap(y: number): boolean {
   return y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
 }
 function fixedFromGregorian(y: number, m: number, d: number): number {
-  return GREGORIAN_EPOCH - 1
-    + 365 * (y - 1)
-    + quot(y - 1, 4) - quot(y - 1, 100) + quot(y - 1, 400)
-    + quot(367 * m - 362, 12)
-    + (m <= 2 ? 0 : isGregorianLeap(y) ? -1 : -2)
-    + d;
+  return (
+    GREGORIAN_EPOCH -
+    1 +
+    365 * (y - 1) +
+    quot(y - 1, 4) -
+    quot(y - 1, 100) +
+    quot(y - 1, 400) +
+    quot(367 * m - 362, 12) +
+    (m <= 2 ? 0 : isGregorianLeap(y) ? -1 : -2) +
+    d
+  );
 }
 
 export type HebrewDate = { year: number; month: number; day: number };
 
 export function hebrewFromGregorian(date: Date): HebrewDate {
-  return hebrewFromFixed(fixedFromGregorian(date.getFullYear(), date.getMonth() + 1, date.getDate()));
+  return hebrewFromFixed(
+    fixedFromGregorian(date.getFullYear(), date.getMonth() + 1, date.getDate()),
+  );
 }
 
 // Hebrew letter formatting (gematria) with geresh/gershayim.
@@ -134,8 +153,20 @@ export function hebrewYearLetters(year: number): string {
 }
 
 const MONTH_NAMES = [
-  "", "ניסן", "אייר", "סיון", "תמוז", "אב", "אלול",
-  "תשרי", "חשון", "כסלו", "טבת", "שבט", "אדר", "אדר ב׳",
+  "",
+  "ניסן",
+  "אייר",
+  "סיון",
+  "תמוז",
+  "אב",
+  "אלול",
+  "תשרי",
+  "חשון",
+  "כסלו",
+  "טבת",
+  "שבט",
+  "אדר",
+  "אדר ב׳",
 ];
 
 export function hebrewMonthName(month: number, year: number): string {
@@ -155,9 +186,9 @@ export function formatHebrewMonthYear(h: HebrewDate): string {
 // Bein Hazmanim windows: Av from י׳ ואילך, Tishrei from י״א ואילך, Nisan (entire month).
 export function isBeinHazmanim(date: Date = new Date()): boolean {
   const h = hebrewFromGregorian(date);
-  if (h.month === 5) return h.day >= 10 && h.day <= 30;                     // Av (מי׳ ואילך)
-  if (h.month === 7) return h.day >= 11 && h.day <= 30;                     // Tishrei (מי״א ואילך)
-  if (h.month === 1) return h.day >= 1 && h.day <= 30;                      // Nisan
+  if (h.month === 5) return h.day >= 10 && h.day <= 30; // Av (מי׳ ואילך)
+  if (h.month === 7) return h.day >= 11 && h.day <= 30; // Tishrei (מי״א ואילך)
+  if (h.month === 1) return h.day >= 1 && h.day <= 30; // Nisan
   return false;
 }
 
@@ -170,24 +201,24 @@ export function isWeekend(date: Date = new Date()): boolean {
 // Yom Tov days — Israel (single-day) calendar.
 export function isYomTov(date: Date = new Date()): boolean {
   const h = hebrewFromGregorian(date);
-  if (h.month === 7 && (h.day === 1 || h.day === 2)) return true;  // ראש השנה (יומיים גם בארץ)
-  if (h.month === 7 && h.day === 10) return true;                  // יום כיפור
-  if (h.month === 7 && h.day === 15) return true;                  // סוכות א׳
-  if (h.month === 7 && h.day === 22) return true;                  // שמיני עצרת
-  if (h.month === 1 && h.day === 15) return true;                  // פסח א׳
-  if (h.month === 1 && h.day === 21) return true;                  // שביעי של פסח
-  if (h.month === 3 && h.day === 6) return true;                   // שבועות
+  if (h.month === 7 && (h.day === 1 || h.day === 2)) return true; // ראש השנה (יומיים גם בארץ)
+  if (h.month === 7 && h.day === 10) return true; // יום כיפור
+  if (h.month === 7 && h.day === 15) return true; // סוכות א׳
+  if (h.month === 7 && h.day === 22) return true; // שמיני עצרת
+  if (h.month === 1 && h.day === 15) return true; // פסח א׳
+  if (h.month === 1 && h.day === 21) return true; // שביעי של פסח
+  if (h.month === 3 && h.day === 6) return true; // שבועות
   return false;
 }
 
 // Erev Yom Tov — kollel is not in session.
 export function isErevYomTov(date: Date = new Date()): boolean {
   const h = hebrewFromGregorian(date);
-  if (h.month === 6 && h.day === 29) return true;                 // ערב ראש השנה
-  if (h.month === 7 && h.day === 9) return true;                  // ערב יום כיפור
-  if (h.month === 7 && h.day === 14) return true;                 // ערב סוכות
-  if (h.month === 1 && h.day === 14) return true;                 // ערב פסח
-  if (h.month === 3 && h.day === 5) return true;                  // ערב שבועות
+  if (h.month === 6 && h.day === 29) return true; // ערב ראש השנה
+  if (h.month === 7 && h.day === 9) return true; // ערב יום כיפור
+  if (h.month === 7 && h.day === 14) return true; // ערב סוכות
+  if (h.month === 1 && h.day === 14) return true; // ערב פסח
+  if (h.month === 3 && h.day === 5) return true; // ערב שבועות
   return false;
 }
 

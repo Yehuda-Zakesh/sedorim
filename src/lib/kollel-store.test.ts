@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
-  calcSeder, hhmmToMin, monthClosing,
-  type SederEntry, type LearningEntry,
+  calcSeder,
+  hhmmToMin,
+  monthClosing,
+  type SederEntry,
+  type LearningEntry,
 } from "./kollel-store";
 import { DEFAULT_SETTINGS } from "./settings-store";
 
@@ -16,7 +19,8 @@ const s1EndMin = hhmmToMin(s1End)!;
 const s1LengthMin = s1EndMin - s1StartMin;
 
 function minToHHMM(min: number): string {
-  const h = Math.floor(min / 60), m = min % 60;
+  const h = Math.floor(min / 60),
+    m = min % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
@@ -95,7 +99,9 @@ describe("calcSeder", () => {
   });
 
   it("manualAdjustMin can reduce net missing below the raw non-excused amount", () => {
-    const c = calcSeder(entry({ arrival: minToHHMM(s1StartMin + 30), departure: s1End, manualAdjustMin: -30 }));
+    const c = calcSeder(
+      entry({ arrival: minToHHMM(s1StartMin + 30), departure: s1End, manualAdjustMin: -30 }),
+    );
     expect(c.missingMin).toBe(30);
     expect(c.netMissingMin).toBe(0); // 30 - 30 manual adjustment
   });
@@ -109,25 +115,43 @@ describe("calcSeder", () => {
     const full = calcSeder(entry({ ohevei: true, arrival: s1Start, departure: s1End }));
     expect(full.isOhevei).toBe(true);
 
-    const late = calcSeder(entry({ ohevei: true, arrival: minToHHMM(s1StartMin + 5), departure: s1End }));
+    const late = calcSeder(
+      entry({ ohevei: true, arrival: minToHHMM(s1StartMin + 5), departure: s1End }),
+    );
     expect(late.isOhevei).toBe(false);
   });
 });
 
 function lesson(overrides: Partial<LearningEntry>): LearningEntry {
-  return { id: "l1", framework: "kollel-erev", date: "2026-07-08", minutes: 60, source: "manual", ...overrides };
+  return {
+    id: "l1",
+    framework: "kollel-erev",
+    date: "2026-07-08",
+    minutes: 60,
+    source: "manual",
+    ...overrides,
+  };
 }
 
 describe("monthClosing", () => {
   it("sums the month's minutes, splits out the excused part, and counts events", () => {
-    const c = monthClosing("2026-07", [
-      // 30 min late, none of it excused
-      entry({ id: "a", date: "2026-07-06", arrival: minToHHMM(s1StartMin + 30), departure: s1End }),
-      // absent, fully excused
-      entry({ id: "b", date: "2026-07-07", absent: true, excusedAll: true }),
-      // full attendance, counts as אוהבי ה׳
-      entry({ id: "c", date: "2026-07-08", ohevei: true, arrival: s1Start, departure: s1End }),
-    ], []);
+    const c = monthClosing(
+      "2026-07",
+      [
+        // 30 min late, none of it excused
+        entry({
+          id: "a",
+          date: "2026-07-06",
+          arrival: minToHHMM(s1StartMin + 30),
+          departure: s1End,
+        }),
+        // absent, fully excused
+        entry({ id: "b", date: "2026-07-07", absent: true, excusedAll: true }),
+        // full attendance, counts as אוהבי ה׳
+        entry({ id: "c", date: "2026-07-08", ohevei: true, arrival: s1Start, departure: s1End }),
+      ],
+      [],
+    );
 
     expect(c.seder.entries).toBe(3);
     expect(c.seder.totalMissing).toBe(30 + s1LengthMin);
@@ -139,24 +163,32 @@ describe("monthClosing", () => {
   });
 
   it("ignores entries and lessons from other months", () => {
-    const c = monthClosing("2026-07", [
-      entry({ id: "a", date: "2026-07-06", absent: true }),
-      entry({ id: "b", date: "2026-08-06", absent: true }),
-    ], [
-      lesson({ id: "l1", date: "2026-07-06", minutes: 45 }),
-      lesson({ id: "l2", date: "2026-08-06", minutes: 90 }),
-    ]);
+    const c = monthClosing(
+      "2026-07",
+      [
+        entry({ id: "a", date: "2026-07-06", absent: true }),
+        entry({ id: "b", date: "2026-08-06", absent: true }),
+      ],
+      [
+        lesson({ id: "l1", date: "2026-07-06", minutes: 45 }),
+        lesson({ id: "l2", date: "2026-08-06", minutes: 90 }),
+      ],
+    );
     expect(c.seder.entries).toBe(1);
     expect(c.learning.kollelErev).toBe(45);
   });
 
   it("splits learning minutes per framework and doubles תענית דיבור", () => {
-    const c = monthClosing("2026-07", [], [
-      lesson({ id: "l1", framework: "kollel-erev", minutes: 60 }),
-      lesson({ id: "l2", framework: "kollel-erev", minutes: 30, tanitDibur: true }),
-      lesson({ id: "l3", framework: "torato-beyado", minutes: 90 }),
-      lesson({ id: "l4", framework: "bein-hazmanim", minutes: 20 }),
-    ]);
+    const c = monthClosing(
+      "2026-07",
+      [],
+      [
+        lesson({ id: "l1", framework: "kollel-erev", minutes: 60 }),
+        lesson({ id: "l2", framework: "kollel-erev", minutes: 30, tanitDibur: true }),
+        lesson({ id: "l3", framework: "torato-beyado", minutes: 90 }),
+        lesson({ id: "l4", framework: "bein-hazmanim", minutes: 20 }),
+      ],
+    );
     expect(c.learning.kollelErev).toBe(60 + 60); // 30 בתענית דיבור נספרות כפול
     expect(c.learning.kollelErevRaw).toBe(90);
     expect(c.learning.toratoBeyado).toBe(90);
