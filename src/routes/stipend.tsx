@@ -367,8 +367,8 @@ function LearningSection({ result }: { result: StipendBreakdown }) {
             <div className="mt-2 flex items-start gap-1.5 text-2xs text-warning-fg">
               <AlertTriangle className="size-3 mt-0.5 shrink-0" />
               <span>
-                המינימום למלגה על כולל ערב הוא {p.kollelErev.minMonthlyMin} דק׳ (10 שעות). חסרות{" "}
-                {p.kollelErev.minMonthlyMin - l.kollelErevCountedMin} דק׳.
+                המינימום למלגה על כולל ערב החודש הוא {result.scaled.kollelErevMinMonthlyMin} דק׳.
+                חסרות {result.scaled.kollelErevMinMonthlyMin - l.kollelErevCountedMin} דק׳.
               </span>
             </div>
           )}

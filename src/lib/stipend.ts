@@ -182,8 +182,13 @@ export type StipendBreakdown = {
   /** ימי הלימוד של אותו חודש אילו היה מלא — כל ימי א׳–ה׳ שבו. */
   fullMonthDays: number;
   ratio: number;
-  /** The §1/§3/§9 thresholds after the proportional scaling. */
-  scaled: { freeMissingMin: number; excusedFreeMin: number; tiers: DeductionTier[] };
+  /** The §1/§3/§6/§9 thresholds after the proportional scaling. */
+  scaled: {
+    freeMissingMin: number;
+    excusedFreeMin: number;
+    kollelErevMinMonthlyMin: number;
+    tiers: DeductionTier[];
+  };
   missing: {
     /** כל הדקות שנשמטו, מוצדקות ולא מוצדקות. */
     total: number;
@@ -255,6 +260,7 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
   const scaled = {
     freeMissingMin: scaleMinutes(p.freeMissingMin, ratio),
     excusedFreeMin: scaleMinutes(p.excusedFreeMin, ratio),
+    kollelErevMinMonthlyMin: scaleMinutes(p.kollelErev.minMonthlyMin, ratio),
     tiers: scaleTiers(p.deductionTiers, ratio),
   };
 
@@ -285,7 +291,7 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
   const shasNis = shasCount * p.shasNisPerArrival;
 
   const erev = cappedKollelErev(lessons, p.kollelErev.maxDailyMin);
-  const kollelErevBelowMinimum = erev.counted < p.kollelErev.minMonthlyMin;
+  const kollelErevBelowMinimum = erev.counted < scaled.kollelErevMinMonthlyMin;
   const kollelErevNis = kollelErevBelowMinimum
     ? 0
     : Math.round((erev.counted / 60) * p.kollelErev.nisPerHour);
@@ -346,7 +352,7 @@ export function calcStipend(input: StipendInput): StipendBreakdown {
       id: "kollel-erev",
       label: "כולל ערב",
       detail: kollelErevBelowMinimum
-        ? `${erev.counted} דק׳ — מתחת למינימום של ${p.kollelErev.minMonthlyMin} דק׳ (10 שעות)`
+        ? `${erev.counted} דק׳ — מתחת למינימום של ${scaled.kollelErevMinMonthlyMin} דק׳`
         : `${erev.counted} דק׳ × ${p.kollelErev.nisPerHour} ₪ לשעה`,
       nis: kollelErevNis,
       kind: "credit",

@@ -461,6 +461,20 @@ describe("calcStipend — §6/§7/§8, the learning frameworks", () => {
     expect(r.learning.kollelErevNis).toBe(0);
   });
 
+  it("prorates the 10-hour minimum itself in a partial month", () => {
+    // Half a month scales the 600-minute minimum down to 300.
+    const met = run({ lessons: erevDays(5), sessionDays: 11, fullMonthDays: 22 });
+    expect(met.scaled.kollelErevMinMonthlyMin).toBe(300);
+    expect(met.learning.kollelErevCountedMin).toBe(300);
+    expect(met.learning.kollelErevBelowMinimum).toBe(false);
+    expect(met.learning.kollelErevNis).toBe(90);
+
+    const short = run({ lessons: erevDays(4), sessionDays: 11, fullMonthDays: 22 });
+    expect(short.learning.kollelErevCountedMin).toBe(240);
+    expect(short.learning.kollelErevBelowMinimum).toBe(true);
+    expect(short.learning.kollelErevNis).toBe(0);
+  });
+
   it("caps כולל ערב at 90 minutes a day", () => {
     const r = run({ lessons: erevDays(10, 120) });
     expect(r.learning.kollelErevRawMin).toBe(1200);
