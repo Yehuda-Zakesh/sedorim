@@ -15,17 +15,14 @@
 // lateness, and a seder missed. Three more reach the two learning frameworks
 // and the month's figures, so the numbers are here too.
 //
-// The layout is two columns, and the window is wide rather than tall (940x660,
-// set in src-tauri/core/src/lib.rs). It used to be a 480x760 phone-shaped
-// column — taller than the usable height of a 1280x720 screen, so the window
-// got capped and useFitToWindow then scaled the whole screen *down* to fit.
-// A window whose entire purpose is to be read and answered in one glance was
-// rendering smaller than everything around it. Laid out across the width it
-// has, at 100%, nothing needs to shrink: the field on one side, the day's
-// records and everything else on the other. Below 768 CSS pixels the two
-// columns fold back into one.
+// The layout is responsive, never scaled: the window is 940x660 by default and
+// can shrink to 560x560 (src-tauri/core/src/lib.rs). Text stays at its real
+// size; wide windows get two columns (the field on one side, the day's records
+// and everything else on the other), narrow ones fold into one column and the
+// content area scrolls when it must.
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { StoreGuard } from "@/components/store-recovery";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Zap,
   Clock,
@@ -43,6 +40,7 @@ import {
 import {
   useSeder,
   useLearning,
+  ValidationError,
   newId,
   hhmmToMin,
   calcSeder,
@@ -70,7 +68,15 @@ import {
   parseLooseTime,
   type ExcusedChoice,
 } from "@/lib/quick-entry";
+import {
+  parseISODate,
+  shiftISO,
+  relativeDayName,
+  dayLabelWithDate,
+  monthPrefixOf,
+} from "@/lib/quick-day";
 import { formatHebrewDate, hasNoSederB, fastDayName } from "@/lib/hebrew-calendar";
+import { attendanceBlockedMessage } from "@/lib/attendance-day";
 import { invoke, isDesktop } from "@/lib/tauri";
 import { logProblem } from "@/lib/diagnostics";
 import { useReminderNotifications } from "@/lib/notifications";
@@ -84,6 +90,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { CONFLICT_SAVE_TEXT } from "@/lib/save-conflicts";
+import { todayISO, useToday } from "@/lib/today";
 
 export const Route = createFileRoute("/quick")({
   head: () => ({
@@ -95,15 +103,10 @@ export const Route = createFileRoute("/quick")({
   component: QuickApp,
 });
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function yesterdayISO() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+/** "היום" / "באתמול, 30.10" / "בתאריך 12.10" — for use mid-sentence. */
+const inDay = (d: string) => (d === "היום" ? d : d.startsWith("אתמול") ? `ב${d}` : `בתאריך ${d}`);
+const saveErrorText = (e: unknown) =>
+  e instanceof ValidationError ? e.message : "השמירה נכשלה — לא נשמר באחסון, הערכים נשארו";
 const sederLabel = (s: SederNum) => (s === 1 ? "סדר א׳" : "סדר ב׳");
 
 function QuickApp() {
@@ -119,21 +122,32 @@ function QuickApp() {
   const learning = useLearning();
   const navigate = useNavigate();
 
-  // Yesterday, for whoever forgot to record on the way in. Everything on the
+  // Another day, for whoever forgot to record on the way in. Everything on the
   // screen follows this — the Hebrew date, the seder hours in force, the rows
   // already saved — so there is never a doubt about which day is being edited.
-  const [day, setDay] = useState<"today" | "yesterday">("today");
-  const date = useMemo(() => (day === "today" ? todayISO() : yesterdayISO()), [day]);
+  const [day, setDay] = useState<"today" | "other">("today");
+  const [otherDate, setOtherDate] = useState(() => shiftISO(new Date(), -1));
+  // "Today" follows the clock past midnight; an explicitly chosen date stays put.
+  const today = useToday();
+  const todayDate = useMemo(() => parseISODate(today) ?? new Date(), [today]);
+  const date = day === "today" ? today : otherDate;
+  const isToday = day === "today";
+  const dayWord = relativeDayName(date, todayDate);
+  const dayFull = dayLabelWithDate(date, todayDate);
   const times = getSederTimesFor(date);
+  const dateObj = useMemo(() => parseISODate(date) ?? new Date(), [date]);
   const hebrewDate = useMemo(() => {
     try {
-      return formatHebrewDate(new Date(date));
+      return formatHebrewDate(dateObj);
     } catch {
       return "";
     }
-  }, [date]);
-  const fastName = useMemo(() => fastDayName(new Date(date)), [date]);
-  const noSederB = useMemo(() => hasNoSederB(new Date(date)), [date]);
+  }, [dateObj]);
+  const fastName = useMemo(() => fastDayName(dateObj), [dateObj]);
+  const noSederB = useMemo(() => hasNoSederB(dateObj), [dateObj]);
+  // Weekends and Yom Tov take no attendance. Derived from `date`, so it follows
+  // "today" past midnight. Extra learning is not affected.
+  const blockedMessage = attendanceBlockedMessage(date);
 
   // Held as raw text, not as a time value: the field accepts 0915, 915, 9.15
   // and 09:15 alike (parseLooseTime), which is the difference between one
@@ -160,31 +174,37 @@ function QuickApp() {
     if (!oheveiPossible && ohevei) setOhevei(false);
   }, [oheveiPossible, ohevei]);
 
+  // Midnight passed while "today" was open: a row picked for correction belongs
+  // to yesterday now, so drop it rather than write it onto the new day.
+  useEffect(() => {
+    if (day === "today") setEditing(null);
+  }, [today, day]);
+
   const todays = seder.entries.filter((e) => e.date === date);
   const existingFor = (s: SederNum) => todays.find((e) => e.seder === s);
   const existing = existingFor(activeSeder);
-
-  // Everything that can make this screen taller or shorter: the day banner, the
-  // fast-day banner, the correction banner, and how many saved rows the summary
-  // is listing. Typing a time is deliberately *not* in here — it swaps one line
-  // of helper text for another and never moves the height.
-  const shell = useFitToWindow(
-    `${day}|${editing?.id ?? ""}|${todays.length}|${fastName ?? ""}|${noSederB}`,
-  );
 
   const lateBy = timeMin === null ? 0 : Math.max(0, timeMin - bounds.start);
   const earlyBy = timeMin === null ? 0 : Math.max(0, bounds.start - timeMin);
 
   /** Switching day is a different set of records — nothing may carry over. */
-  const chooseDay = (next: "today" | "yesterday") => {
+  const chooseDay = (next: "today" | "other") => {
     setDay(next);
     setEditing(null);
     setOhevei(false);
     setTyped(next === "today" ? hhmmOf(new Date()) : "");
   };
+  const chooseOtherDate = (iso: string) => {
+    if (!parseISODate(iso) || iso > todayISO()) return;
+    setOtherDate(iso);
+    setEditing(null);
+    setOhevei(false);
+    setTyped("");
+  };
 
   /** Loads a saved row back into the field so it can be corrected. */
   const editEntry = (entry: SederEntry) => {
+    if (blockedMessage) return;
     setEditing({ id: entry.id, seder: entry.seder });
     setTyped(entry.arrival ?? "");
     setOhevei(entry.ohevei);
@@ -193,73 +213,145 @@ function QuickApp() {
   const stopEditing = () => {
     setEditing(null);
     setOhevei(false);
-    setTyped(day === "today" ? hhmmOf(new Date()) : "");
+    setTyped(isToday ? hhmmOf(new Date()) : "");
   };
 
-  const save = () => {
-    if (time === null) {
-      toast.error("שעה לא תקינה — נסה 0915 או 9:15");
-      return;
-    }
+  // One save at a time: a second click while a write is in flight would store
+  // the same thing twice. Success is announced only after the write reached
+  // storage; on a failure the form / dialog stays open with its values.
+  const saving = useRef(false);
+  const guarded = async (fn: () => Promise<void>) => {
+    if (saving.current) return;
+    saving.current = true;
     try {
-      seder.upsert(arrivalEntry({ existing, date, seder: activeSeder, time, ohevei, times }));
-      setEditing(null);
-      toast.success(
-        lateBy > 0
-          ? `נרשמה הגעה ל${sederLabel(activeSeder)} · ${lateBy} דק׳ אחרי תחילת הסדר`
-          : `נרשמה הגעה ל${sederLabel(activeSeder)}${earlyBy > 0 ? ` · ${earlyBy} דק׳ מוקדם` : ""}`,
-      );
-    } catch (e) {
-      logProblem("שמירת הגעה מהחלון המהיר", e);
-      toast.error(e instanceof Error ? e.message : "השמירה נכשלה");
+      await fn();
+    } finally {
+      saving.current = false;
     }
   };
 
-  const applyExcused = (choice: ExcusedChoice) => {
-    const target =
-      existing ??
-      arrivalEntry({
-        date,
-        seder: activeSeder,
-        time: time ?? hhmmOf(new Date()),
-        ohevei: false,
-        times,
-      });
-    try {
-      seder.upsert(withExcused(target, choice));
-      toast.success(
-        choice.kind === "all"
-          ? `כל החוסר ב${sederLabel(activeSeder)} סומן כמוצדק`
-          : `${choice.minutes} דק׳ ב${sederLabel(activeSeder)} סומנו כמוצדקות`,
-      );
-      setDialog(null);
-    } catch (e) {
-      logProblem("סימון מוצדק מהחלון המהיר", e);
-      toast.error(e instanceof Error ? e.message : "השמירה נכשלה");
-    }
-  };
+  const save = () =>
+    guarded(async () => {
+      if (time === null) {
+        toast.error("שעה לא תקינה — נסה 0915 או 9:15");
+        return;
+      }
+      try {
+        // "Today" is re-read at the click: the screen may have stayed open past
+        // midnight. An explicitly chosen date stays as chosen.
+        const saveDate = isToday ? todayISO() : date;
+        const blockedNow = attendanceBlockedMessage(saveDate);
+        if (blockedNow) {
+          toast.error(blockedNow);
+          return;
+        }
+        const rolled = saveDate !== date;
+        const outcome = await seder.upsertChecked(
+          arrivalEntry({
+            existing: rolled ? undefined : existing,
+            date: saveDate,
+            seder: activeSeder,
+            time,
+            ohevei,
+            times: rolled ? getSederTimesFor(saveDate) : times,
+          }),
+        );
+        if (!outcome.complete) {
+          toast.warning(CONFLICT_SAVE_TEXT);
+          return;
+        }
+        setEditing(null);
+        toast.success(
+          lateBy > 0
+            ? `נרשמה הגעה ל${sederLabel(activeSeder)} (${dayFull}) · ${lateBy} דק׳ אחרי תחילת הסדר`
+            : `נרשמה הגעה ל${sederLabel(activeSeder)} (${dayFull})${earlyBy > 0 ? ` · ${earlyBy} דק׳ מוקדם` : ""}`,
+        );
+      } catch (e) {
+        logProblem("שמירת הגעה מהחלון המהיר", e);
+        toast.error(saveErrorText(e));
+      }
+    });
 
-  const applyAbsence = (target: SederNum, excused: ExcusedChoice | null) => {
-    try {
-      seder.upsert(absenceEntry({ existing: existingFor(target), date, seder: target, excused }));
-      toast.success(`נרשמה היעדרות ב${sederLabel(target)}${excused ? " (מוצדקת)" : ""}`);
-      setDialog(null);
-    } catch (e) {
-      logProblem("רישום היעדרות מהחלון המהיר", e);
-      toast.error(e instanceof Error ? e.message : "השמירה נכשלה");
-    }
-  };
+  const applyExcused = (choice: ExcusedChoice) =>
+    guarded(async () => {
+      const blockedNow = attendanceBlockedMessage(isToday ? todayISO() : date);
+      if (blockedNow) {
+        toast.error(blockedNow);
+        setDialog(null);
+        return;
+      }
+      const target =
+        existing ??
+        arrivalEntry({
+          date,
+          seder: activeSeder,
+          time: time ?? hhmmOf(new Date()),
+          ohevei: false,
+          times,
+        });
+      try {
+        const outcome = await seder.upsertChecked(withExcused(target, choice));
+        if (!outcome.complete) {
+          toast.warning(CONFLICT_SAVE_TEXT);
+          return;
+        }
+        toast.success(
+          choice.kind === "all"
+            ? `כל החוסר ב${sederLabel(activeSeder)} סומן כמוצדק`
+            : `${choice.minutes} דק׳ ב${sederLabel(activeSeder)} סומנו כמוצדקות`,
+        );
+        setDialog(null);
+      } catch (e) {
+        logProblem("סימון מוצדק מהחלון המהיר", e);
+        toast.error(saveErrorText(e));
+      }
+    });
 
-  const addLearning = (framework: LearningFramework, minutes: number) => {
-    try {
-      learning.add({ id: newId(), framework, date, minutes, source: "manual" });
-      toast.success(`נוספו ${minutes} דק׳`);
-      setDialog(null);
-    } catch (e) {
-      logProblem("רישום לימוד מהחלון המהיר", e);
-      toast.error(e instanceof Error ? e.message : "השמירה נכשלה");
-    }
-  };
+  const applyAbsence = (target: SederNum, excused: ExcusedChoice | null) =>
+    guarded(async () => {
+      const blockedNow = attendanceBlockedMessage(isToday ? todayISO() : date);
+      if (blockedNow) {
+        toast.error(blockedNow);
+        setDialog(null);
+        return;
+      }
+      try {
+        const outcome = await seder.upsertChecked(
+          absenceEntry({ existing: existingFor(target), date, seder: target, excused }),
+        );
+        if (!outcome.complete) {
+          toast.warning(CONFLICT_SAVE_TEXT);
+          return;
+        }
+        toast.success(`נרשמה היעדרות ב${sederLabel(target)}${excused ? " (מוצדקת)" : ""}`);
+        setDialog(null);
+      } catch (e) {
+        logProblem("רישום היעדרות מהחלון המהיר", e);
+        toast.error(saveErrorText(e));
+      }
+    });
+
+  const addLearning = (framework: LearningFramework, minutes: number) =>
+    guarded(async () => {
+      try {
+        const outcome = await learning.addChecked({
+          id: newId(),
+          framework,
+          date,
+          minutes,
+          source: "manual",
+        });
+        if (!outcome.complete) {
+          toast.warning(CONFLICT_SAVE_TEXT);
+          return;
+        }
+        toast.success(`נוספו ${minutes} דק׳ (${dayFull})`);
+        setDialog(null);
+      } catch (e) {
+        logProblem("רישום לימוד מהחלון המהיר", e);
+        toast.error(saveErrorText(e));
+      }
+    });
 
   function openMainApp() {
     if (!isDesktop) {
@@ -275,264 +367,318 @@ function QuickApp() {
     });
   }
 
+  const saveLabel = editing || (existing && !existing.absent) ? "עדכן הגעה" : "שמור הגעה";
+  const typedBad = typed.trim() !== "" && time === null;
+  const hintId = "quick-time-hint";
+  const dayOptions = [
+    { key: "today", label: "היום" },
+    { key: "other", label: "תאריך אחר" },
+  ] as const;
+
   return (
-    <div ref={shell} className="bg-background">
-      <div dir="rtl" className="h-full bg-background text-foreground flex flex-col">
-        <header className="border-b border-border bg-card">
-          <div className="mx-auto w-full max-w-5xl px-6 py-3.5 flex items-center gap-3">
-            <div className="size-11 rounded-xl bg-primary grid place-items-center text-primary-foreground shadow-sm">
-              <Zap className="size-6" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold">כניסה מהירה</h1>
-              <p className="text-xs text-muted-foreground truncate">{hebrewDate}</p>
-            </div>
-            <div className="flex-1" />
-            <div className="text-sm text-muted-foreground tabular-nums flex items-center gap-1.5">
-              <Clock className="size-4" />
-              <LiveClock />
-            </div>
-            <button
-              onClick={openMainApp}
-              title="פתח את התוכנה המלאה"
-              aria-label="פתח את התוכנה המלאה"
-              className="pressable size-10 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent"
-            >
-              <LayoutDashboard className="size-5" />
-            </button>
+    <div
+      dir="rtl"
+      className="h-dvh bg-background text-foreground flex flex-col [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring"
+    >
+      {/* The shell is kept to one slim line: the title and the date it is
+          writing to, the clock, and the way into the full app. */}
+      <header className="shrink-0 border-b border-border bg-card">
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 py-2 flex items-center gap-3">
+          <div className="min-w-0">
+            <h1 className="title-serif text-xl sm:text-2xl">כניסה מהירה</h1>
+            <p className="text-sm text-muted-foreground truncate">
+              {dayFull}
+              {hebrewDate ? ` · ${hebrewDate}` : ""}
+            </p>
           </div>
-        </header>
+          <div className="flex-1" />
+          <div
+            className="text-base text-muted-foreground figure flex items-center gap-1.5"
+            aria-label="השעה עכשיו"
+            dir="ltr"
+          >
+            <Clock className="size-4" aria-hidden="true" />
+            <LiveClock />
+          </div>
+          <button
+            onClick={openMainApp}
+            title="פתח את התוכנה המלאה"
+            aria-label="פתח את התוכנה המלאה"
+            className="pressable size-10 shrink-0 rounded-md border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent"
+          >
+            <LayoutDashboard className="size-5" aria-hidden="true" />
+          </button>
+        </div>
+      </header>
 
-        {/* overflow-hidden, not auto: useFitToWindow scales the screen down to
-          the window, so a scrollbar here could only ever be a rounding
-          artefact — and it would be the one thing this window must not have.
-          At the window's own size (940x660, see build_quick_window) the two
-          columns below fit with no scaling at all, so the hook is now the
-          fallback for a small screen rather than the everyday case. */}
-        <main className="flex-1 overflow-hidden mx-auto w-full max-w-5xl px-6 py-4">
-          {/* Today or yesterday. It scopes both columns — the field on one side
-            and the day's records on the other — so it sits above them both
-            rather than inside either. Anything older is a job for the
-            attendance screen, which can reach any date at all. */}
-          <div className="inline-grid w-64 grid-cols-2 gap-1 rounded-xl border border-border bg-card p-1">
-            {(
-              [
-                { key: "today", label: "היום" },
-                { key: "yesterday", label: "אתמול" },
-              ] as const
-            ).map((choice) => (
-              <button
-                key={choice.key}
-                onClick={() => chooseDay(choice.key)}
-                aria-pressed={day === choice.key}
-                className={`pressable rounded-lg px-3 py-2 text-sm font-medium ${
-                  day === choice.key
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent"
-                }`}
+      {/* The content area scrolls when the window is short; nothing is scaled. */}
+      <StoreGuard scroll>
+        <main className="flex-1 min-h-0 overflow-y-auto">
+          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 py-3">
+            {/* Which day the record is written to. It scopes every panel below. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <div
+                role="group"
+                aria-label="היום שאליו נרשם"
+                className="inline-grid grid-cols-2 gap-0.5 rounded-md border border-border p-0.5 min-w-[13rem]"
               >
-                {choice.label}
-              </button>
-            ))}
-          </div>
-
-          {(day === "yesterday" || fastName) && (
-            <div className="mt-3 space-y-2">
-              {day === "yesterday" && (
-                <div className="rounded-xl border border-primary/40 bg-primary/5 px-4 py-2.5 text-xs text-primary flex items-center gap-2">
-                  <CalendarClock className="size-4 shrink-0" />
-                  <span>הרישום ייכתב לאתמול — {hebrewDate}</span>
+                {dayOptions.map((choice) => (
+                  <button
+                    key={choice.key}
+                    onClick={() => chooseDay(choice.key)}
+                    aria-pressed={day === choice.key}
+                    className={`pressable min-h-9 rounded-[0.25rem] px-3 py-1.5 text-sm font-medium ${
+                      day === choice.key
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+              {day === "other" && (
+                <div className="flex items-center gap-2">
+                  <label htmlFor="quick-other-date" className="text-sm text-muted-foreground">
+                    תאריך
+                  </label>
+                  <input
+                    id="quick-other-date"
+                    type="date"
+                    value={otherDate}
+                    max={today}
+                    onChange={(e) => chooseOtherDate(e.target.value)}
+                    className="field-input min-h-9 figure"
+                  />
                 </div>
               )}
-              {fastName && (
-                <div className="rounded-xl border border-warning/40 bg-warning/5 px-4 py-2.5 text-xs text-warning-fg">
-                  {day === "today" ? "היום" : "אתמול"} {fastName}
-                  {noSederB ? " — אין סדר ב׳" : ""}
-                </div>
+              {!isToday && (
+                <p
+                  role="status"
+                  className="flex items-center gap-1.5 text-sm font-medium text-primary"
+                >
+                  <CalendarClock className="size-4 shrink-0" aria-hidden="true" />
+                  הרישום ייכתב ל{dayFull}
+                </p>
               )}
             </div>
-          )}
 
-          <div className="mt-4 grid gap-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start">
-            {/* ── The one thing this window exists for. ───────────────────── */}
-            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              {editing && (
-                <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-primary">
-                  <Pencil className="size-4 shrink-0" />
-                  <span className="flex-1">תיקון הרישום של {sederLabel(editing.seder)}</span>
-                  <button
-                    onClick={stopEditing}
-                    title="בטל תיקון"
-                    aria-label="בטל תיקון"
-                    className="pressable rounded p-0.5 hover:opacity-70"
-                  >
-                    <X className="size-4" />
-                  </button>
+            {blockedMessage && (
+              <p
+                role="status"
+                className="mt-2 border-s-4 border-info bg-secondary/60 px-3 py-2 text-sm font-medium"
+              >
+                {blockedMessage} אפשר לרשום לימוד נוסף, או לבחור תאריך אחר.
+              </p>
+            )}
+
+            {fastName && (
+              <p className="mt-2 border-s-2 border-warning ps-3 text-sm text-warning-fg">
+                {dayWord} {fastName}
+                {noSederB ? " — אין סדר ב׳" : ""}
+              </p>
+            )}
+
+            <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-start">
+              {/* ── The one thing this window exists for. ───────────────────── */}
+              <section aria-label="רישום שעת הגעה" className="card-surface p-3 sm:p-4">
+                {editing && (
+                  <div className="mb-3 flex items-center gap-2 border-s-2 border-primary bg-primary/5 ps-3 pe-1 py-1 text-sm text-primary">
+                    <Pencil className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="flex-1">תיקון הרישום של {sederLabel(editing.seder)}</span>
+                    <button
+                      onClick={stopEditing}
+                      title="בטל תיקון"
+                      aria-label="בטל תיקון"
+                      className="pressable size-9 grid place-items-center rounded-md hover:bg-primary/10"
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                  <label htmlFor="quick-time" className="text-base font-semibold">
+                    שעת הגעה
+                  </label>
+                  <span className="text-sm font-semibold text-primary">
+                    {sederLabel(activeSeder)} ·{" "}
+                    <span className="figure" dir="ltr">
+                      {activeSeder === 1
+                        ? `${times.s1Start}–${times.s1End}`
+                        : `${times.s2Start}–${times.s2End}`}
+                    </span>
+                  </span>
                 </div>
-              )}
+                <p className="text-sm text-muted-foreground">
+                  {editing ? "הסדר נקבע לפי הרישום שנבחר" : "הסדר מזוהה אוטומטית לפי השעה"} · נרשם ל
+                  {dayFull}
+                </p>
 
-              <div className="flex items-baseline justify-between gap-3">
-                <label htmlFor="quick-time" className="text-base font-semibold">
-                  שעת הגעה
-                </label>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {sederLabel(activeSeder)} ·{" "}
-                  {activeSeder === 1
-                    ? `${times.s1Start}–${times.s1End}`
-                    : `${times.s2Start}–${times.s2End}`}
-                </span>
-              </div>
-
-              {/* A text field, not <input type="time">: that one insists on being
+                {/* A text field, not <input type="time">: that one insists on being
                 driven segment by segment, and "0915" typed straight through is
                 the whole point. parseLooseTime does the rest. */}
-              <input
-                id="quick-time"
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="0915"
-                value={typed}
-                onChange={(e) => setTyped(e.target.value)}
-                onFocus={(e) => e.currentTarget.select()}
-                onBlur={() => {
-                  if (time) setTyped(time);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") save();
-                }}
-                className={`mt-4 w-full rounded-2xl border-2 bg-primary/5 px-4 py-4 text-center text-6xl font-bold tabular-nums focus:outline-none ${
-                  typed.trim() !== "" && time === null
-                    ? "border-destructive/60 focus:border-destructive"
-                    : "border-primary/30 focus:border-primary"
-                }`}
-              />
-
-              {/* The consequence of what was typed, in the colour of what it
-                means: an on-time arrival reads as good, a late one is marked,
-                an unreadable one is an error. This was one grey 11px line
-                whatever it said. */}
-              <p
-                className={`mt-3 text-center text-sm ${
-                  typed.trim() === ""
-                    ? "text-muted-foreground"
-                    : time === null
-                      ? "text-destructive"
-                      : lateBy > 0
-                        ? "text-warning-fg"
-                        : "text-success"
-                }`}
-              >
-                {typed.trim() === ""
-                  ? "אפשר להקליד 0915, 915 או 9:15"
-                  : time === null
-                    ? "שעה לא תקינה — אפשר להקליד 0915, 915 או 9:15"
-                    : lateBy > 0
-                      ? `${time} · ${lateBy} דק׳ אחרי תחילת ${sederLabel(activeSeder)}`
-                      : earlyBy > 0
-                        ? `${time} · ${earlyBy} דק׳ לפני תחילת ${sederLabel(activeSeder)} — נצבר כבונוס`
-                        : `${time} · בדיוק בתחילת ${sederLabel(activeSeder)}`}
-              </p>
-
-              <label
-                className={`mt-4 flex items-start gap-3 rounded-xl border p-3.5 ${
-                  oheveiPossible
-                    ? "pressable-lg border-border cursor-pointer hover:bg-accent/40"
-                    : "border-dashed border-border opacity-55"
-                }`}
-                title={oheveiPossible ? undefined : "אוהבי ה׳ אפשרי רק בהגעה עד תחילת הסדר"}
-              >
                 <input
-                  type="checkbox"
-                  className="mt-0.5 size-4 accent-primary"
-                  checked={ohevei}
-                  disabled={!oheveiPossible}
-                  onChange={(e) => setOhevei(e.target.checked)}
+                  id="quick-time"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  dir="ltr"
+                  placeholder="0915"
+                  value={typed}
+                  aria-describedby={hintId}
+                  aria-invalid={typedBad}
+                  disabled={!!blockedMessage}
+                  onChange={(e) => setTyped(e.target.value)}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onBlur={() => {
+                    if (time) setTyped(time);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void save();
+                  }}
+                  className={`mt-2 w-full rounded-md border-2 bg-background px-3 py-1 text-center text-5xl sm:text-6xl [@media(max-height:640px)]:text-4xl font-bold figure focus:outline-none focus-visible:ring-4 focus-visible:ring-ring/40 ${
+                    typedBad
+                      ? "border-destructive/70 focus:border-destructive"
+                      : "border-input focus:border-primary"
+                  }`}
                 />
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold">אוהבי ה׳</span>
-                  <span className="block text-xs text-muted-foreground mt-0.5">
-                    {oheveiPossible
-                      ? "הסדר כולו — מתחילתו ועד סופו"
-                      : "אפשרי רק כשההגעה עד תחילת הסדר"}
+
+                {/* The consequence of what was typed, in the colour of what it
+                means: on time reads as good, late is marked, unreadable is an
+                error. The words carry it too, never the colour alone. */}
+                <p
+                  id={hintId}
+                  aria-live="polite"
+                  className={`mt-2 text-center text-sm font-medium ${
+                    typed.trim() === ""
+                      ? "text-muted-foreground"
+                      : time === null
+                        ? "text-destructive"
+                        : lateBy > 0
+                          ? "text-warning-fg"
+                          : "text-success"
+                  }`}
+                >
+                  {typed.trim() === ""
+                    ? "אפשר להקליד 0915, 915 או 9:15"
+                    : time === null
+                      ? "שעה לא תקינה — אפשר להקליד 0915, 915 או 9:15"
+                      : lateBy > 0
+                        ? `${time} · ${lateBy} דק׳ אחרי תחילת ${sederLabel(activeSeder)}`
+                        : earlyBy > 0
+                          ? `${time} · ${earlyBy} דק׳ לפני תחילת ${sederLabel(activeSeder)} — נצבר כבונוס`
+                          : `${time} · בדיוק בתחילת ${sederLabel(activeSeder)}`}
+                </p>
+
+                <label
+                  className={`mt-2 flex items-center gap-3 border-t border-border pt-2 ${
+                    oheveiPossible ? "cursor-pointer" : "opacity-70"
+                  }`}
+                  title={oheveiPossible ? undefined : "אוהבי ה׳ אפשרי רק בהגעה עד תחילת הסדר"}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-5 shrink-0 accent-primary"
+                    checked={ohevei}
+                    disabled={!oheveiPossible || !!blockedMessage}
+                    onChange={(e) => setOhevei(e.target.checked)}
+                  />
+                  <span className="min-w-0">
+                    <span className="text-sm font-semibold">אוהבי ה׳</span>
+                    <span className="text-sm text-muted-foreground">
+                      {" — "}
+                      {oheveiPossible
+                        ? "הסדר כולו, מתחילתו ועד סופו"
+                        : "אפשרי רק כשההגעה עד תחילת הסדר"}
+                    </span>
                   </span>
-                </span>
-              </label>
+                </label>
 
-              <button
-                onClick={save}
-                className="pressable-lg mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-lg font-semibold text-primary-foreground hover:bg-primary/90"
-              >
-                <Check className="size-5" />
-                {editing || (existing && !existing.absent) ? "עדכן הגעה" : "שמור הגעה"}
-              </button>
-
-              <p className="mt-2.5 text-center text-2xs text-muted-foreground">
-                שעת היציאה נרשמת אוטומטית כסוף הסדר. יציאה מוקדמת נערכת בתוכנה המלאה.
-              </p>
-            </section>
-
-            {/* ── Everything else the day can need, one click away. ────────── */}
-            <aside className="space-y-4">
-              <div>
-                <h2 className="mb-2 text-sm font-semibold">
-                  {day === "today" ? "נרשם היום" : "נרשם אתמול"}
-                </h2>
-                <DaySummary
-                  date={date}
-                  day={day}
-                  editingId={editing?.id ?? null}
-                  onEdit={editEntry}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => setDialog("excused")}
-                  className="pressable-lg rounded-xl border-2 border-border bg-card p-4 text-center hover:border-status-excused"
+                  onClick={() => void save()}
+                  disabled={!!blockedMessage}
+                  className="pressable-lg mt-3 w-full inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-lg font-semibold text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
                 >
-                  <FileText className="size-6 mx-auto text-status-excused-fg" />
-                  <span className="mt-2 block text-sm font-semibold">מוצדק</span>
-                  <span className="block text-xs text-muted-foreground">איחור מאושר</span>
+                  <Check className="size-5" aria-hidden="true" />
+                  {isToday ? saveLabel : `${saveLabel} ל${dayFull}`}
                 </button>
-                <button
-                  onClick={() => setDialog("absence")}
-                  className="pressable-lg rounded-xl border-2 border-border bg-card p-4 text-center hover:border-status-absent"
-                >
-                  <UserX className="size-6 mx-auto text-status-absent-fg" />
-                  <span className="mt-2 block text-sm font-semibold">היעדרות</span>
-                  <span className="block text-xs text-muted-foreground">סדר שלם שהוחסר</span>
-                </button>
-              </div>
 
-              {/* The learning frameworks and the month's figures — the same three
-                destinations that used to be a strip pinned to the bottom edge
-                of the window, now sized to be hit. */}
-              <div className="grid grid-cols-3 gap-2">
-                <BarButton icon={Moon} label="כולל ערב" onClick={() => setDialog("kollel-erev")} />
-                <BarButton
-                  icon={BookOpen}
-                  label="תורתו בידו"
-                  onClick={() => setDialog("torato-beyado")}
-                />
-                <BarButton
-                  icon={BarChart3}
-                  label="נתוני החודש"
-                  onClick={() => setDialog("stats")}
-                />
-              </div>
-            </aside>
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  שעת היציאה נרשמת אוטומטית כסוף הסדר. יציאה מוקדמת נערכת בתוכנה המלאה.
+                </p>
+              </section>
+
+              {/* ── Everything else the day can need, one click away. ────────── */}
+              <aside className="space-y-4" aria-label="פעולות נוספות">
+                <section aria-labelledby="quick-day-title">
+                  <h2 id="quick-day-title" className="mb-1 text-base font-semibold">
+                    נרשם {dayFull}
+                  </h2>
+                  <DaySummary
+                    date={date}
+                    dayWord={dayWord}
+                    editingId={editing?.id ?? null}
+                    onEdit={editEntry}
+                    readOnly={!!blockedMessage}
+                  />
+                </section>
+
+                <div className="section-rule grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setDialog("excused")}
+                    disabled={!!blockedMessage}
+                    className="pressable-lg disabled:pointer-events-none disabled:opacity-50 flex items-center gap-2 rounded-md border border-border px-3 py-2 text-start hover:border-status-excused hover:bg-accent/40"
+                  >
+                    <FileText
+                      className="size-5 shrink-0 text-status-excused-fg"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">מוצדק</span>
+                      <span className="block text-xs text-muted-foreground">איחור מאושר</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setDialog("absence")}
+                    disabled={!!blockedMessage}
+                    className="pressable-lg disabled:pointer-events-none disabled:opacity-50 flex items-center gap-2 rounded-md border border-border px-3 py-2 text-start hover:border-status-absent hover:bg-accent/40"
+                  >
+                    <UserX className="size-5 shrink-0 text-status-absent-fg" aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">היעדרות</span>
+                      <span className="block text-xs text-muted-foreground">סדר שלם שהוחסר</span>
+                    </span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <BarButton
+                    icon={Moon}
+                    label="כולל ערב"
+                    onClick={() => setDialog("kollel-erev")}
+                  />
+                  <BarButton
+                    icon={BookOpen}
+                    label="תורתו בידו"
+                    onClick={() => setDialog("torato-beyado")}
+                  />
+                  <BarButton
+                    icon={BarChart3}
+                    label="נתוני החודש"
+                    onClick={() => setDialog("stats")}
+                  />
+                </div>
+              </aside>
+            </div>
           </div>
         </main>
-
-        <footer className="border-t border-border bg-card px-6 py-2 text-center text-2xs text-muted-foreground">
-          סדר פלוס · כניסה מהירה
-        </footer>
 
         <ExcusedDialog
           open={dialog === "excused"}
           onClose={() => setDialog(null)}
           seder={activeSeder}
+          dayFull={dayFull}
           missingMin={existing ? calcSeder(existing).missingMin : lateBy}
           alsoRecordsArrival={existing ? null : time}
           onApply={applyExcused}
@@ -542,6 +688,7 @@ function QuickApp() {
           onClose={() => setDialog(null)}
           suggested={activeSeder}
           noSederB={noSederB}
+          dayFull={dayFull}
           sederLengthMin={(s: SederNum) => {
             const b = sederBounds(s, times);
             return Math.max(0, b.end - b.start);
@@ -552,96 +699,14 @@ function QuickApp() {
           open={dialog === "kollel-erev" || dialog === "torato-beyado"}
           onClose={() => setDialog(null)}
           framework={dialog === "torato-beyado" ? "torato-beyado" : "kollel-erev"}
+          date={date}
+          dayFull={dayFull}
           onApply={addLearning}
         />
-        <MonthStatsDialog open={dialog === "stats"} onClose={() => setDialog(null)} />
-      </div>
+        <MonthStatsDialog open={dialog === "stats"} onClose={() => setDialog(null)} date={date} />
+      </StoreGuard>
     </div>
   );
-}
-
-/**
- * Everything at once, never a scrollbar — without touching the design.
- *
- * The whole screen is scaled down by however much it takes to fit the window,
- * and only when it doesn't fit. Nothing is dropped, resized or rearranged; a
- * short day stays at 100%.
- *
- * `100vh` inside a zoomed element still means the unzoomed window, so the
- * shell's height is set in pixels rather than in vh.
- *
- * Written straight to the DOM, on every render, rather than through state: a
- * layout that changes what it measures is exactly the shape that turns a
- * ResizeObserver — or a setState — into a loop.
- */
-function useFitToWindow(signature: string) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const MIN_ZOOM = 0.5; // well below what the smallest allowed window
-    // (min_inner_size in src-tauri/core/src/lib.rs) ever needs.
-
-    const fit = () => {
-      const main = el.querySelector("main");
-      if (!main) return;
-
-      // Ask the layout, don't predict it: set a zoom, then read whether main
-      // is actually clipping anything. A predicted height was wrong in both
-      // directions — the flex/overflow combination does not report an honest
-      // natural height, and a webfont arriving a moment later invalidates
-      // whatever was measured before it.
-      const apply = (zoom: number) => {
-        el.style.zoom = String(zoom);
-        el.style.height = `${window.innerHeight / zoom}px`;
-      };
-      const fits = () => main.scrollHeight <= main.clientHeight;
-
-      // Full size is the common case and costs exactly one layout.
-      apply(1);
-      if (fits()) return;
-
-      // Otherwise bisect. "Does it fit" is monotonic in the zoom, so seven
-      // steps land within half a percent — where stepping down by 1% at a
-      // time took up to fifty forced synchronous layouts to say the same
-      // thing.
-      let lo = MIN_ZOOM,
-        hi = 1;
-      for (let i = 0; i < 7; i++) {
-        const mid = (lo + hi) / 2;
-        apply(mid);
-        if (fits()) lo = mid;
-        else hi = mid;
-      }
-      apply(lo);
-    };
-
-    // A window drag fires resize per pixel; one fit per frame is enough.
-    let frame = 0;
-    const onResize = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(fit);
-    };
-
-    fit();
-    window.addEventListener("resize", onResize);
-    // Hebrew text reflows when the real font replaces the fallback, which is
-    // after the first fit has already run and settled.
-    document.fonts?.ready.then(fit).catch(() => {});
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", onResize);
-    };
-    // `signature` is every piece of state that changes the height of the
-    // screen. It used to have no dependency list at all, so the whole measure
-    // loop ran after *every* render — including each keystroke in the time
-    // field, which cannot change the layout and was paying up to fifty forced
-    // layouts to discover that.
-  }, [signature]);
-
-  return ref;
 }
 
 function BarButton({
@@ -657,10 +722,10 @@ function BarButton({
     <button
       onClick={onClick}
       title={label}
-      className="pressable flex flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-2 py-3 text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-accent/40"
+      className="pressable flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-md border border-border px-2 py-2 text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-accent/40"
     >
-      <Icon className="size-5" />
-      <span className="text-xs font-medium text-center leading-tight">{label}</span>
+      <Icon className="size-5" aria-hidden="true" />
+      <span className="text-sm font-medium text-center leading-tight">{label}</span>
     </button>
   );
 }
@@ -672,58 +737,64 @@ function BarButton({
  */
 function DaySummary({
   date,
-  day,
+  dayWord,
   editingId,
   onEdit,
+  readOnly,
 }: {
   date: string;
-  day: "today" | "yesterday";
+  dayWord: string;
   editingId: string | null;
   onEdit: (entry: SederEntry) => void;
+  /** A day that takes no attendance: rows are shown, not loaded for correction. */
+  readOnly: boolean;
 }) {
   const { entries } = useSeder();
   const rows = entries.filter((e) => e.date === date).sort((a, b) => a.seder - b.seder);
   if (!rows.length) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-xs text-muted-foreground">
-        {day === "today" ? "עדיין לא נרשם דבר היום." : "לא נרשם דבר באתמול."}
+      <div className="border-y border-dashed border-border px-2 py-4 text-center text-sm text-muted-foreground">
+        {dayWord === "היום"
+          ? "עדיין לא נרשם דבר היום."
+          : `לא נרשם דבר ב${dayWord === "אתמול" ? "אתמול" : `־${dayWord}`}.`}
       </div>
     );
   }
   return (
-    <div className="rounded-xl border border-border bg-muted/20 divide-y divide-border overflow-hidden">
+    <div className="ledger border-y border-border">
       {rows.map((e) => {
         const c = calcSeder(e);
         return (
           <button
             key={e.id}
             onClick={() => onEdit(e)}
+            disabled={readOnly}
             title={e.absent ? "טען לתיקון — רישום ההיעדרות יוחלף בהגעה" : "טען לתיקון"}
-            className={`pressable w-full flex items-center gap-2.5 px-4 py-3 text-sm text-start hover:bg-accent/60 ${
+            className={`pressable w-full min-h-11 flex items-center gap-2.5 px-2 py-2 text-sm text-start hover:bg-accent/60 ${
               editingId === e.id ? "bg-primary/10" : ""
             }`}
           >
             <span className="font-semibold">{e.seder === 1 ? "א׳" : "ב׳"}</span>
-            <span className="tabular-nums text-muted-foreground">
+            <span className="figure text-muted-foreground" dir="ltr">
               {e.absent ? "היעדרות" : e.arrival}
             </span>
             <span className="flex-1" />
             {c.isOhevei && (
-              <span className="rounded bg-status-present/15 px-1.5 py-0.5 text-2xs text-status-present-fg">
+              <span className="rounded-sm bg-status-present/15 px-1.5 py-0.5 text-xs text-status-present-fg">
                 אוהבי ה׳
               </span>
             )}
             {c.excusedMin > 0 && (
-              <span className="rounded bg-status-excused/15 px-1.5 py-0.5 text-2xs text-status-excused-fg">
+              <span className="rounded-sm bg-status-excused/15 px-1.5 py-0.5 text-xs text-status-excused-fg">
                 מוצדק {c.excusedMin}
               </span>
             )}
             <span
-              className={`tabular-nums font-medium ${c.netMissingMin > 0 ? "text-destructive" : "text-success"}`}
+              className={`figure font-medium ${c.netMissingMin > 0 ? "text-destructive" : "text-success"}`}
             >
               {c.netMissingMin > 0 ? `חסר ${c.netMissingMin}` : "מלא"}
             </span>
-            <Pencil className="size-3.5 text-muted-foreground shrink-0" />
+            <Pencil className="size-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
           </button>
         );
       })}
@@ -747,6 +818,7 @@ function ExcusedDialog({
   open,
   onClose,
   seder,
+  dayFull,
   missingMin,
   alsoRecordsArrival,
   onApply,
@@ -754,6 +826,7 @@ function ExcusedDialog({
   open: boolean;
   onClose: () => void;
   seder: SederNum;
+  dayFull: string;
   missingMin: number;
   /** The arrival time this will also record, when nothing is saved yet. */
   alsoRecordsArrival: string | null;
@@ -779,7 +852,9 @@ function ExcusedDialog({
     >
       <DialogContent dir="rtl" className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>מוצדק — {sederLabel(seder)}</DialogTitle>
+          <DialogTitle>
+            מוצדק — {sederLabel(seder)} ({dayFull})
+          </DialogTitle>
         </DialogHeader>
         <p className="text-xs text-muted-foreground">
           {missingMin > 0
@@ -787,7 +862,7 @@ function ExcusedDialog({
             : `אין כרגע דקות חסרות ב${sederLabel(seder)} — סימון מוצדק יחול על חוסר שיירשם.`}
         </p>
         {alsoRecordsArrival && (
-          <p className="text-2xs text-warning-fg">
+          <p className="text-xs text-warning-fg">
             טרם נרשמה הגעה ל{sederLabel(seder)} — השמירה תרשום גם הגעה בשעה {alsoRecordsArrival}.
           </p>
         )}
@@ -844,6 +919,7 @@ function AbsenceDialog({
   onClose,
   suggested,
   noSederB,
+  dayFull,
   sederLengthMin,
   onApply,
 }: {
@@ -851,6 +927,7 @@ function AbsenceDialog({
   onClose: () => void;
   suggested: SederNum;
   noSederB: boolean;
+  dayFull: string;
   sederLengthMin: (s: SederNum) => number;
   onApply: (seder: SederNum, excused: ExcusedChoice | null) => void;
 }) {
@@ -877,7 +954,7 @@ function AbsenceDialog({
     >
       <DialogContent dir="rtl" className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>רישום היעדרות</DialogTitle>
+          <DialogTitle>רישום היעדרות ({dayFull})</DialogTitle>
         </DialogHeader>
 
         <div>
@@ -887,7 +964,7 @@ function AbsenceDialog({
               <button
                 key={s}
                 onClick={() => setSeder(s)}
-                className={`rounded-lg border-2 px-3 py-2.5 text-sm font-medium pressable transition ${
+                className={`rounded-md border-2 px-3 py-2.5 text-sm font-medium pressable transition ${
                   seder === s
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border hover:border-primary/40"
@@ -898,8 +975,8 @@ function AbsenceDialog({
             ))}
           </div>
           {seder === 2 && noSederB && (
-            <p className="mt-1.5 text-2xs text-warning-fg">
-              היום אין סדר ב׳ — אין צורך לרשום היעדרות.
+            <p className="mt-1.5 text-xs text-warning-fg">
+              {inDay(dayFull)} אין סדר ב׳ — אין צורך לרשום היעדרות.
             </p>
           )}
         </div>
@@ -977,11 +1054,15 @@ function MinutesDialog({
   open,
   onClose,
   framework,
+  date,
+  dayFull,
   onApply,
 }: {
   open: boolean;
   onClose: () => void;
   framework: "kollel-erev" | "torato-beyado";
+  date: string;
+  dayFull: string;
   onApply: (framework: LearningFramework, minutes: number) => void;
 }) {
   const [minutes, setMinutes] = useState(60);
@@ -994,7 +1075,7 @@ function MinutesDialog({
   }, [open, framework]);
 
   const todayTotal = items
-    .filter((l) => l.framework === framework && l.date === todayISO())
+    .filter((l) => l.framework === framework && l.date === date)
     .reduce((s, l) => s + l.minutes, 0);
 
   return (
@@ -1007,7 +1088,7 @@ function MinutesDialog({
       <DialogContent dir="rtl" className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Icon className="size-5 text-primary" /> {title}
+            <Icon className="size-5 text-primary" /> {title} ({dayFull})
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-2">
@@ -1046,14 +1127,14 @@ function MinutesDialog({
             ))}
           </div>
           {todayTotal > 0 && (
-            <p className="text-2xs text-muted-foreground">
-              נרשמו היום {todayTotal} דק׳ במסגרת זו — הרישום החדש יתווסף אליהן.
+            <p className="text-xs text-muted-foreground">
+              נרשמו {inDay(dayFull)} {todayTotal} דק׳ במסגרת זו — הרישום החדש יתווסף אליהן.
             </p>
           )}
         </div>
         <DialogFooter className="flex-row-reverse gap-2 sm:justify-start">
           <Button onClick={() => onApply(framework, minutes)}>
-            <Check className="size-4" /> הוסף
+            <Check className="size-4" aria-hidden="true" /> הוסף ל{dayFull}
           </Button>
           <Button variant="ghost" onClick={onClose}>
             <X className="size-4" /> ביטול
@@ -1065,14 +1146,22 @@ function MinutesDialog({
 }
 
 /** The month, in the figures the user actually asks about. */
-function MonthStatsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function MonthStatsDialog({
+  open,
+  onClose,
+  date,
+}: {
+  open: boolean;
+  onClose: () => void;
+  date: string;
+}) {
   const { entries } = useSeder();
   const { items: lessons } = useLearning();
   const { settings } = useSettings();
-  const now = new Date();
+  const now = parseISODate(date) ?? new Date();
   const monthEntries = entriesInMonth(entries, now.getFullYear(), now.getMonth());
   const s = summarizeEntries(monthEntries);
-  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthPrefix = monthPrefixOf(date);
   const learnFor = (framework: LearningFramework) =>
     lessons
       .filter((l) => l.framework === framework && l.date.startsWith(monthPrefix))
@@ -1108,7 +1197,8 @@ function MonthStatsDialog({ open, onClose }: { open: boolean; onClose: () => voi
       <DialogContent dir="rtl" className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <BarChart3 className="size-5 text-primary" /> נתוני החודש
+            <BarChart3 className="size-5 text-primary" aria-hidden="true" /> נתוני החודש{" "}
+            {now.toLocaleDateString("he-IL", { month: "long", year: "numeric" })}
           </DialogTitle>
         </DialogHeader>
         {s.entries === 0 ? (
@@ -1118,14 +1208,14 @@ function MonthStatsDialog({ open, onClose }: { open: boolean; onClose: () => voi
             {rows.map((r) => (
               <li key={r.label} className="flex items-baseline gap-2 px-3 py-2.5">
                 <span className="text-sm">{r.label}</span>
-                {r.hint && <span className="text-2xs text-muted-foreground">{r.hint}</span>}
+                {r.hint && <span className="text-xs text-muted-foreground">{r.hint}</span>}
                 <span className="flex-1" />
                 <span className="text-base font-bold tabular-nums">{r.value}</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {s.entries} רישומי סדר בחודש. לפירוט מלא — בתוכנה המלאה.
         </p>
         <DialogFooter className="flex-row-reverse gap-2 sm:justify-start">
@@ -1152,7 +1242,7 @@ function ChoiceRow({
   return (
     <button
       onClick={onSelect}
-      className={`w-full flex items-start gap-2.5 rounded-lg border-2 p-3 text-start pressable transition ${
+      className={`w-full flex items-start gap-2.5 rounded-md border-2 p-3 text-start pressable transition ${
         selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
       }`}
     >
@@ -1163,7 +1253,7 @@ function ChoiceRow({
       </span>
       <span className="min-w-0">
         <span className="block text-sm font-medium">{label}</span>
-        <span className="block text-2xs text-muted-foreground">{hint}</span>
+        <span className="block text-xs text-muted-foreground">{hint}</span>
       </span>
     </button>
   );

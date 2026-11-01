@@ -9,15 +9,20 @@ import { toast } from "sonner";
  * so `restore` is simply "write the record we still hold in hand back in" —
  * pass the entry that was captured *before* the delete.
  */
-export function toastUndo(message: string, restore: () => void) {
+export function toastUndo(message: string, restore: () => void | Promise<unknown>) {
   toast(message, {
     duration: 8000,
     action: {
       label: "בטל",
-      onClick: () => {
+      onClick: async () => {
         try {
-          restore();
-          toast.success("הרישום שוחזר");
+          // Success is announced only once a promise-returning restore has settled.
+          const outcome = await restore();
+          // A restore that hit an edit conflict is not "restored": the notice
+          // at the top of the screen asks what to do.
+          if ((outcome as { complete?: unknown } | undefined)?.complete === false)
+            toast.warning("הרישום לא שוחזר במלואו: נערך גם בחלון אחר");
+          else toast.success("הרישום שוחזר");
         } catch (e) {
           toast.error(e instanceof Error ? e.message : "השחזור נכשל");
         }

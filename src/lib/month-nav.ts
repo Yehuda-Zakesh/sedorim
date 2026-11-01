@@ -54,3 +54,21 @@ export function monthsWithData(...lists: { date: string }[][]): string[] {
   }
   return [...keys].sort().reverse();
 }
+
+/** "27.10.2026" — how a day is written on screen. ISO stays for keys and links. */
+export function formatDateDots(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+}
+
+export type MonthScoreKind = "none" | "zero" | "score";
+
+/**
+ * What a month's bar in the twelve-month chart should say. A month with
+ * records and a score of 0 was measured; a month without records was not — the
+ * two must not look alike, and the zero must not be given a height.
+ */
+export function classifyMonthScore(entryCount: number, score: number): MonthScoreKind {
+  if (entryCount <= 0) return "none";
+  return score > 0 ? "score" : "zero";
+}

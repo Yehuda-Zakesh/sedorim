@@ -9,6 +9,7 @@
 import type { ColorTheme, BgTheme } from "./settings-store";
 
 export const COLOR_THEMES: { id: ColorTheme; label: string; hex: string }[] = [
+  { id: "ink", label: "ירוק דיו", hex: "#354A3A" },
   { id: "blue", label: "כחול", hex: "#1565C0" },
   { id: "indigo", label: "אינדיגו", hex: "#3F51B5" },
   { id: "violet", label: "סגול", hex: "#7C3AED" },
@@ -23,8 +24,8 @@ export const COLOR_THEMES: { id: ColorTheme; label: string; hex: string }[] = [
 ];
 
 export const BG_THEMES: { id: BgTheme; label: string; hex: string }[] = [
-  { id: "white", label: "לבן (ברירת מחדל)", hex: "#F5F5F5" },
-  { id: "paper", label: "נייר", hex: "#FAF8F1" },
+  { id: "white", label: "חם (ברירת מחדל)", hex: "#F4F1EA" },
+  { id: "paper", label: "נייר בהיר", hex: "#FAF8F1" },
   { id: "cream", label: "שמנת", hex: "#F8F1DE" },
   { id: "sand", label: "חול", hex: "#F1E9D2" },
   { id: "peach", label: "אפרסק", hex: "#FAE3D0" },
@@ -35,7 +36,7 @@ export const BG_THEMES: { id: BgTheme; label: string; hex: string }[] = [
   { id: "gray", label: "אפור", hex: "#E5E5E5" },
 ];
 
-const FALLBACK_ACCENT = "#1565C0";
+const FALLBACK_ACCENT = "#354A3A";
 
 /** The chosen theme's accent as hex, for contexts that cannot read oklch. */
 export function colorThemeHex(id: ColorTheme | undefined): string {

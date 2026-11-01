@@ -26,6 +26,12 @@ export default defineConfig({
     // Fixed, because src-tauri/*/tauri.conf.json points devUrl here.
     port: 5173,
     strictPort: true,
+    watch: {
+      // cargo writes (and briefly locks) DLLs and PDBs under src-tauri/target;
+      // the watcher tried to follow them and the dev server died with EBUSY.
+      // Only the build output is ignored — the Rust sources stay watched.
+      ignored: ["**/src-tauri/target/**"],
+    },
   },
   build: {
     // Only ever runs in WebView2 (Edge/Chromium), so there is nothing to gain

@@ -39,6 +39,8 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { invoke, isDesktop } from "./tauri";
+import { isStoreWritable } from "./store-gate";
+import { logProblem } from "./diagnostics";
 import { sharedValue } from "./shared-state";
 import { getSettings } from "./settings-store";
 import { getSederTimesFor } from "./settings-store";
@@ -543,6 +545,10 @@ export function collectFacts(now = new Date()): ReminderFacts {
 
 /** Delivers whatever is due, and records what was delivered and how it landed. */
 export async function runReminderCheck(now = new Date()): Promise<DueNotification[]> {
+  // While the data file is not readable/writable nothing is said and nothing is
+  // marked: a reminder announced now could not be recorded as sent, and the
+  // facts it would be judged on are not the user's.
+  if (!isStoreWritable()) return [];
   const f = collectFacts(now);
   const decision = decideNotifications(f);
   const delivered: DueNotification[] = [];
@@ -564,14 +570,15 @@ export async function runReminderCheck(now = new Date()): Promise<DueNotificatio
   if (delivered.length) {
     const next = { ...sent.get() };
     for (const n of delivered) next[n.kind] = n.token;
-    sent.set(next);
+    // Checked: a failed mark must not look like a delivered-and-recorded one.
+    sent.setChecked(next).catch((err) => logProblem("סימון תזכורת כנשלחה", err));
   }
   // Settling a verdict and charging a cooldown both happen with nothing
   // delivered, so this is written whenever it moved — and only then. These
   // rules re-run every ten minutes in every open window, and each set() is a
   // write to the file the other EXE is polling.
   if (JSON.stringify(learning) !== JSON.stringify(learningStore.get())) {
-    learningStore.set(learning);
+    learningStore.setChecked(learning).catch((err) => logProblem("שמירת למידת ההתראות", err));
   }
   return delivered;
 }

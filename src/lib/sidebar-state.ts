@@ -13,11 +13,42 @@ import { useEffect, useState } from "react";
 const SB_KEY = "sederplus.sidebar.collapsed.v1";
 const SB_LEGACY_KEY = "kollel.sidebar.collapsed.v1";
 
+// The choice made in this session, so the toggle works even when localStorage
+// is unavailable (private window, blocked site data) — it just is not remembered.
+let sessionChoice: boolean | null = null;
+
+/** Below this window width the rail folds by itself. */
+export const SIDEBAR_AUTO_COLLAPSE_PX = 1000;
+
+/**
+ * The person's own choice: true/false once they have pressed the toggle, null
+ * while they never have. It is stored apart from the automatic fold — a narrow
+ * window must not overwrite it, and it wins over the window width.
+ */
+export function getSidebarChoice(): boolean | null {
+  if (typeof window === "undefined") return null;
+  if (sessionChoice !== null) return sessionChoice;
+  try {
+    // Pre-rename installs still carry the old key; read it once as a fallback.
+    const v = localStorage.getItem(SB_KEY) ?? localStorage.getItem(SB_LEGACY_KEY);
+    return v === "1" ? true : v === "0" ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isNarrowWindow(width: number): boolean {
+  return width < SIDEBAR_AUTO_COLLAPSE_PX;
+}
+
+/** Choice if there is one, otherwise whatever the window width asks for. */
+export function resolveSidebarCollapsed(choice: boolean | null, width: number): boolean {
+  return choice ?? isNarrowWindow(width);
+}
+
 export function getSidebarCollapsed(): boolean {
   if (typeof window === "undefined") return false;
-  // Pre-rename installs still carry the old key; read it once as a fallback.
-  const v = localStorage.getItem(SB_KEY) ?? localStorage.getItem(SB_LEGACY_KEY);
-  return v === "1";
+  return resolveSidebarCollapsed(getSidebarChoice(), window.innerWidth);
 }
 
 export function useSidebarCollapsed() {
@@ -25,11 +56,20 @@ export function useSidebarCollapsed() {
   useEffect(() => {
     const h = () => setC(getSidebarCollapsed());
     window.addEventListener("kollel:sidebar", h);
-    return () => window.removeEventListener("kollel:sidebar", h);
+    window.addEventListener("resize", h);
+    return () => {
+      window.removeEventListener("kollel:sidebar", h);
+      window.removeEventListener("resize", h);
+    };
   }, []);
   const toggle = () => {
     const next = !getSidebarCollapsed();
-    localStorage.setItem(SB_KEY, next ? "1" : "0");
+    sessionChoice = next;
+    try {
+      localStorage.setItem(SB_KEY, next ? "1" : "0");
+    } catch {
+      /* unavailable storage: sessionChoice above still carries it for this session */
+    }
     window.dispatchEvent(new Event("kollel:sidebar"));
   };
   return { collapsed: c, toggle };

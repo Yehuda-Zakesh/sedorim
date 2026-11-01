@@ -16,9 +16,9 @@ const TONE_CLASSES: Record<Tone, string> = {
 };
 
 const BADGE_SIZES = {
-  sm: "size-8 rounded-md",
-  md: "size-9 rounded-md",
-  lg: "size-10 rounded-lg",
+  sm: "size-8 rounded-sm",
+  md: "size-9 rounded-sm",
+  lg: "size-10 rounded-md",
 } as const;
 
 /** An icon in a tinted rounded square — the app's most repeated visual unit. */
@@ -109,7 +109,7 @@ export function KpiCard({
   );
 }
 
-/** A bordered label/number tile — the building block of the summary grids. */
+/** A label and a figure, ruled at the start — the building block of the summary grids. */
 export function StatTile({
   label,
   value,
@@ -123,15 +123,19 @@ export function StatTile({
   hint?: string;
 }) {
   return (
-    <div className="rounded-lg border border-border p-3">
+    <div className="border-s-2 border-border ps-3">
       <div className="flex items-center gap-2">
         {dot && (
-          <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+          <span
+            className="size-2 rounded-full shrink-0"
+            style={{ backgroundColor: dot }}
+            aria-hidden="true"
+          />
         )}
-        <span className="text-xs text-muted-foreground truncate">{label}</span>
+        <span className="eyebrow truncate">{label}</span>
       </div>
-      <div className="mt-2 text-2xl font-bold">{value}</div>
-      {hint && <div className="text-2xs text-muted-foreground mt-0.5">{hint}</div>}
+      <div className="figure mt-1 text-2xl font-semibold">{value}</div>
+      {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
     </div>
   );
 }

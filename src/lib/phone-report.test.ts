@@ -9,6 +9,12 @@ import {
   setReported,
   REPORT_WINDOW_LAST_DAY,
 } from "./phone-report";
+import { setStoreGate } from "@/lib/store-gate";
+
+// These tests exercise the stores as if the data file had been read: writes are
+// refused until the gate is "ready" (see store-gate.ts). In this environment the
+// real startup read finds no storage, so the gate is opened before every test.
+beforeEach(() => setStoreGate("ready"));
 
 beforeEach(() => {
   // Each test starts with nothing reported.

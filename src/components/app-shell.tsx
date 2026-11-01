@@ -4,8 +4,11 @@ import { Moon, Sun, Monitor, Keyboard, Search } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { AppSidebar } from "./app-sidebar";
 import { useSidebarCollapsed } from "@/lib/sidebar-state";
+import { SectionTabs } from "./section-tabs";
+import { TimerBar } from "./timer-bar";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { useTheme } from "@/lib/use-theme";
+import { StoreGuard } from "@/components/store-recovery";
 import { applyAppearance, useSettings, useNeedsOnboarding } from "@/lib/settings-store";
 import { useGlobalShortcuts } from "@/lib/shortcuts";
 import { useReminderNotifications } from "@/lib/notifications";
@@ -46,7 +49,7 @@ function useScrolled() {
   return scrolled;
 }
 
-/** The identical bordered icon control the header had written out three times. */
+/** The quiet icon control of the header — no box until it is pointed at. */
 function HeaderButton({
   as: As = "button",
   label,
@@ -63,7 +66,7 @@ function HeaderButton({
     <Comp
       {...rest}
       aria-label={label}
-      className="pressable inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent"
+      className="pressable inline-grid size-10 [@media(max-height:640px)]:size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       {children}
     </Comp>
@@ -115,44 +118,58 @@ export function AppShell({
       {/* `ms-`, not `mr-`: the rail is pinned to the inline start, which is the
           right only because the document is RTL. */}
       <div
-        className={`${collapsed ? "ms-[64px]" : "ms-[220px]"} flex flex-col min-h-screen transition-[margin] duration-200 ease-[var(--ease-out-soft)]`}
+        className={`${collapsed ? "ms-[64px]" : "ms-[208px]"} flex flex-col min-h-screen transition-[margin] duration-200 ease-[var(--ease-out-soft)]`}
       >
-        {/* A translucent layer with the page passing underneath it, and a seam
-            that only appears once there is something to separate from — a
-            permanent 1px rule under a header floating over blank space is a
-            line drawn for no reason. */}
-        <header data-scrolled={scrolled} className="sticky top-0 z-20 glass-regular scroll-edge">
-          <div className="flex items-center justify-between gap-4 px-6 py-3.5">
-            <div>
-              <h1 className="text-lg font-semibold">{title}</h1>
-              {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+        {/* One solid band: the screen's name, what it is about, the tabs of its
+            area, and — when a timer is running — the timer. It is a single
+            sticky block so the timer is never scrolled out of reach, and it is
+            opaque: nothing is read through it. */}
+        <header
+          data-scrolled={scrolled}
+          className="sticky top-0 z-20 border-b border-border bg-background"
+        >
+          <div className="flex items-start justify-between gap-4 px-[var(--density-page)] pt-4 pb-2 [@media(max-height:640px)]:pt-1.5 [@media(max-height:640px)]:pb-1">
+            <div className="min-w-0">
+              <h1 className="title-serif text-2xl truncate [@media(max-height:640px)]:text-xl">
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="mt-0.5 text-sm text-muted-foreground [@media(max-height:640px)]:mt-0 [@media(max-height:640px)]:truncate">
+                  {subtitle}
+                </p>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1">
               {actions}
-              <HeaderButton as={Link} to="/search" title="חיפוש" label="חיפוש">
-                <Search className="size-4" />
+              <HeaderButton as={Link} to="/search" title="חיפוש מתקדם (/)" label="חיפוש מתקדם">
+                <Search className="size-[18px]" aria-hidden="true" />
               </HeaderButton>
               <HeaderButton
                 onClick={() => setHelpOpen(true)}
                 title="קיצורי מקלדת (?)"
                 label="קיצורי מקלדת"
               >
-                <Keyboard className="size-4" />
+                <Keyboard className="size-[18px]" aria-hidden="true" />
               </HeaderButton>
               <HeaderButton
                 onClick={cycle}
                 title={`ערכת נושא: ${label}`}
                 label={`ערכת נושא: ${label}`}
               >
-                <Icon className="size-4" />
-                <span className="hidden sm:inline">{label}</span>
+                <Icon className="size-[18px]" aria-hidden="true" />
               </HeaderButton>
             </div>
           </div>
+          <SectionTabs />
+          <TimerBar />
         </header>
-        <main className="flex-1 p-6">{children}</main>
-        <footer className="border-t border-border glass-thin px-6 py-3 text-center text-2xs text-muted-foreground">
-          סדר פלוס · כל הזכויות לא שמורות · גרסה {APP_VERSION}
+        <main className="page-pad flex-1">
+          <div className="mx-auto w-full max-w-[80rem]">
+            <StoreGuard>{children}</StoreGuard>
+          </div>
+        </main>
+        <footer className="px-[var(--density-page)] py-3 text-xs text-muted-foreground">
+          סדר פלוס · גרסה {APP_VERSION}
         </footer>
       </div>
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />

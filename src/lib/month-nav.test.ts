@@ -87,3 +87,20 @@ describe("monthsWithData", () => {
     expect(out).toEqual(["2026-08", "2026-04"]);
   });
 });
+
+import { classifyMonthScore, formatDateDots } from "./month-nav";
+
+describe("classifyMonthScore", () => {
+  it("separates no data, a measured zero and a score", () => {
+    expect(classifyMonthScore(0, 0)).toBe("none");
+    expect(classifyMonthScore(4, 0)).toBe("zero");
+    expect(classifyMonthScore(4, 63)).toBe("score");
+  });
+});
+
+describe("formatDateDots", () => {
+  it("writes day.month.year", () => {
+    expect(formatDateDots("2026-10-27")).toBe("27.10.2026");
+    expect(formatDateDots("garbage")).toBe("garbage");
+  });
+});

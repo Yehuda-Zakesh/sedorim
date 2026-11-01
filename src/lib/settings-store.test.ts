@@ -18,6 +18,12 @@ import {
   type Settings,
 } from "./settings-store";
 import { hhmmToMin } from "./kollel-store";
+import { setStoreGate } from "@/lib/store-gate";
+
+// These tests exercise the stores as if the data file had been read: writes are
+// refused until the gate is "ready" (see store-gate.ts). In this environment the
+// real startup read finds no storage, so the gate is opened before every test.
+beforeEach(() => setStoreGate("ready"));
 
 const BASE: SederTimes = {
   s1Start: DEFAULT_SETTINGS.seder.s1Start,
@@ -78,6 +84,7 @@ describe("DEFAULT_SETTINGS", () => {
     expect(["off", "daily", "weekly"]).toContain(DEFAULT_SETTINGS.data.autoBackup);
     expect(["small", "normal", "large", "xlarge"]).toContain(DEFAULT_SETTINGS.appearance.fontSize);
     expect([
+      "ink",
       "blue",
       "emerald",
       "violet",

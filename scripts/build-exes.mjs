@@ -19,6 +19,8 @@ import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { sourceLabel } from "./source-fingerprint.mjs";
+
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const outDir = path.join(root, "release-win");
 const buildInfoFile = path.join(root, "src", "lib", "build-info.ts");
@@ -44,9 +46,9 @@ let stampedCommit = "unknown";
 // so running this never leaves a dirty working tree.
 function stampBuildInfo() {
   try {
-    stampedCommit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root })
-      .toString()
-      .trim();
+    // The short commit, plus +dirty.<hash of the sources> when there are
+    // changes that are not committed (see scripts/source-fingerprint.mjs).
+    stampedCommit = sourceLabel();
   } catch {
     console.warn("⚠  Could not read the git commit — About will show 'unknown'.");
   }

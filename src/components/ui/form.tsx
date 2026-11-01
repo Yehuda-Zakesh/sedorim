@@ -1,37 +1,82 @@
 // Form controls shared by Settings, the onboarding wizard and the record
 // screens. The raw look lives in the `field-input` utility in styles.css so
 // that plain <input>s elsewhere match these without importing anything.
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
+import { finalNumber, liveNumber } from "@/lib/number-input";
 
-/** Label on the right, control filling the rest — the Settings row layout. */
+/** How wide the control of a row is — sized to what goes in it, not to the row. */
+export type ControlWidth = "time" | "number" | "select" | "text";
+const WIDTHS: Record<ControlWidth, string> = {
+  time: "w-32",
+  number: "w-28",
+  select: "w-44",
+  text: "w-72",
+};
+
+/**
+ * One setting: the label (and a short explanation) at the start, the control at
+ * the end, at the width its value needs. Narrow windows stack the two.
+ */
+function FieldRow({
+  id,
+  label,
+  note,
+  width,
+  children,
+}: {
+  id: string;
+  label: string;
+  note?: ReactNode;
+  width: ControlWidth;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+      <div className="min-w-0 flex-1 basis-48">
+        <label htmlFor={id} className="text-sm">
+          {label}
+        </label>
+        {note && (
+          <p id={`${id}-note`} className="mt-0.5 text-xs text-muted-foreground">
+            {note}
+          </p>
+        )}
+      </div>
+      <div className={`max-w-full shrink-0 ${WIDTHS[width]}`}>{children}</div>
+    </div>
+  );
+}
+
 export function Field({
   label,
   value,
   onChange,
   maxLength = 80,
   placeholder,
+  note,
+  width = "text",
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   maxLength?: number;
   placeholder?: string;
+  note?: ReactNode;
+  width?: ControlWidth;
 }) {
   const id = useId();
   return (
-    <div className="grid grid-cols-3 gap-3 items-center">
-      <label htmlFor={id} className="text-xs text-muted-foreground">
-        {label}
-      </label>
+    <FieldRow id={id} label={label} note={note} width={width}>
       <input
         id={id}
         value={value}
         maxLength={maxLength}
         placeholder={placeholder}
+        aria-describedby={note ? `${id}-note` : undefined}
         onChange={(e) => onChange(e.target.value)}
-        className="field-input col-span-2 w-full"
+        className="field-input w-full"
       />
-    </div>
+    </FieldRow>
   );
 }
 
@@ -41,29 +86,59 @@ export function NumberField({
   min,
   max,
   onChange,
+  note,
+  unit,
+  width = "number",
 }: {
   label: string;
   value: number;
   min: number;
   max: number;
   onChange: (v: number) => void;
+  note?: ReactNode;
+  /** Shown inside the box edge, e.g. "דק׳"; the label stays the accessible name. */
+  unit?: string;
+  width?: ControlWidth;
 }) {
   const id = useId();
+  // Text while the box has focus; the stored number otherwise. Valid in-range
+  // values are committed as they are typed, the rest waits for blur.
+  const [draft, setDraft] = useState<string | null>(null);
   return (
-    <div className="grid grid-cols-3 gap-3 items-center">
-      <label htmlFor={id} className="text-xs text-muted-foreground">
-        {label}
-      </label>
-      <input
-        id={id}
-        type="number"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, +e.target.value || 0)))}
-        className="field-input col-span-2 w-full"
-      />
-    </div>
+    <FieldRow id={id} label={label} note={note} width={width}>
+      <div className="flex items-center gap-2">
+        <input
+          id={id}
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          value={draft ?? value}
+          aria-describedby={note ? `${id}-note` : undefined}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            const n = liveNumber(e.target.value, min, max);
+            if (n !== null) onChange(n);
+          }}
+          onBlur={(e) => {
+            onChange(finalNumber(e.target.value, min, max));
+            setDraft(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            // Commit the clamped value first, then let an enclosing form submit
+            // on the next tick — after the parent has re-rendered with it.
+            e.preventDefault();
+            const form = e.currentTarget.form;
+            onChange(finalNumber(e.currentTarget.value, min, max));
+            setDraft(null);
+            if (form) setTimeout(() => form.requestSubmit(), 0);
+          }}
+          className="field-input w-full min-w-0 tabular-nums"
+        />
+        {unit && <span className="shrink-0 text-xs text-muted-foreground">{unit}</span>}
+      </div>
+    </FieldRow>
   );
 }
 
@@ -72,23 +147,25 @@ export function SelectField({
   value,
   options,
   onChange,
+  note,
+  width = "select",
 }: {
   label: string;
   value: string;
   options: { v: string; l: string }[];
   onChange: (v: string) => void;
+  note?: ReactNode;
+  width?: ControlWidth;
 }) {
   const id = useId();
   return (
-    <div className="grid grid-cols-3 gap-3 items-center">
-      <label htmlFor={id} className="text-xs text-muted-foreground">
-        {label}
-      </label>
+    <FieldRow id={id} label={label} note={note} width={width}>
       <select
         id={id}
         value={value}
+        aria-describedby={note ? `${id}-note` : undefined}
         onChange={(e) => onChange(e.target.value)}
-        className="field-input col-span-2 w-full"
+        className="field-input w-full"
       >
         {options.map((o) => (
           <option key={o.v} value={o.v}>
@@ -96,7 +173,7 @@ export function SelectField({
           </option>
         ))}
       </select>
-    </div>
+    </FieldRow>
   );
 }
 
@@ -153,10 +230,13 @@ export function TimeField({
  */
 export function Toggle({
   label,
+  note,
   on,
   onChange,
 }: {
   label: ReactNode;
+  /** Quiet explanation under the label — what the switch does, in one line. */
+  note?: ReactNode;
   on: boolean;
   onChange: (v: boolean) => void;
 }) {
@@ -166,23 +246,32 @@ export function Toggle({
       role="switch"
       aria-checked={on}
       onClick={() => onChange(!on)}
-      className="pressable-lg group flex w-full items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 text-start hover:bg-accent/40"
+      className="pressable-lg group flex min-h-11 w-full items-center justify-between gap-4 rounded-md py-1.5 text-start hover:bg-accent/40"
     >
-      <span className="text-sm">{label}</span>
-      <span
-        aria-hidden="true"
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${on ? "bg-primary" : "bg-muted"}`}
-      >
-        {/* The track is RTL like the rest of the app: the knob rests at the
-            inline-start edge when on, and travels 20px towards the end (which
-            is leftwards here) when off. */}
+      <span className="min-w-0">
+        <span className="block text-sm">{label}</span>
+        {note && <span className="mt-0.5 block text-xs text-muted-foreground">{note}</span>}
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        {/* The state in words as well as in the track: colour is not the only cue. */}
+        <span className="text-xs text-muted-foreground" aria-hidden="true">
+          {on ? "פועל" : "כבוי"}
+        </span>
         <span
-          className="absolute top-0.5 start-0.5 size-5 rounded-full bg-card shadow-sm"
-          style={{
-            transform: on ? "translateX(0)" : "translateX(-20px)",
-            transition: "transform 240ms var(--ease-spring)",
-          }}
-        />
+          aria-hidden="true"
+          className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors duration-200 ${on ? "border-primary bg-primary" : "border-input bg-muted"}`}
+        >
+          {/* The track is RTL like the rest of the app: the knob rests at the
+              inline-start edge when on, and travels 20px towards the end (which
+              is leftwards here) when off. */}
+          <span
+            className="absolute top-[3px] start-[3px] size-4 rounded-full bg-card shadow-sm"
+            style={{
+              transform: on ? "translateX(0)" : "translateX(-20px)",
+              transition: "transform 240ms var(--ease-spring)",
+            }}
+          />
+        </span>
       </span>
     </button>
   );

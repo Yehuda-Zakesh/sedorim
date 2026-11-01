@@ -1,36 +1,49 @@
-import { Keyboard, X } from "lucide-react";
+// The keyboard-shortcut list, as a real dialog: Radix supplies role="dialog",
+// the focus trap, Escape, focus return to whatever opened it, and the scroll
+// lock. The rows are read from SHORTCUTS, so the list cannot drift from what
+// the shortcuts actually do.
 import { SHORTCUTS } from "@/lib/shortcuts";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function ShortcutsHelp({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-sm grid place-items-center p-4"
-      onClick={onClose}
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
     >
-      <div className="card-surface w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 mb-4">
-          <Keyboard className="size-5 text-primary" />
-          <h2 className="text-base font-semibold flex-1">קיצורי מקלדת</h2>
-          <button
-            onClick={onClose}
-            className="size-8 rounded-md hover:bg-accent grid place-items-center"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <ul className="divide-y divide-border text-sm">
+      <DialogContent dir="rtl" className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="title-serif text-xl">קיצורי מקלדת</DialogTitle>
+          <DialogDescription>
+            הקיצורים פועלים כשאין שדה טקסט בפוקוס. Escape סוגר חלון זה.
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="ledger text-sm">
           {SHORTCUTS.map((s) => (
-            <li key={s.keys} className="flex items-center justify-between py-2">
+            <li key={s.keys} className="row-pad flex items-center justify-between gap-3">
               <span>{s.label}</span>
-              <span className="font-mono text-xs px-2 py-1 rounded bg-muted">{s.keys}</span>
+              <kbd
+                className="figure rounded-sm border border-border bg-secondary px-2 py-0.5 font-mono text-xs text-foreground"
+                dir="ltr"
+              >
+                {s.keys}
+              </kbd>
             </li>
           ))}
         </ul>
-        <p className="mt-4 text-xs text-muted-foreground">
-          קיצורים כפולים (כמו <span className="font-mono">g d</span>) — הקש בזה אחר זה תוך שנייה.
+        <p className="text-sm text-muted-foreground">
+          קיצור בשני חלקים (כמו <span className="font-mono">g d</span>): מקישים את שני המקשים זה אחר
+          זה, תוך שנייה.
         </p>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

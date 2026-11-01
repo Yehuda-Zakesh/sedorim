@@ -3,21 +3,19 @@ import { useNavigate } from "@tanstack/react-router";
 
 export type Shortcut = { keys: string; label: string; to?: string; action?: () => void };
 
-// Labels match the sidebar's, so the help dialog and the menu name the same
-// screen the same way. Every entry here has a matching sidebar item — see
-// NAV_GROUPS in src/components/app-sidebar.tsx.
+// Every target here is a tab of one of the areas in src/lib/nav.ts.
 export const SHORTCUTS: Shortcut[] = [
-  { keys: "g d", label: "לוח בקרה", to: "/" },
-  { keys: "g a", label: "נוכחות סדרים", to: "/attendance" },
-  { keys: "g c", label: "לוח שנה", to: "/calendar" },
-  { keys: "g h", label: "היסטוריה", to: "/history" },
+  { keys: "g d", label: "היום", to: "/" },
+  { keys: "g a", label: "רישום נוכחות", to: "/attendance" },
+  { keys: "g h", label: "היומן שלי — רשימה", to: "/history" },
+  { keys: "g c", label: "היומן שלי — לוח שנה", to: "/calendar" },
   { keys: "g l", label: "לימוד נוסף", to: "/learning" },
-  { keys: "g s", label: "סטטיסטיקות ותובנות", to: "/statistics" },
-  { keys: "g m", label: "מחשבון מלגה", to: "/stipend" },
+  { keys: "g s", label: "סיכום חודש", to: "/statistics" },
+  { keys: "g m", label: "מלגה", to: "/stipend" },
   { keys: "g r", label: "דוחות", to: "/reports" },
-  { keys: "g b", label: "גיבוי ושחזור", to: "/backup" },
+  { keys: "g b", label: "נתונים וגיבוי", to: "/backup" },
   { keys: "g ,", label: "הגדרות", to: "/settings" },
-  { keys: "/", label: "חיפוש", to: "/search" },
+  { keys: "/", label: "חיפוש מתקדם", to: "/search" },
   { keys: "?", label: "הצג קיצורי דרך" },
 ];
 

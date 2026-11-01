@@ -44,7 +44,7 @@ const DialogContent = React.forwardRef<
       // desktop window, there is no phone-width case where a sheet should go
       // square-cornered, and the app's own cards are all `--radius-xl`.
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-border bg-popover text-popover-foreground p-6 shadow-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border border-border bg-popover text-popover-foreground p-6 shadow-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className,
       )}
       {...props}
@@ -53,9 +53,11 @@ const DialogContent = React.forwardRef<
       {/* `end-4`, not `right-4`: the app is RTL, so the close control belongs
           at the inline end — the left — where it isn't sitting on top of the
           first word of the title. */}
-      <DialogPrimitive.Close className="pressable absolute end-4 top-4 grid size-7 place-items-center rounded-md text-muted-foreground opacity-80 hover:bg-accent hover:text-foreground hover:opacity-100 disabled:pointer-events-none">
-        <X className="size-4" />
-        <span className="sr-only">סגירה</span>
+      <DialogPrimitive.Close
+        aria-label="סגירה"
+        className="pressable absolute end-4 top-4 grid size-7 place-items-center rounded-md text-muted-foreground opacity-80 hover:bg-accent hover:text-foreground hover:opacity-100 disabled:pointer-events-none"
+      >
+        <X className="size-4" aria-hidden="true" />
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>

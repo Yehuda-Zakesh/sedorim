@@ -1,26 +1,20 @@
-// Statistics and insights, on one screen.
+// Statistics and insights: the month summary page.
 //
-// They used to be two: /statistics with the charts and /insights with the
-// sentences — both opening with the same four figures (score, streak,
-// forecast, consistency), so the app answered "how am I doing" twice, in two
-// places, slightly differently.
+// Three periods live on this screen and each has its own section, titled for
+// what is inside it, so a figure never sits under a heading that contradicts it:
 //
-// The order here is deliberate, and it is the order a person actually asks in:
-// how am I doing → what happened this month → what should I do → and then the
-// charts, for whoever wants to look further.
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+//   1. the selected month  — everything that changes with the month picker;
+//   2. as of today         — streak, forecast, consistency and the insights,
+//                            which are always computed for the present;
+//   3. trends              — twelve months, the weekday split and the heat map.
+//
+// Each datum appears once. The verdict says it in a sentence, the ledger beside
+// it gives the measured figures, and the charts are folded away for whoever
+// wants to look further.
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import {
-  TrendingUp,
-  Lightbulb,
-  CheckCircle2,
-  AlertTriangle,
-  Target,
-  BarChart3,
-  ChevronDown,
-  Users,
-} from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import {
   useSeder,
   useLearning,
@@ -43,7 +37,18 @@ import {
   type Insight,
 } from "@/lib/insights";
 import { hebrewFromGregorian, formatHebrewMonthYear, isWeekend } from "@/lib/hebrew-calendar";
-import { StatTile, IconBadge, type Tone } from "@/components/ui/stat";
+import { MonthPicker } from "@/components/month-picker";
+import { PageSection, LedgerRow, StatusMark, Figure, Notice } from "@/components/ui/ledger";
+import type { MarkTone } from "@/components/ui/ledger";
+import { useSelectedMonth } from "@/lib/period";
+import {
+  classifyMonthScore,
+  currentMonthKey,
+  formatDateDots,
+  monthKeyLabel,
+  monthsWithData,
+} from "@/lib/month-nav";
+import { calcStipend } from "@/lib/stipend";
 
 export const Route = createFileRoute("/statistics")({
   head: () => ({ meta: [{ title: "סטטיסטיקות ותובנות — סדר פלוס" }] }),
@@ -55,21 +60,18 @@ export const Route = createFileRoute("/statistics")({
 // nothing recorded — they are not days the breakdown has anything to say about.
 const LEARNING_WEEKDAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי"];
 
-const VERDICT_STYLES: Record<
-  Insight["tone"],
-  { border: string; badge: Tone; icon: typeof CheckCircle2 }
-> = {
-  success: { border: "border-s-success", badge: "success", icon: CheckCircle2 },
-  info: { border: "border-s-info", badge: "info", icon: Lightbulb },
-  warning: { border: "border-s-warning", badge: "warning", icon: AlertTriangle },
-  destructive: { border: "border-s-destructive", badge: "destructive", icon: AlertTriangle },
+const TONE_MARK: Record<Insight["tone"], MarkTone> = {
+  success: "present",
+  info: "none",
+  warning: "late",
+  destructive: "absent",
 };
 
 /** The three insight buckets, in the order they are worth reading. */
 const BUCKETS = [
-  { key: "trend", label: "מה קורה", icon: TrendingUp },
-  { key: "opportunity", label: "מה כדאי לשפר", icon: Target },
-  { key: "recommendation", label: "המלצות", icon: Lightbulb },
+  { key: "trend", label: "מה קורה" },
+  { key: "opportunity", label: "מה כדאי לשפר" },
+  { key: "recommendation", label: "המלצות" },
 ] as const;
 
 function StatisticsPage() {
@@ -77,16 +79,20 @@ function StatisticsPage() {
   const { items: lessons } = useLearning();
   const { settings } = useSettings();
 
-  const now = new Date();
-  const y = now.getFullYear(),
-    m = now.getMonth();
+  const [month, setMonth] = useSelectedMonth();
+  const months = useMemo(() => monthsWithData(entries, lessons), [entries, lessons]);
+  const [y, mNum] = month.split("-").map(Number);
+  const m = mNum - 1;
+  const monthLabel = monthKeyLabel(month);
   const monthEntries = entriesInMonth(entries, y, m);
   const summary = summarizeEntries(monthEntries);
   const score = scoreEntries(monthEntries);
+  const arrivalOffset = averageArrivalOffsetMin(monthEntries);
+
+  // Today's figures: they do not move with the month picker.
   const streak = currentDayStreak();
   const forecast = forecastMonthlyNetMissing();
   const consistency = consistencyScore();
-  const arrivalOffset = averageArrivalOffsetMin(monthEntries);
 
   const verdict = monthVerdict({
     score,
@@ -97,6 +103,7 @@ function StatisticsPage() {
     maxLatePerMonth: settings.goals.maxLatePerMonth,
   });
 
+  // generateInsights reads the present month, whatever month is selected.
   const insights = generateInsights(entries, lessons, {
     monthlyTarget: settings.goals.monthlyTarget,
     maxLatePerMonth: settings.goals.maxLatePerMonth,
@@ -109,133 +116,214 @@ function StatisticsPage() {
   };
   for (const i of insights) grouped[i.category].push(i);
 
-  const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
-  const learnMin = lessons
-    .filter((l) => l.date.startsWith(monthPrefix))
-    .reduce((s, l) => s + effectiveLearningMin(l), 0);
-
-  const style = VERDICT_STYLES[verdict.tone];
+  const monthLessons = lessons.filter((l) => l.date.startsWith(month));
+  const learnMin = monthLessons.reduce((s, l) => s + effectiveLearningMin(l), 0);
+  const learnRawMin = monthLessons.reduce((s, l) => s + l.minutes, 0);
+  const priorApproval = (settings.stipend?.approvedMonths ?? []).includes(month);
+  const stipend = calcStipend({
+    monthKey: month,
+    entries,
+    lessons,
+    shasChavura: settings.seder.shasChavura,
+    priorApproval,
+  });
+  const nisFmt = (n: number) => `${n < 0 ? "−" : ""}${Math.abs(n).toLocaleString("he-IL")} ₪`;
+  const hasAttendance = summary.entries > 0;
+  const noData = !hasAttendance && monthLessons.length === 0;
+  const hasInsights = insights.length > 0;
 
   return (
     <AppShell title="סטטיסטיקות ותובנות" subtitle="איך נראה החודש, ומה כדאי לעשות">
-      {/* 1 — the answer, in a sentence. */}
-      <section className={`card-surface p-5 border-s-4 ${style.border}`}>
-        <div className="flex items-start gap-4">
-          <IconBadge icon={style.icon} tone={style.badge} size="lg" />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold">{verdict.headline}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{verdict.sentence}</p>
-          </div>
-          <ScoreRing score={score} target={settings.goals.monthlyTarget} />
-        </div>
-      </section>
+      <div className="stack-gap">
+        <MonthPicker value={month} months={months} onChange={setMonth} />
 
-      {/* 2 — the figures behind it, each with its unit spelled out. */}
-      <section className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile
-          label="דקות שחסרות החודש"
-          value={summary.netMissing}
-          hint={summary.excused > 0 ? `${summary.excused} דק׳ נוספות מוצדקות` : "אחרי הפחתת הבונוס"}
-        />
-        <StatTile
-          label="איחורים"
-          value={summary.lateCount}
-          dot="var(--status-late)"
-          hint={`מכסה חודשית: ${settings.goals.maxLatePerMonth}`}
-        />
-        <StatTile
-          label="היעדרויות"
-          value={summary.absenceCount}
-          dot="var(--status-absent)"
-          hint={`${summary.entries} סדרים נרשמו`}
-        />
-        <StatTile
-          label="סדרי אוהבי ה׳"
-          value={summary.oheveiCount}
-          dot="var(--status-present)"
-          hint="סדר מתחילתו ועד סופו"
-        />
-      </section>
+        {/* 1 — the selected month: the conclusion, and the figures behind it. */}
+        <PageSection title={`החודש הנבחר · ${monthLabel}`} aside="משתנה לפי בורר החודש">
+          {noData ? (
+            <Notice tone="info" title={`אין עדיין נתונים ל${monthLabel}`}>
+              לא נרשמו סדרים או לימוד נוסף בחודש זה, ולכן אין מה לסכם. רשום סדר או לימוד, או עבור
+              לחודש אחר.
+            </Notice>
+          ) : (
+            <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+              <div className="min-w-0">
+                {hasAttendance ? (
+                  <div className="flex items-start gap-4">
+                    <div className="min-w-0 flex-1">
+                      <StatusMark tone={TONE_MARK[verdict.tone]}>מסקנת החודש</StatusMark>
+                      <h3 className="title-serif mt-2 text-2xl">{verdict.headline}</h3>
+                      <p className="mt-1.5 text-sm text-muted-foreground">{verdict.sentence}</p>
+                    </div>
+                    <ScoreRing score={score} target={settings.goals.monthlyTarget} />
+                  </div>
+                ) : (
+                  <Notice tone="info" title={`אין רישומי סדר ב${monthLabel}`}>
+                    יש רק לימוד נוסף. ציון הנוכחות מחושב מרישומי סדר, ולכן אין לו ערך לחודש זה.
+                  </Notice>
+                )}
+              </div>
 
-      {/* One figure, so a row rather than a lone tile marooned in a
-          four-column grid with three empty cells beside it. */}
-      {settings.seder.shasChavura && (
-        <section className="mt-3 card-surface p-4 flex items-center gap-3">
-          <IconBadge icon={Users} tone="success" size="md" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">חבורת ש״ס</div>
-            <div className="text-2xs text-muted-foreground">
-              הגעות לסדר ב׳ עד {SHAS_ARRIVAL_DEADLINE}, החודש
+              <div className="min-w-0">
+                <div className="ledger" role="group" aria-label={`נתוני בפועל, ${monthLabel}`}>
+                  {hasAttendance && (
+                    <>
+                      <LedgerRow
+                        label="חסר נטו"
+                        note={
+                          summary.excused > 0
+                            ? `בנוסף ${summary.excused} דק׳ מוצדקות שאינן נכללות`
+                            : "אחרי הפחתת הבונוס"
+                        }
+                      >
+                        {summary.netMissing} דק׳
+                      </LedgerRow>
+                      <LedgerRow
+                        label="איחורים"
+                        note={`מכסה חודשית: ${settings.goals.maxLatePerMonth}`}
+                      >
+                        {summary.lateCount}
+                      </LedgerRow>
+                      <LedgerRow label="היעדרויות" note={`מתוך ${summary.entries} סדרים שנרשמו`}>
+                        {summary.absenceCount}
+                      </LedgerRow>
+                      <LedgerRow label="סדרי אוהבי ה׳" note="סדר מתחילתו ועד סופו">
+                        {summary.oheveiCount}
+                      </LedgerRow>
+                      {settings.seder.shasChavura && (
+                        <LedgerRow
+                          label="חבורת ש״ס"
+                          note={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`}
+                        >
+                          {summary.shasCount}
+                        </LedgerRow>
+                      )}
+                      <LedgerRow
+                        label="הרגל הגעה"
+                        note={
+                          arrivalOffset === null
+                            ? "אין מספיק רישומים עם שעת הגעה"
+                            : arrivalOffset <= 0
+                              ? "דק׳ לפני תחילת הסדר, בממוצע"
+                              : "דק׳ אחרי תחילת הסדר, בממוצע"
+                        }
+                      >
+                        {arrivalOffset === null
+                          ? "—"
+                          : `${arrivalOffset <= 0 ? "" : "+"}${arrivalOffset}`}
+                      </LedgerRow>
+                    </>
+                  )}
+                  <LedgerRow
+                    label="לימוד נוסף מזכה"
+                    note={
+                      learnRawMin !== learnMin
+                        ? `${learnRawMin} דק׳ בפועל · תענית דיבור נספרת כפול`
+                        : `${learnRawMin} דק׳ בפועל · ${(learnMin / 60).toFixed(1)} שעות`
+                    }
+                  >
+                    {learnMin} דק׳
+                  </LedgerRow>
+                  <LedgerRow
+                    label="מלגה מחושבת"
+                    note={
+                      <>
+                        להמחשה בלבד ·{" "}
+                        <Link to="/stipend" className="text-primary underline underline-offset-2">
+                          לפירוט החישוב
+                        </Link>
+                      </>
+                    }
+                  >
+                    <bdi dir="ltr">{nisFmt(stipend.totalNis)}</bdi>
+                  </LedgerRow>
+                </div>
+                {(summary.lateCount > 0 || summary.absenceCount > 0) && (
+                  <p className="mt-3 text-sm">
+                    <Link
+                      to="/history"
+                      search={{ month, kind: "attendance", filter: "exceptions" }}
+                      className="text-primary underline underline-offset-2"
+                    >
+                      לרישומי האיחורים וההיעדרויות ב{monthLabel}, ביומן
+                    </Link>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </PageSection>
+
+        {/* 2 — today: independent of the month picker, and said so. */}
+        <PageSection
+          title="נכון להיום"
+          aside={
+            month === currentMonthKey()
+              ? "מדדים שמתייחסים להווה"
+              : `אינו תלוי ב${monthLabel}: מחושב להיום`
+          }
+        >
+          <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+            <div className="ledger">
+              <LedgerRow label="רצף ימים" note={streak > 0 ? "ימים ללא חיסור" : "מתחילים היום"}>
+                {streak}
+              </LedgerRow>
+              <LedgerRow
+                label="תחזית לסוף החודש הנוכחי"
+                note={
+                  forecast === null
+                    ? "אין מספיק נתונים לתחזית (נדרשים 3 סדרים)"
+                    : "תחזית, לא נתון בפועל: דק׳ חסרות לפי הקצב הנוכחי"
+                }
+              >
+                {forecast === null ? "—" : <>{forecast} דק׳ (תחזית)</>}
+              </LedgerRow>
+              <LedgerRow
+                label="ציון עקביות"
+                note={consistency === 0 ? "אין מספיק חודשים" : "יציבות מחודש לחודש"}
+              >
+                {consistency === 0 ? "—" : consistency}
+              </LedgerRow>
+            </div>
+
+            <div className="min-w-0">
+              <div className="eyebrow mb-1">תובנות · נכון להיום, לחודש הנוכחי</div>
+              {!hasInsights ? (
+                <p className="text-sm text-muted-foreground">
+                  {entries.length === 0
+                    ? "אין עדיין נתונים לתובנות. רשום סדר אחד כדי להתחיל."
+                    : "אין כרגע מה לדווח."}
+                </p>
+              ) : (
+                BUCKETS.map((bucket) =>
+                  grouped[bucket.key].length === 0 ? null : (
+                    <div key={bucket.key} className="mb-3">
+                      <h3 className="mt-3 text-sm font-semibold">{bucket.label}</h3>
+                      <ul className="ledger">
+                        {grouped[bucket.key].map((i) => (
+                          <li key={i.id} className="row-pad">
+                            <StatusMark tone={TONE_MARK[i.tone]}>{i.title}</StatusMark>
+                            <div className="mt-0.5 text-xs text-muted-foreground">{i.detail}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ),
+                )
+              )}
             </div>
           </div>
-          <div className="text-2xl font-bold tabular-nums">{summary.shasCount}</div>
-        </section>
-      )}
+        </PageSection>
 
-      <section className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile
-          label="רצף ימים"
-          value={streak}
-          hint={streak > 0 ? "ימים ללא חיסור" : "מתחילים היום"}
+        {/* 3 — the charts, folded away: useful, but not the first thing to read. */}
+        <Charts
+          entries={entries}
+          lessons={lessons}
+          year={y}
+          monthIdx={m}
+          monthLabel={monthLabel}
+          target={settings.goals.monthlyTarget}
         />
-        <StatTile
-          label="הרגל ההגעה"
-          value={arrivalOffset === null ? "—" : `${arrivalOffset <= 0 ? "" : "+"}${arrivalOffset}`}
-          hint={
-            arrivalOffset === null
-              ? "אין מספיק רישומים"
-              : arrivalOffset <= 0
-                ? `דק׳ לפני תחילת הסדר, בממוצע`
-                : "דק׳ אחרי תחילת הסדר, בממוצע"
-          }
-        />
-        <StatTile
-          label="צפי לסוף החודש"
-          value={forecast === null ? "—" : forecast}
-          hint={forecast === null ? "אין מספיק נתונים החודש" : "דק׳ חסרות, לפי הקצב הנוכחי"}
-        />
-        <StatTile
-          label="לימוד נוסף החודש"
-          value={learnMin}
-          hint={`${(learnMin / 60).toFixed(1)} שעות`}
-        />
-      </section>
-
-      {/* 3 — what to do about it. */}
-      <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {BUCKETS.map((bucket) => (
-          <div key={bucket.key} className="card-surface p-5">
-            <h2 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <bucket.icon className="size-4 text-primary" /> {bucket.label}
-            </h2>
-            {grouped[bucket.key].length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {summary.entries === 0 ? "רשום סדר אחד כדי להתחיל." : "אין כרגע מה לדווח כאן."}
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {grouped[bucket.key].map((i) => {
-                  const s = VERDICT_STYLES[i.tone];
-                  return (
-                    <li key={i.id} className="rounded-lg border border-border p-3">
-                      <div className="flex items-start gap-2">
-                        <IconBadge icon={s.icon} tone={s.badge} size="sm" />
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium">{i.title}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">{i.detail}</div>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        ))}
       </div>
-
-      {/* 4 — the charts, folded away: useful, but not the first thing to read. */}
-      <Charts entries={entries} lessons={lessons} consistency={consistency} />
     </AppShell>
   );
 }
@@ -243,17 +331,15 @@ function StatisticsPage() {
 /** The month's score as a ring — one glance instead of a number to interpret. */
 function ScoreRing({ score, target }: { score: number; target: number }) {
   const ok = score >= target;
-  const size = 78,
-    stroke = 7,
+  const size = 60,
+    stroke = 6,
     r = (size - stroke) / 2;
   const c = size / 2;
   const circumference = 2 * Math.PI * r;
 
   // The target, marked *on* the ring rather than only spelled out underneath
-  // it. The ring's whole job is to answer "am I there yet" without reading a
-  // number, and it couldn't do that while the thing being aimed at was absent
-  // from the picture. Angle measured clockwise from twelve o'clock, matching
-  // the -90° rotation the arc is drawn under.
+  // it. Angle measured clockwise from twelve o'clock, matching the -90°
+  // rotation the arc is drawn under.
   const theta = (Math.min(100, Math.max(0, target)) / 100) * 2 * Math.PI;
   const tick = (radius: number) => ({
     x: c + radius * Math.sin(theta),
@@ -266,7 +352,8 @@ function ScoreRing({ score, target }: { score: number; target: number }) {
     <div
       className="relative shrink-0"
       style={{ width: size, height: size }}
-      title={`ציון ${score} מתוך 100 · יעד ${target}`}
+      role="img"
+      aria-label={`ציון ${score} מתוך 100, יעד ${target}, ${ok ? "מעל היעד" : "מתחת ליעד"}`}
     >
       <svg width={size} height={size} aria-hidden="true">
         <g transform={`rotate(-90 ${c} ${c})`}>
@@ -293,12 +380,11 @@ function ScoreRing({ score, target }: { score: number; target: number }) {
           className="stroke-foreground/45"
         />
       </svg>
-      <div className="absolute inset-0 grid place-items-center">
+      <div className="absolute inset-0 grid place-items-center" aria-hidden="true">
         <div className="text-center leading-none">
-          {/* No `tabular-nums` here: equal-width digits make a two-digit
-              number look gappy at display size. */}
-          <div className="text-xl font-bold">{score}</div>
-          <div className="text-2xs text-muted-foreground mt-0.5">יעד {target}</div>
+          {/* No tabular figures here: equal-width digits look gappy at display size. */}
+          <div className="text-base font-bold">{score}</div>
+          <div className="mt-0.5 text-2xs text-muted-foreground">יעד {target}</div>
         </div>
       </div>
     </div>
@@ -308,14 +394,14 @@ function ScoreRing({ score, target }: { score: number; target: number }) {
 type ChartProps = {
   entries: ReturnType<typeof useSeder>["entries"];
   lessons: ReturnType<typeof useLearning>["items"];
-  consistency: number;
+  year: number;
+  monthIdx: number;
+  monthLabel: string;
+  target: number;
 };
 
-function Charts({ entries, lessons, consistency }: ChartProps) {
+function Charts({ entries, lessons, year: y, monthIdx: m, monthLabel, target }: ChartProps) {
   const [open, setOpen] = useState(false);
-  const now = new Date();
-  const y = now.getFullYear(),
-    m = now.getMonth();
 
   // Twelve months of score, each computed over that month's own rows.
   const months = Array.from({ length: 12 }, (_, i) => {
@@ -345,8 +431,7 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
   }
   // A fixed floor under the scale, and the scale is named in the caption.
   // Normalising purely to the observed maximum meant the worst day was drawn
-  // full-width whatever the number was — a month where the very worst day
-  // averaged three missing minutes looked exactly like a catastrophe.
+  // full-width whatever the number was.
   const weekdayScaleMax = Math.max(
     30,
     Math.ceil(Math.max(0, ...weekday.map((w) => (w.count ? w.net / w.count : 0))) / 10) * 10,
@@ -355,92 +440,158 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
   const totalLearnHours = (lessons.reduce((s, l) => s + effectiveLearningMin(l), 0) / 60).toFixed(
     1,
   );
+  const zeroLabels = months
+    .filter((mo) => classifyMonthScore(mo.entries, mo.score) === "zero")
+    .map((mo) => mo.hebLabel);
+  const measured = months.filter((mo) => mo.entries > 0).length;
 
   return (
-    <div className="mt-5 card-surface overflow-hidden">
+    <PageSection title="מגמות וגרפים">
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="w-full flex items-center gap-3 px-5 py-4 text-start hover:bg-accent/40 pressable transition"
+        className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-start pressable transition hover:bg-accent/40"
       >
-        <IconBadge icon={BarChart3} size="md" />
         <span className="flex-1">
-          <span className="block text-sm font-semibold">גרפים ומגמות</span>
+          <span className="block text-sm font-medium">
+            {open ? "הסתר את הגרפים" : "הצג את הגרפים"}
+          </span>
           <span className="block text-xs text-muted-foreground">
-            12 חודשים אחרונים, חלוקה לפי יום בשבוע, ומפת נוכחות
+            ציון 12 חודשים, ימים חלשים, ומפת נוכחות
           </span>
         </span>
         <ChevronDown
           className={`size-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden="true"
         />
       </button>
 
       {open && (
-        <div className="border-t border-border p-5 space-y-5">
-          <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatTile
-              label="ציון החודש"
+        <div className="mt-4 space-y-8">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <Figure
+              label={`ציון ${monthLabel}`}
               value={curScore}
-              hint={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`}
+              unit="מתוך 100"
+              note={`${curScore - yoyScore >= 0 ? "+" : ""}${curScore - yoyScore} מול אשתקד`}
             />
-            <StatTile
-              label="החודש המצטיין"
+            <Figure
+              label="החודש המצטיין, 12 חודשים"
               value={best?.score ?? "—"}
-              hint={best?.hebLabel || "אין נתונים"}
+              unit={best ? "מתוך 100" : undefined}
+              note={best?.hebLabel || "אין נתונים"}
             />
-            <StatTile
-              label="ציון עקביות"
-              value={consistency === 0 ? "—" : consistency}
-              hint={consistency === 0 ? "אין מספיק חודשים" : "יציבות מחודש לחודש"}
+            <Figure
+              label="לימוד נוסף, כל התקופה"
+              value={totalLearnHours}
+              unit="שעות"
+              note="מאז ההתחלה"
             />
-            <StatTile label="שעות לימוד נוסף" value={totalLearnHours} hint="מאז ההתחלה" />
-          </section>
+          </div>
 
-          <section>
-            <h3 className="text-sm font-semibold">ציון נוכחות, 12 החודשים האחרונים</h3>
-            <p className="text-xs text-muted-foreground mb-4">עמודה גבוהה = חודש טוב יותר</p>
-            {/* Twelve bars with a number over every one of them is a wall of
-                digits nobody reads. Only the best month and the current one
-                are labelled; the tooltip carries the rest, and the tiles above
-                carry the same two figures in full. */}
-            <div className="flex items-end gap-1.5 h-40">
-              {months.map((mo, i) => {
-                const isCurrent = i === months.length - 1;
-                const isBest = best && mo.hebLabel === best.hebLabel;
-                const labelled = mo.entries > 0 && (isCurrent || isBest);
-                return (
-                  <div
-                    key={i}
-                    className="flex-1 h-full flex flex-col justify-end gap-1.5"
-                    title={`${mo.hebLabel} · ${mo.entries ? `ציון ${mo.score} · ${fmtMin(mo.net)} דק׳ חסרות` : "אין רישומים"}`}
-                  >
-                    <div className="text-2xs tabular-nums text-center text-muted-foreground h-4">
-                      {labelled ? mo.score : ""}
-                    </div>
-                    {/* A track behind each bar, so a month scored at zero is
-                        still visibly a month that was measured. The old chart
-                        floored every bar at 2% and faded empty months to 20%
-                        opacity, which made "no data" and "very bad" the same
-                        picture. */}
-                    <div className="flex-1 flex items-end rounded-md bg-muted/50">
-                      {mo.entries > 0 && (
+          <section aria-label={`ציון נוכחות, 12 חודשים עד ${monthLabel}`}>
+            <h3 className="text-sm font-semibold">ציון נוכחות, 12 חודשים עד {monthLabel}</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              בפועל, לפי רישומי סדר. מסייע לראות אם החודש הנבחר מעל היעד ובאיזו מגמה.
+            </p>
+            {measured === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                אין רישומי סדר ב־12 החודשים האלה, ולכן אין מה להציג.
+              </p>
+            ) : (
+              <>
+                <div
+                  className="relative"
+                  role="img"
+                  aria-label={`ציון נוכחות לפי חודש, 12 חודשים עד ${monthLabel}. הציון בחודש הנבחר ${curScore}, היעד ${target}${best ? `, החודש המצטיין ${best.hebLabel} בציון ${best.score}` : ""}${zeroLabels.length ? `. ציון 0 — נמדד: ${zeroLabels.join(", ")}` : ""}`}
+                >
+                  <div className="flex h-36 items-end gap-1.5">
+                    {months.map((mo, i) => {
+                      const selected = i === months.length - 1;
+                      const kind = classifyMonthScore(mo.entries, mo.score);
+                      return (
                         <div
-                          className={`w-full rounded-md ${isBest ? "bg-primary" : "bg-primary/70"}`}
-                          style={{ height: `${mo.score}%`, minHeight: mo.score > 0 ? 2 : 0 }}
-                        />
-                      )}
-                    </div>
-                    <div className="text-2xs text-center text-muted-foreground">{mo.label}</div>
+                          key={i}
+                          className="relative h-full flex-1 rounded-sm bg-muted/60"
+                          title={`${mo.hebLabel} · ${kind === "none" ? "אין רישומים" : kind === "zero" ? `ציון 0 — נמדד · ${fmtMin(mo.net)} חסרות` : `ציון ${mo.score} · ${fmtMin(mo.net)} חסרות`}`}
+                        >
+                          {kind === "score" && (
+                            <div
+                              className={`absolute bottom-0 w-full rounded-sm ${selected ? "bg-primary" : "bg-primary/50"}`}
+                              style={{ height: `${mo.score}%`, minHeight: 2 }}
+                            />
+                          )}
+                          {kind === "zero" && (
+                            <span
+                              role="img"
+                              aria-label="ציון 0 — נמדד"
+                              className="absolute inset-x-0 bottom-0 flex flex-col items-center"
+                            >
+                              <span className="size-1.5 rounded-full bg-foreground" />
+                              <span className="h-0.5 w-full bg-foreground" />
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 h-36"
+                    aria-hidden="true"
+                  >
+                    <div
+                      className="absolute inset-x-0 border-t-2 border-dashed border-foreground/50"
+                      style={{ bottom: `${Math.min(100, Math.max(0, target))}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="mt-1 flex gap-1.5" aria-hidden="true">
+                  {months.map((mo, i) => {
+                    const selected = i === months.length - 1;
+                    const isBest = best && mo.hebLabel === best.hebLabel;
+                    return (
+                      <div key={i} className="flex-1 text-center text-xs text-muted-foreground">
+                        <div>{mo.label}</div>
+                        <div className="figure h-4 font-semibold text-foreground">
+                          {mo.entries > 0 && (selected || isBest) ? mo.score : ""}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-3 rounded-sm bg-primary" aria-hidden="true" />
+                    {monthLabel} (הנבחר)
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-3 rounded-sm bg-primary/50" aria-hidden="true" />
+                    חודשים קודמים
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="w-4 border-t-2 border-dashed border-foreground/50"
+                      aria-hidden="true"
+                    />
+                    יעד ({target})
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="flex flex-col items-center" aria-hidden="true">
+                      <span className="size-1.5 rounded-full bg-foreground" />
+                      <span className="h-0.5 w-4 bg-foreground" />
+                    </span>
+                    • = ציון אפס שנמדד
+                  </span>
+                  <span>עמודה ריקה = אין רישומים · הסולם 0–100</span>
+                </p>
+              </>
+            )}
           </section>
 
-          <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <section className="grid grid-cols-1 gap-8 lg:grid-cols-2">
             <div>
-              <h3 className="text-sm font-semibold">באילו ימים אתה מפסיד הכי הרבה</h3>
-              <p className="text-xs text-muted-foreground mb-3">
+              <h3 className="text-sm font-semibold">באילו ימים חסר הכי הרבה · כל התקופה</h3>
+              <p className="mb-3 text-xs text-muted-foreground">
                 ממוצע דקות חסרות לסדר, בימי א׳–ה׳ · הסולם: 0–{weekdayScaleMax} דק׳
               </p>
               <ul className="space-y-2.5">
@@ -448,16 +599,16 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
                   const avg = w.count ? Math.round(w.net / w.count) : 0;
                   return (
                     <li key={w.d}>
-                      <div className="flex items-center justify-between text-xs mb-1">
+                      <div className="mb-1 flex items-center justify-between text-xs">
                         <span>
                           {w.d}
                           {w.count === 0 && (
                             <span className="text-muted-foreground"> — אין רישומים</span>
                           )}
                         </span>
-                        <span className="tabular-nums font-medium">{w.count ? avg : "—"}</span>
+                        <span className="figure font-medium">{w.count ? `${avg} דק׳` : "—"}</span>
                       </div>
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div className="h-2 overflow-hidden rounded-full bg-muted">
                         <div
                           className="h-full rounded-full bg-primary"
                           style={{ width: `${Math.min(100, (avg / weekdayScaleMax) * 100)}%` }}
@@ -473,7 +624,7 @@ function Charts({ entries, lessons, consistency }: ChartProps) {
           </section>
         </div>
       )}
-    </div>
+    </PageSection>
   );
 }
 
@@ -483,8 +634,7 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
   const start = new Date(today);
   start.setDate(today.getDate() - 6 * 7 + 1);
 
-  // The five bands the cells are painted in, named. The chart used to use these
-  // levels without ever saying what they meant.
+  // The five bands the cells are painted in, named.
   const LEVELS = [
     { label: "60 דק׳ ומעלה" },
     { label: "30–59 דק׳" },
@@ -517,25 +667,31 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
       level: net === 0 ? 4 : net < 15 ? 3 : net < 30 ? 2 : net < 60 ? 1 : 0,
     });
   }
+  const recorded = cells.filter((c) => c.level >= 0);
+  const full = recorded.filter((c) => c.level === 4).length;
 
   return (
     <div>
-      <h3 className="text-sm font-semibold">ששת השבועות האחרונים</h3>
-      <p className="text-xs text-muted-foreground mb-3">
-        ככל שהריבוע ירוק יותר — נשמט פחות באותו יום
+      <h3 className="text-sm font-semibold">ששת השבועות האחרונים · נכון להיום</h3>
+      <p className="mb-3 text-xs text-muted-foreground">
+        ככל שהריבוע ירוק יותר, חסר פחות באותו יום
       </p>
-      <div className="grid grid-cols-7 gap-1.5 max-w-xs">
+      <div
+        className="grid max-w-xs grid-cols-7 gap-1.5"
+        role="img"
+        aria-label={`ששת השבועות האחרונים: ${recorded.length} ימים עם רישום, מתוכם ${full} עם סדר שלם`}
+      >
         {cells.map((c) => (
           <div
             key={c.iso}
             title={
               c.offDay
-                ? `${c.iso} — שישי/שבת, אינו יום לימודים`
+                ? `${formatDateDots(c.iso)} — שישי/שבת, אינו יום לימודים`
                 : c.level < 0
-                  ? `${c.iso} — אין רישום`
-                  : `${c.iso} · ${c.net} דק׳ חסרות`
+                  ? `${formatDateDots(c.iso)} — אין רישום`
+                  : `${formatDateDots(c.iso)} · ${c.net} דק׳ חסרות`
             }
-            className={`aspect-square rounded ${c.offDay && c.level < 0 ? "border border-dashed border-border" : ""}`}
+            className={`aspect-square rounded-sm ${c.offDay && c.level < 0 ? "border border-dashed border-border" : ""}`}
             style={{
               backgroundColor:
                 c.offDay && c.level < 0
@@ -548,18 +704,20 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
         ))}
       </div>
 
-      {/* A scale legend, reading from "most missed" to "a full seder", plus the
-          grey that means nothing was recorded at all.
-          What stood here before was four icons — a flame, a medal, a clock and
-          a calendar — that mapped to none of the five colours on the grid and
-          so explained nothing about it. */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted-foreground">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-3 rounded border border-dashed border-border" />
+          <span
+            className="size-3 rounded-sm border border-dashed border-border"
+            aria-hidden="true"
+          />
           שישי־שבת
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-3 rounded" style={{ backgroundColor: "var(--color-muted)" }} />
+          <span
+            className="size-3 rounded-sm"
+            style={{ backgroundColor: "var(--color-muted)" }}
+            aria-hidden="true"
+          />
           לא נרשם
         </span>
         <span className="inline-flex items-center gap-1">
@@ -567,8 +725,9 @@ function AttendanceHeatmap({ entries }: { entries: ChartProps["entries"] }) {
             <span
               key={i}
               title={l.label}
-              className="size-3 rounded"
+              className="size-3 rounded-sm"
               style={{ backgroundColor: levelFill(i) }}
+              aria-hidden="true"
             />
           ))}
         </span>

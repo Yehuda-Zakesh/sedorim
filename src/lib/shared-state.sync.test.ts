@@ -19,6 +19,19 @@ const file = {
 };
 
 vi.mock("./store-bridge", () => ({
+  loadStoreChecked: () => {
+    file.loads++;
+    return file.loadFails
+      ? Promise.reject(new Error("unreadable"))
+      : Promise.resolve({
+          status: "ok" as const,
+          store: file.store,
+          meta: { upgradedFrom: null, upgradeCopy: null },
+        });
+  },
+  onStoreCorruptDetected: () => {},
+  saveStoreKeysDuringStartup: () => Promise.resolve({ ok: true as const, updatedAt: 1 }),
+  createUpgradeCopy: () => Promise.resolve({ files: ["copy"] }),
   loadStore: () => {
     file.loads++;
     return file.loadFails ? Promise.reject(new Error("unreadable")) : Promise.resolve(file.store);
@@ -147,15 +160,16 @@ describe("hydration", () => {
     expect(value.get()).toBe("light");
   });
 
-  it("keeps the seeded value and still finishes when the file cannot be read", async () => {
+  it("keeps the seeded value and does NOT hydrate when the file cannot be read", async () => {
     file.loadFails = true;
     storage.setItem(`${MIRROR_PREFIX}theme`, JSON.stringify("light"));
     const value = themeValue();
     await flush();
     expect(value.get()).toBe("light");
-    // Crucially it does not get stuck un-hydrated, or useNeedsOnboarding would
-    // never render anything.
-    expect(sharedState.isHydrated()).toBe(true);
+    // A failed read must never look like "loaded": defaults are not the user's
+    // values, so the wizard and the writes stay held back.
+    expect(sharedState.isHydrated()).toBe(false);
+    expect((await import("./store-gate")).getStoreGate()).toBe("corrupt");
   });
 
   it("reads the file once for all the values registered up front", async () => {

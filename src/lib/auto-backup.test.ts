@@ -2,7 +2,6 @@
 // the clock has no setter, so each test gets a freshly imported copy of the
 // module graph rather than trying to wind it back.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-
 let backup: typeof import("./auto-backup");
 let settings: typeof import("./settings-store");
 
@@ -17,6 +16,8 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(2026, 6, 8, 12, 0));
   // Imported together so both halves see the same fresh module instances.
+  // Writes are refused until the gate is "ready"; this fresh module graph has its own.
+  (await import("./store-gate")).setStoreGate("ready");
   backup = await import("./auto-backup");
   settings = await import("./settings-store");
 });

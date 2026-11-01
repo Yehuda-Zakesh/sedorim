@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { logWarn } from "./diagnostics";
+import { attendanceBlockedMessage } from "./attendance-day";
 import { getSettings, getSederTimesFor, SHAS_ARRIVAL_DEADLINE } from "./settings-store";
-import { maybeAutoBackup, createSnapshot } from "./auto-backup";
+import {
+  maybeAutoBackup,
+  createSnapshot,
+  planSnapshot,
+  commitSnapshotPlan,
+  isEmptyData,
+  type BackupSnapshot,
+} from "./auto-backup";
 import {
   isLearningDay,
   hebrewFromGregorian,
@@ -9,7 +17,25 @@ import {
   hebrewYearLetters,
   formatHebrewMonthYear,
 } from "./hebrew-calendar";
-import { loadStore, saveStoreKey, saveStoreKeys, storeStamp } from "./store-bridge";
+import {
+  loadStore,
+  saveStoreKey,
+  saveStoreKeys,
+  storeStamp,
+  type SaveResult,
+  type StoreBases,
+  type StoreKey,
+} from "./store-bridge";
+import { applyMineToList, type RecordConflict } from "./record-merge";
+import {
+  COMPLETE_SAVE,
+  outcomeOf,
+  registerConflictResolver,
+  reportConflicts,
+  type SaveOutcome,
+} from "./save-conflicts";
+import { assertStoreWritable, getStoreGate, reportWriteFailure } from "./store-gate";
+import { onStoreReady } from "./store-startup";
 export type SederNum = 1 | 2;
 export type LearningFramework = "kollel-erev" | "torato-beyado" | "bein-hazmanim";
 
@@ -51,46 +77,9 @@ export type TimerSession = {
   pausedAt?: number;
 };
 
-const MIGRATED_FLAG = "kollel.serverStoreMigrated.v1";
-const LIVE_SEDER_KEY = "kollel.seder.v1";
-const LIVE_LRN_KEY = "kollel.learning.v1";
-const LIVE_TIMER_KEY = "kollel.timer.v1";
-
-// One-time migration for users upgrading from the localStorage-based build:
-// copies whatever is already sitting in localStorage into the shared data
-// file, exactly once. Old keys are left in place afterwards (untouched, just
-// no longer read) as a safety net — nothing is deleted.
-async function migrateLegacyLocalStorageIfNeeded() {
-  if (typeof window === "undefined") return;
-  if (localStorage.getItem(MIGRATED_FLAG)) return;
-  try {
-    const remote = await loadStore();
-    const remoteHasData =
-      (Array.isArray(remote?.seder) && remote.seder.length > 0) ||
-      (Array.isArray(remote?.learning) && remote.learning.length > 0);
-    if (!remoteHasData) {
-      const sederRaw = localStorage.getItem(LIVE_SEDER_KEY);
-      const lrnRaw = localStorage.getItem(LIVE_LRN_KEY);
-      const timerRaw = localStorage.getItem(LIVE_TIMER_KEY);
-      if (sederRaw) {
-        const parsed = JSON.parse(sederRaw);
-        if (Array.isArray(parsed) && parsed.length) await saveStoreKey("seder", parsed);
-      }
-      if (lrnRaw) {
-        const parsed = JSON.parse(lrnRaw);
-        if (Array.isArray(parsed) && parsed.length) await saveStoreKey("learning", parsed);
-      }
-      if (timerRaw) {
-        const parsed = JSON.parse(timerRaw);
-        if (parsed) await saveStoreKey("timer", parsed);
-      }
-    }
-    localStorage.setItem(MIGRATED_FLAG, String(Date.now()));
-  } catch {
-    // Leave the flag unset on failure so we retry on the next launch instead
-    // of silently giving up on migrating the user's existing data.
-  }
-}
+// Carrying the old localStorage build's data over lives in legacy-migration.ts
+// and runs inside the single startup read (store-startup.ts), before this
+// module hydrates — so what is hydrated below is what really is in the file.
 
 // ============ File-backed store ============
 // The in-memory arrays below are the synchronous source of truth for all UI
@@ -101,9 +90,57 @@ async function migrateLegacyLocalStorageIfNeeded() {
 // EXE processes cannot safely share (see src/lib/store-bridge.ts).
 let sederEntries: SederEntry[] = [];
 let learningEntries: LearningEntry[] = [];
+// The arrays as this window last loaded or wrote them — see applyRemoteStore.
+let sederBase: SederEntry[] | undefined;
+let learningBase: LearningEntry[] | undefined;
 let timerSession: TimerSession | null = null;
+// The timer as the file last held it (loaded or written): what an unsaved change rolls back to.
+let timerBase: TimerSession | null = null;
 let lastKnownUpdatedAt = 0;
 let hydrated = false;
+// Identity of the running timer session. Bumped whenever a session starts,
+// ends or is cancelled (here or in the other window) — but NOT on pause/resume,
+// which keep the same session. Lets a late "save this" request tell that the
+// session it was made for is gone. (The stored session has no id field and the
+// schema must not change, so identity is tracked in memory.)
+let timerGeneration = 0;
+export function getTimerGeneration(): number {
+  return timerGeneration;
+}
+// Pause keeps startedAt and adds accumulatedMs (accumulatedMs = what it was at
+// the last resume + the stretch run since); resume sets a new startedAt but
+// keeps accumulatedMs; a brand-new session never has accumulatedMs.
+//
+// "Same session" must hold across any pause/resume in the other window, and
+// must NOT hold when one session was replaced by another — including two
+// *paused* sessions that both carry accumulatedMs. The stored session has no
+// id, so identity is inferred from the arithmetic of those transitions:
+// the later state must have started no earlier than the earlier one stopped,
+// and what it had banked by its last resume must not be less than what the
+// earlier one had banked in total.
+export function sameTimerSession(a: TimerSession | null, b: TimerSession | null): boolean {
+  if (!a || !b) return a === b;
+  if (a.framework !== b.framework) return false;
+  if (
+    a.startedAt === b.startedAt &&
+    a.accumulatedMs === b.accumulatedMs &&
+    a.pausedAt === b.pausedAt
+  )
+    return true;
+  const aBanked = a.accumulatedMs ?? 0;
+  // What b had banked at its last resume (before the stretch that ended at pausedAt).
+  const bAtResume =
+    (b.accumulatedMs ?? 0) - (b.pausedAt !== undefined ? Math.max(0, b.pausedAt - b.startedAt) : 0);
+  if (a.accumulatedMs === undefined) {
+    // A fresh session can only turn into the same session: paused at the same
+    // startedAt, or paused/resumed later (then it has banked something).
+    if (b.accumulatedMs === undefined) return false; // fresh, different startedAt
+    return b.startedAt === a.startedAt || (b.startedAt >= a.startedAt && bAtResume > 0);
+  }
+  if (b.accumulatedMs === undefined) return false; // a new session replaced a banked one
+  const aStopped = a.pausedAt ?? a.startedAt;
+  return b.startedAt >= aStopped && bAtResume >= aBanked - 1 && b.startedAt >= a.startedAt;
+}
 
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
@@ -116,32 +153,76 @@ function applyRemoteStore(store: {
 }) {
   sederEntries = (store.seder as SederEntry[] | undefined) ?? [];
   learningEntries = (store.learning as LearningEntry[] | undefined) ?? [];
-  timerSession = (store.timer as TimerSession | null | undefined) ?? null;
+  // What the file held when this window adopted it: the base the next save is
+  // merged against (store-bridge saveStoreKeys `bases`). Absent key = no base.
+  sederBase = Array.isArray(store.seder) ? sederEntries : undefined;
+  learningBase = Array.isArray(store.learning) ? learningEntries : undefined;
+  const nextTimer = (store.timer as TimerSession | null | undefined) ?? null;
+  if (!sameTimerSession(timerSession, nextTimer)) timerGeneration++;
+  timerSession = nextTimer;
+  timerBase = nextTimer;
   lastKnownUpdatedAt = store.updatedAt ?? 0;
 }
 
-async function hydrate() {
-  try {
-    await migrateLegacyLocalStorageIfNeeded();
-    const store = await loadStore();
+// Hydrates only when the shared startup read succeeded (store-startup.ts:
+// the gate is "ready"). On a failed or corrupt read nothing is applied and
+// `hydrated` stays false — empty defaults are never passed off as the user's
+// data — and a retry from the recovery screen hydrates here the same way.
+function hydrate() {
+  onStoreReady((store) => {
     applyRemoteStore(store);
-  } catch {
-    // Data file unreadable right now — keep empty defaults; the next poll
-    // tick will retry.
-  } finally {
     hydrated = true;
     emit();
-  }
+  });
 }
 
-function persistKey(key: "seder" | "learning" | "timer", value: unknown) {
-  saveStoreKey(key, value)
-    .then((res) => {
-      lastKnownUpdatedAt = res.updatedAt;
-    })
-    .catch(() => {
-      /* best-effort; next poll will reconcile */
-    });
+/**
+ * Re-reads the file now and adopts it (used after an action that wrote to it
+ * from outside this module, such as adding legacy records). Rejects if the
+ * file cannot be read.
+ */
+export async function refreshFromStore(): Promise<void> {
+  const store = await loadStore();
+  applyRemoteStore(store);
+  emit();
+}
+
+// Returns the save's outcome (rejects on failure) for callers that must not
+// report success falsely; the fire-and-forget callers go through persistKey.
+function persistKeyChecked(
+  key: "seder" | "learning" | "timer",
+  value: unknown,
+  replace = false,
+): Promise<RecordConflict[]> {
+  const partial = { [key]: value } as Persisted;
+  return saveStoreKey(key, value, { bases: replace ? undefined : basesFor(partial) }).then((res) =>
+    afterPersist(partial, res),
+  );
+}
+
+// Fire-and-forget save. A refused or failed write is never swallowed: what this
+// call changed in memory is rolled back to what the file holds (unless
+// something newer replaced it meanwhile) and the failure is reported, so the
+// screen shows the truth instead of an unsaved change.
+function persistKey(key: "seder" | "learning" | "timer", value: unknown, replace = false) {
+  persistKeyChecked(key, value, replace).catch((err) => {
+    rollbackUnsaved(key, value);
+    reportWriteFailure(err);
+  });
+}
+
+function rollbackUnsaved(key: "seder" | "learning" | "timer", written: unknown) {
+  if (key === "seder" && sederEntries === written) {
+    sederEntries = sederBase ?? [];
+  } else if (key === "learning" && learningEntries === written) {
+    learningEntries = learningBase ?? [];
+  } else if (key === "timer" && timerSession === written) {
+    timerSession = timerBase;
+    timerGeneration++;
+  } else {
+    return;
+  }
+  emit();
 }
 
 // Use this instead of two separate persistKey() calls whenever seder +
@@ -149,14 +230,259 @@ function persistKey(key: "seder" | "learning" | "timer", value: unknown) {
 // independent writes leave a real window where the shared file — and the
 // 4s poll below, in this same window or the other EXE — can observe a
 // partial state with only one of the two updated.
+function persistKeysChecked(
+  partial: Persisted,
+  opts: { replace?: boolean } = {},
+): Promise<RecordConflict[]> {
+  // `replace` (restore, import, delete-all) means the whole list really is the
+  // new truth and is written as such, not merged. `extra` keys ride in the
+  // same write as plain keys of the file.
+  const { extra, ...known } = partial;
+  return saveStoreKeys({ ...extra, ...known } as Partial<Record<StoreKey, unknown>>, {
+    bases: opts.replace ? undefined : basesFor(known),
+  }).then((res) => afterPersist(known, res));
+}
+
+type Persisted = {
+  seder?: SederEntry[];
+  learning?: LearningEntry[];
+  timer?: TimerSession | null;
+  snapshots?: BackupSnapshot[];
+  extra?: Record<string, unknown>;
+};
+
+// Entries are written as a record-level merge against what this window last
+// loaded/wrote, so another window's concurrent add or edit is not erased by
+// this window's stale array (see saveStoreKeys `bases`).
+function basesFor(partial: Persisted): StoreBases {
+  const bases: StoreBases = {};
+  if (partial.seder !== undefined && sederBase) bases.seder = sederBase;
+  if (partial.learning !== undefined && learningBase) bases.learning = learningBase;
+  return bases;
+}
+
+// Returns the records that could not be applied (see store.rs merge_records):
+// the file kept its version of each, `merged` below makes this window adopt it,
+// and the user's pending version is parked for them to resolve (save-conflicts.ts).
+function afterPersist(partial: Persisted, res: SaveResult): RecordConflict[] {
+  lastKnownUpdatedAt = res.updatedAt;
+  if (partial.timer !== undefined) timerBase = partial.timer;
+  if (partial.seder !== undefined) {
+    sederBase = partial.seder;
+    const merged = res.merged?.seder;
+    // Adopt what the file really holds now (the other window's records), but
+    // only if nothing newer replaced the list while the save was in flight.
+    if (Array.isArray(merged) && sederEntries === partial.seder) {
+      sederEntries = merged as SederEntry[];
+      sederBase = sederEntries;
+      emit();
+    }
+  }
+  if (partial.learning !== undefined) {
+    learningBase = partial.learning;
+    const merged = res.merged?.learning;
+    if (Array.isArray(merged) && learningEntries === partial.learning) {
+      learningEntries = merged as LearningEntry[];
+      learningBase = learningEntries;
+      emit();
+    }
+  }
+  const conflicts = res.conflicts ?? [];
+  reportConflicts(conflicts);
+  return conflicts;
+}
+
+// "החלף": this window's version of one conflicting record written over the
+// file's — an explicit overwrite. It starts from the file as it is NOW (read
+// fresh) and uses that as the merge base, so the only difference it makes is
+// the user's own version of that one record; if the file moved yet again in
+// between, that is a new conflict, not a silent overwrite.
+async function replaceConflictingRecord(
+  key: "seder" | "learning",
+  conflict: RecordConflict,
+): Promise<void> {
+  const store = await loadStore();
+  const fileList = (store as Record<string, unknown>)[key];
+  if (!Array.isArray(fileList)) throw new Error("הקובץ אינו מכיל את הרשימה הזאת");
+  const merged = applyMineToList(fileList as { id: string | number }[], conflict);
+  const before = key === "seder" ? sederEntries : learningEntries;
+  const next = key === "seder" ? sortSeder(merged as SederEntry[]) : (merged as LearningEntry[]);
+  if (key === "seder") sederEntries = next as SederEntry[];
+  else learningEntries = next as LearningEntry[];
+  emit();
+  try {
+    const res = await saveStoreKey(key, next, { bases: { [key]: fileList } });
+    afterPersist({ [key]: next } as Persisted, res);
+    backupNow();
+  } catch (err) {
+    if (key === "seder" && sederEntries === next) sederEntries = before as SederEntry[];
+    if (key === "learning" && learningEntries === next) learningEntries = before as LearningEntry[];
+    emit();
+    throw err;
+  }
+}
+
+registerConflictResolver("seder", (c) => replaceConflictingRecord("seder", c));
+registerConflictResolver("learning", (c) => replaceConflictingRecord("learning", c));
+
 function persistKeys(partial: { seder?: SederEntry[]; learning?: LearningEntry[] }) {
-  saveStoreKeys(partial)
-    .then((res) => {
-      lastKnownUpdatedAt = res.updatedAt;
-    })
-    .catch(() => {
-      /* best-effort; next poll will reconcile */
-    });
+  persistKeysChecked(partial, { replace: true }).catch(() => {
+    /* best-effort; next poll will reconcile */
+  });
+}
+
+const sortSeder = (list: SederEntry[]) =>
+  [...list].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
+
+function backupNow() {
+  maybeAutoBackup({
+    attendance: sederEntries as unknown,
+    learning: learningEntries as unknown,
+  });
+}
+
+/**
+ * Swaps ALL attendance and learning for the given lists, together with ONE full
+ * safety snapshot of what is there now, in a single atomic write
+ * (snapshots + seder + learning): the file gets both or neither. Nothing is
+ * filtered — an invalid record rejects the whole call with a ValidationError
+ * before anything changes (analyse first, see backup-analysis.ts).
+ *
+ * The snapshot is the new, complete one and goes first in the list, so it is
+ * the one kept even when the retention is 1; none is taken when there is no
+ * data. Memory updates synchronously; the promise settles with the save. On
+ * failure memory is restored (if nothing changed meanwhile), the snapshot list
+ * is untouched and it rejects. Resolves with the snapshot taken (or null).
+ * `opts.extra` (a restore from a full copy, chosen explicitly) adds other file
+ * keys — settings, onboarded, unknown keys — to the same atomic write. Keys not
+ * named there, and keys of the file this version does not know, are never
+ * touched. It does not read the file back — see backup-actions.ts, which does.
+ */
+/**
+ * The window's lists can be a few seconds old (another window may have written
+ * since the last poll), and the safety copy is built from them. So the file is
+ * read again first; if that read fails, nothing is changed.
+ */
+export async function replaceAllDataChecked(
+  sederList: SederEntry[],
+  learningList: LearningEntry[],
+  opts: { safetySnapshot?: boolean; extra?: Record<string, unknown> } = {},
+): Promise<{ snapshot: BackupSnapshot | null }> {
+  if (opts.safetySnapshot !== false) {
+    try {
+      await refreshFromStore();
+    } catch (e) {
+      throw new Error(
+        `לא ניתן לקרוא את קובץ הנתונים לפני ההחלפה, ולכן לא שונה דבר${e instanceof Error && e.message ? ` (${e.message})` : ""}`,
+      );
+    }
+  }
+  return replaceAllDataNow(sederList, learningList, opts);
+}
+
+function replaceAllDataNow(
+  sederList: SederEntry[],
+  learningList: LearningEntry[],
+  opts: { safetySnapshot?: boolean; extra?: Record<string, unknown> } = {},
+): Promise<{ snapshot: BackupSnapshot | null }> {
+  for (const e of sederList) {
+    const v = validateSeder(e);
+    if (!v.ok) return Promise.reject(new ValidationError(`רשומת סדר ${e.date}: ${v.error}`));
+  }
+  for (const l of learningList) {
+    const v = validateLearning(l);
+    if (!v.ok) return Promise.reject(new ValidationError(`רשומת לימוד ${l.date}: ${v.error}`));
+  }
+  const beforeSeder = sederEntries;
+  const beforeLearning = learningEntries;
+  const nextSeder = sortSeder(sederList);
+  const nextLearning = [...learningList];
+  // The safety copy is part of the operation: when it cannot be made (an empty
+  // store needs none), nothing is changed and the call rejects.
+  let plan: ReturnType<typeof planSnapshot> = null;
+  if (opts.safetySnapshot !== false) {
+    try {
+      plan = planSnapshot({ attendance: beforeSeder, learning: beforeLearning }, "before-op");
+    } catch (e) {
+      return Promise.reject(
+        new Error(
+          `אי אפשר ליצור עותק בטיחות של הנתונים הנוכחיים${e instanceof Error && e.message ? ` (${e.message})` : ""}`,
+        ),
+      );
+    }
+    if (!plan && beforeSeder.length + beforeLearning.length > 0)
+      return Promise.reject(new Error("אי אפשר ליצור עותק בטיחות של הנתונים הנוכחיים"));
+  }
+  sederEntries = nextSeder;
+  learningEntries = nextLearning;
+  emit();
+  return persistKeysChecked(
+    {
+      seder: nextSeder,
+      learning: nextLearning,
+      ...(plan ? { snapshots: plan.list } : {}),
+      ...(opts.extra ? { extra: opts.extra } : {}),
+    },
+    { replace: true },
+  ).then(
+    () => {
+      if (plan) commitSnapshotPlan(plan);
+      return { snapshot: plan?.snap ?? null };
+    },
+    (err) => {
+      if (sederEntries === nextSeder) sederEntries = beforeSeder;
+      if (learningEntries === nextLearning) learningEntries = beforeLearning;
+      emit();
+      throw err;
+    },
+  );
+}
+
+/** Deletes ALL attendance and learning, with its safety snapshot in the same
+ *  atomic write. See replaceAllDataChecked. */
+export function clearAllData(): Promise<{ snapshot: BackupSnapshot | null }> {
+  return replaceAllDataChecked([], []);
+}
+
+/**
+ * Ends the timer session and records its learning entry in ONE write
+ * (learning + timer together). Memory updates synchronously; the promise
+ * settles with the save. On failure the entry is removed again and the session
+ * is put back (only if nothing else started/changed meanwhile), and it rejects
+ * — so a failed save never loses the session. Rejects at once (nothing
+ * changed) when the entry is invalid or the session is not the one the caller
+ * saw (`expectedGeneration`, see getTimerGeneration).
+ */
+export function saveLearningAndEndTimer(
+  entry: LearningEntry,
+  expectedGeneration: number,
+): Promise<void> {
+  const v = validateLearning(entry);
+  if (!v.ok) {
+    logWarn(`רישום לימוד נדחה (${entry.date}): ${v.error}`);
+    return Promise.reject(new ValidationError(v.error));
+  }
+  const session = timerSession;
+  if (!session || timerGeneration !== expectedGeneration)
+    return Promise.reject(new ValidationError("הטיימר התחלף או הסתיים, ולכן לא נשמר"));
+  const beforeLearning = learningEntries;
+  const nextLearning = [entry, ...beforeLearning];
+  learningEntries = nextLearning;
+  timerSession = null;
+  emit();
+  return persistKeysChecked({ learning: nextLearning, timer: null }).then(
+    () => {
+      timerGeneration++;
+      backupNow();
+    },
+    (err) => {
+      if (learningEntries === nextLearning) learningEntries = beforeLearning;
+      else learningEntries = learningEntries.filter((i) => i.id !== entry.id);
+      if (timerSession === null && timerGeneration === expectedGeneration) timerSession = session;
+      emit();
+      throw err;
+    },
+  );
 }
 
 // Cross-window sync: poll the shared data file so a write made in the
@@ -170,11 +496,13 @@ if (typeof window !== "undefined") {
   hydrate();
   let lastSeenStamp = "";
   setInterval(async () => {
+    // Not read yet, or unreadable: keep what is in memory untouched.
+    if (getStoreGate() !== "ready") return;
     try {
       const stamp = await storeStamp();
       if (stamp === lastSeenStamp) return;
-      lastSeenStamp = stamp;
       const store = await loadStore();
+      lastSeenStamp = stamp;
       if ((store.updatedAt ?? 0) > lastKnownUpdatedAt) {
         applyRemoteStore(store);
         emit();
@@ -188,10 +516,10 @@ if (typeof window !== "undefined") {
 function snapshotIfConfigured() {
   if (typeof window === "undefined") return;
   if (!getSettings().data.autoBackupBeforeOps) return;
-  createSnapshot(
-    { attendance: sederEntries as unknown, learning: learningEntries as unknown },
-    "before-op",
-  );
+  const data = { attendance: sederEntries as unknown, learning: learningEntries as unknown };
+  // No data, no safety copy: an empty one would push a full one out.
+  if (isEmptyData(data)) return;
+  createSnapshot(data, "before-op");
 }
 
 export class ValidationError extends Error {
@@ -320,7 +648,7 @@ export function calcSeder(entry: SederEntry): SederCalc {
 }
 
 // ============ Validation ============
-function validateSeder(e: SederEntry): { ok: true } | { ok: false; error: string } {
+export function validateSeder(e: SederEntry): { ok: true } | { ok: false; error: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date)) return { ok: false, error: "תאריך לא תקין" };
   if (new Date(e.date).getTime() > Date.now() + 86400000)
     return { ok: false, error: "לא ניתן לרשום תאריך עתידי" };
@@ -341,7 +669,7 @@ function validateSeder(e: SederEntry): { ok: true } | { ok: false; error: string
   return { ok: true };
 }
 
-function validateLearning(l: LearningEntry): { ok: true } | { ok: false; error: string } {
+export function validateLearning(l: LearningEntry): { ok: true } | { ok: false; error: string } {
   if (!l.id) return { ok: false, error: "מזהה חסר" };
   if (!["kollel-erev", "torato-beyado", "bein-hazmanim"].includes(l.framework))
     return { ok: false, error: "מסגרת לא חוקית" };
@@ -356,11 +684,10 @@ export function effectiveLearningMin(l: LearningEntry): number {
   return l.tanitDibur ? l.minutes * 2 : l.minutes;
 }
 
-// Replaces both seder + learning in one atomic write — use this (not
-// useSeder().replaceAll + useLearning().replaceAll back to back) whenever
-// restoring/importing both together, e.g. a backup file or a snapshot. See
-// persistKeys() for why: two separate saves leave a real window where a
-// concurrent reader can see only one of the two already updated.
+// In-memory seeding helper (and legacy fire-and-forget): it silently drops
+// records that fail validation and does not wait for the save, so the backup
+// screen must NOT use it — import/restore go through replaceAllDataChecked.
+// Kept because many tests seed the store with it.
 export function replaceAllData(sederList: SederEntry[], learningList: LearningEntry[]) {
   sederEntries = sederList
     .filter((e) => validateSeder(e).ok)
@@ -368,6 +695,44 @@ export function replaceAllData(sederList: SederEntry[], learningList: LearningEn
   learningEntries = learningList.filter((l) => validateLearning(l).ok);
   persistKeys({ seder: sederEntries, learning: learningEntries });
   emit();
+}
+
+// Shared by upsert / upsertChecked: validation, the weekend/Yom Tov block and
+// the restore rule. Throws ValidationError; returns the record being replaced.
+function checkSederUpsert(e: SederEntry, opts?: { restore?: boolean }): SederEntry | undefined {
+  const v = validateSeder(e);
+  if (!v.ok) {
+    logWarn(`רישום סדר נדחה (${e.date}, סדר ${e.seder}): ${v.error}`);
+    throw new ValidationError(v.error);
+  }
+  const prev = sederEntries.find((x) => x.id === e.id);
+  // No attendance on a weekend or Yom Tov. Only a record arriving on that day
+  // is refused — one already there (old, imported, restored) can still be
+  // edited in place, and replaceAll (import/restore) is not subject to this.
+  if (!opts?.restore && (!prev || prev.date !== e.date)) {
+    const blocked = attendanceBlockedMessage(e.date);
+    if (blocked) {
+      logWarn(`רישום סדר נדחה (${e.date}, סדר ${e.seder}): ${blocked}`);
+      throw new ValidationError(blocked);
+    }
+  }
+  // Undoing a deletion must not put a second record on a day and seder that
+  // has meanwhile been filled in again.
+  if (
+    opts?.restore &&
+    sederEntries.some((x) => x.id !== e.id && x.date === e.date && x.seder === e.seder)
+  ) {
+    throw new ValidationError("כבר נרשם סדר זה ביום הזה, ולכן הרישום שנמחק לא שוחזר");
+  }
+  return prev;
+}
+
+function checkLearningAdd(item: LearningEntry) {
+  const v = validateLearning(item);
+  if (!v.ok) {
+    logWarn(`רישום לימוד נדחה (${item.date}): ${v.error}`);
+    throw new ValidationError(v.error);
+  }
 }
 
 // ============ Hooks / API ============
@@ -382,23 +747,66 @@ export function useSeder() {
   }, []);
   return {
     entries: sederEntries,
-    upsert(e: SederEntry) {
-      const v = validateSeder(e);
-      if (!v.ok) {
-        logWarn(`רישום סדר נדחה (${e.date}, סדר ${e.seder}): ${v.error}`);
-        throw new ValidationError(v.error);
-      }
-      const prev = sederEntries.find((x) => x.id === e.id);
+    /**
+     * `restore` is for undoing a deletion: the record goes back exactly where
+     * it was, even on a weekend/Yom Tov where it was saved before the rule.
+     */
+    upsert(e: SederEntry, opts?: { restore?: boolean }) {
+      const prev = checkSederUpsert(e, opts);
       if (!prev) snapshotIfConfigured();
-      sederEntries = [e, ...sederEntries.filter((x) => x.id !== e.id)].sort((a, b) =>
-        a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder,
-      );
+      sederEntries = sortSeder([e, ...sederEntries.filter((x) => x.id !== e.id)]);
       persistKey("seder", sederEntries);
-      maybeAutoBackup({
-        attendance: sederEntries as unknown,
-        learning: learningEntries as unknown,
-      });
+      backupNow();
       emit();
+    },
+    /**
+     * Same validation/weekend-Yom-Tov block/restore rules as `upsert`, but the
+     * promise settles only after the write reached storage. Memory updates at
+     * once; on a failed save THIS record (by id) is put back — the previous
+     * version, or removed if it was new — without touching other records
+     * changed meanwhile, and the promise rejects. Validation failures reject
+     * the promise too (nothing changed).
+     */
+    upsertChecked(e: SederEntry, opts?: { restore?: boolean }): Promise<SaveOutcome> {
+      let prev: SederEntry | undefined;
+      try {
+        prev = checkSederUpsert(e, opts);
+      } catch (err) {
+        return Promise.reject(err);
+      }
+      if (!prev) snapshotIfConfigured();
+      sederEntries = sortSeder([e, ...sederEntries.filter((x) => x.id !== e.id)]);
+      const written = sederEntries;
+      emit();
+      return persistKeyChecked("seder", written).then(
+        (conflicts) => {
+          backupNow();
+          return outcomeOf(conflicts);
+        },
+        (err) => {
+          if (sederEntries.find((x) => x.id === e.id) === e) {
+            const rest = sederEntries.filter((x) => x.id !== e.id);
+            sederEntries = sortSeder(prev ? [prev, ...rest] : rest);
+            emit();
+          }
+          throw err;
+        },
+      );
+    },
+    /** Checked delete: rejects on a failed save, putting the record back by id. */
+    removeChecked(id: string): Promise<SaveOutcome> {
+      const prev = sederEntries.find((x) => x.id === id);
+      if (!prev) return Promise.resolve(COMPLETE_SAVE);
+      snapshotIfConfigured();
+      sederEntries = sederEntries.filter((x) => x.id !== id);
+      emit();
+      return persistKeyChecked("seder", sederEntries).then(outcomeOf, (err) => {
+        if (!sederEntries.some((x) => x.id === id)) {
+          sederEntries = sortSeder([prev, ...sederEntries]);
+          emit();
+        }
+        throw err;
+      });
     },
     remove(id: string) {
       const prev = sederEntries.find((x) => x.id === id);
@@ -412,13 +820,13 @@ export function useSeder() {
       sederEntries = list
         .filter((e) => validateSeder(e).ok)
         .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.seder - b.seder));
-      persistKey("seder", sederEntries);
+      persistKey("seder", sederEntries, true);
       emit();
     },
     clearAll() {
       snapshotIfConfigured();
       sederEntries = [];
-      persistKey("seder", sederEntries);
+      persistKey("seder", sederEntries, true);
       emit();
     },
   };
@@ -436,18 +844,93 @@ export function useLearning() {
   return {
     items: learningEntries,
     add(item: LearningEntry) {
-      const v = validateLearning(item);
-      if (!v.ok) {
-        logWarn(`רישום לימוד נדחה (${item.date}): ${v.error}`);
-        throw new ValidationError(v.error);
-      }
+      checkLearningAdd(item);
       learningEntries = [item, ...learningEntries];
       persistKey("learning", learningEntries);
-      maybeAutoBackup({
-        attendance: sederEntries as unknown,
-        learning: learningEntries as unknown,
-      });
+      backupNow();
       emit();
+    },
+    /**
+     * Same validation as `add`, but the promise settles only after the write
+     * reached storage. On a failed save THIS record (by id) is removed again,
+     * leaving records changed meanwhile alone, and the promise rejects.
+     * Validation failures reject the promise too (nothing changed).
+     */
+    addChecked(item: LearningEntry): Promise<SaveOutcome> {
+      try {
+        checkLearningAdd(item);
+      } catch (err) {
+        return Promise.reject(err);
+      }
+      // Idempotent on id: a double-clicked "undo" (or an undo after a restore)
+      // must not count the same lesson twice.
+      if (learningEntries.some((i) => i.id === item.id)) return Promise.resolve(COMPLETE_SAVE);
+      learningEntries = [item, ...learningEntries];
+      emit();
+      return persistKeyChecked("learning", learningEntries).then(
+        (conflicts) => {
+          backupNow();
+          return outcomeOf(conflicts);
+        },
+        (err) => {
+          if (learningEntries.includes(item)) {
+            learningEntries = learningEntries.filter((i) => i !== item);
+            emit();
+          }
+          throw err;
+        },
+      );
+    },
+    /**
+     * Swaps the entry with the same id for `item` in place, with ONE save and
+     * no intermediate delete. Throws ValidationError (nothing changed) when the
+     * item is invalid or unknown. Memory updates synchronously; the returned
+     * promise settles with the save, and on failure memory is rolled back to
+     * the previous array (if nothing else changed it meanwhile) and it rejects.
+     */
+    replace(item: LearningEntry): Promise<SaveOutcome> {
+      const v = validateLearning(item);
+      if (!v.ok) {
+        logWarn(`החלפת רישום לימוד נדחתה (${item.date}): ${v.error}`);
+        throw new ValidationError(v.error);
+      }
+      if (!learningEntries.some((i) => i.id === item.id))
+        throw new ValidationError("הרישום לא נמצא");
+      const prev = learningEntries.find((i) => i.id === item.id)!;
+      learningEntries = learningEntries.map((i) => (i.id === item.id ? item : i));
+      emit();
+      return persistKeyChecked("learning", learningEntries).then(
+        (conflicts) => {
+          backupNow();
+          return outcomeOf(conflicts);
+        },
+        (err) => {
+          // By record id, not whole array: a parallel change to another record
+          // is neither overwritten nor left wrong.
+          if (learningEntries.includes(item)) {
+            learningEntries = learningEntries.map((i) => (i === item ? prev : i));
+            emit();
+          }
+          throw err;
+        },
+      );
+    },
+    /** Checked delete: rejects on a failed save, putting the record back by id. */
+    removeChecked(id: string): Promise<SaveOutcome> {
+      const prev = learningEntries.find((i) => i.id === id);
+      if (!prev) return Promise.resolve(COMPLETE_SAVE);
+      const index = learningEntries.indexOf(prev);
+      learningEntries = learningEntries.filter((i) => i.id !== id);
+      emit();
+      return persistKeyChecked("learning", learningEntries).then(outcomeOf, (err) => {
+        if (!learningEntries.some((i) => i.id === id)) {
+          const next = [...learningEntries];
+          next.splice(Math.min(index, next.length), 0, prev);
+          learningEntries = next;
+          emit();
+        }
+        throw err;
+      });
     },
     remove(id: string) {
       const prev = learningEntries.find((i) => i.id === id);
@@ -458,13 +941,13 @@ export function useLearning() {
     },
     replaceAll(list: LearningEntry[]) {
       learningEntries = list.filter((l) => validateLearning(l).ok);
-      persistKey("learning", learningEntries);
+      persistKey("learning", learningEntries, true);
       emit();
     },
     clearAll() {
       snapshotIfConfigured();
       learningEntries = [];
-      persistKey("learning", learningEntries);
+      persistKey("learning", learningEntries, true);
       emit();
     },
   };
@@ -506,6 +989,8 @@ export function startTimer(
   framework: LearningFramework,
   opts?: { limitMinutes?: number; tanitDibur?: boolean },
 ): TimerSession {
+  assertStoreWritable();
+  timerGeneration++;
   const t: TimerSession = {
     framework,
     startedAt: Date.now(),
@@ -522,6 +1007,7 @@ export function startTimer(
 export function pauseTimer(now = Date.now()): TimerSession | null {
   const t = getTimer();
   if (!t || t.pausedAt !== undefined) return t;
+  assertStoreWritable();
   const next: TimerSession = {
     ...t,
     accumulatedMs: timerElapsedMs(t, now),
@@ -537,6 +1023,7 @@ export function pauseTimer(now = Date.now()): TimerSession | null {
 export function resumeTimer(now = Date.now()): TimerSession | null {
   const t = getTimer();
   if (!t || t.pausedAt === undefined) return t;
+  assertStoreWritable();
   const next: TimerSession = { ...t, startedAt: now };
   delete next.pausedAt;
   timerSession = next;
@@ -545,21 +1032,53 @@ export function resumeTimer(now = Date.now()): TimerSession | null {
   return next;
 }
 
-export function stopTimer(): {
+export type TimerResult = {
   framework: LearningFramework;
   minutes: number;
   tanitDibur?: boolean;
-} | null {
+};
+
+/** What stopTimer() would return, without ending the session. */
+export function previewStopTimer(): TimerResult | null {
   const t = getTimer();
   if (!t) return null;
   let minutes = Math.max(1, Math.round(timerElapsedMs(t) / 60000));
   if (t.limitMinutes && minutes > t.limitMinutes) minutes = t.limitMinutes;
+  return { framework: t.framework, minutes, tanitDibur: t.tanitDibur };
+}
+
+export function stopTimer(): TimerResult | null {
+  const res = previewStopTimer();
+  if (!res) return null;
+  assertStoreWritable();
+  timerGeneration++;
   timerSession = null;
   persistKey("timer", null);
   emit();
-  return { framework: t.framework, minutes, tanitDibur: t.tanitDibur };
+  return res;
 }
+/**
+ * Drops the time limit of the running session and nothing else: startedAt,
+ * accumulatedMs and pausedAt are kept, so the time already run still counts.
+ * Same session (generation unchanged). Throws StoreBlockedError when the file
+ * may not be written; on a failed save the limit comes back.
+ */
+export function removeTimerLimit(): TimerSession | null {
+  const t = timerSession;
+  if (!t || t.limitMinutes === undefined) return t;
+  assertStoreWritable();
+  const next: TimerSession = { ...t };
+  delete next.limitMinutes;
+  timerSession = next;
+  persistKey("timer", next);
+  emit();
+  return next;
+}
+
 export function cancelTimer(): void {
+  if (!timerSession) return;
+  assertStoreWritable();
+  timerGeneration++;
   timerSession = null;
   persistKey("timer", null);
   emit();

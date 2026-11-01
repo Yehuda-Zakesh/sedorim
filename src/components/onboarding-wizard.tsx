@@ -6,9 +6,11 @@
 // genuinely cannot guess and cannot work without: when the sedarim start and
 // end. Every minute the app counts is measured against those four times.
 //
-// So the hours come first, notifications second, backups third.
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, Check, Bell, Database, Clock } from "lucide-react";
+// So the hours come first, then how reminders show up, then the one reminder
+// that needs a background process (its own step, so it is always a deliberate
+// choice, off unless asked for), then backups. One decision per step.
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight, Check, Bell, BellRing, Database, Clock } from "lucide-react";
 import {
   getSettings,
   markOnboarded,
@@ -18,19 +20,26 @@ import {
   sederTimesError,
   type SederTimes,
 } from "@/lib/settings-store";
-import { StackedField, TimeField, Toggle } from "@/components/ui/form";
+import { NumberField, SelectField, TimeField, Toggle } from "@/components/ui/form";
 import { setBackgroundEnabled } from "@/lib/background";
 
 const STEPS = [
   { id: "seder", title: "שעות הסדרים", icon: Clock },
-  { id: "notifications", title: "התראות ותזכורות", icon: Bell },
+  { id: "notifications", title: "איך להזכיר לך", icon: Bell },
+  { id: "background", title: "כשהתוכנה סגורה", icon: BellRing },
   { id: "backup", title: "גיבויים", icon: Database },
   { id: "done", title: "הכל מוכן", icon: Check },
 ];
 
+const AUTO_LABEL = { off: "כבוי", daily: "יומי", weekly: "שבועי" } as const;
+
 function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function Hint({ children }: { children: ReactNode }) {
+  return <p className="text-sm leading-relaxed text-muted-foreground">{children}</p>;
 }
 
 export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
@@ -45,6 +54,13 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const [background, setBackground] = useState(initial.background.enabled);
   const [auto, setAuto] = useState(initial.data.autoBackup);
   const [retention, setRetention] = useState(initial.data.backupRetention);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Each step moves focus to its own heading, so a keyboard or screen-reader
+  // user lands at the top of the new step rather than on a vanished button.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [step]);
 
   const timesError = sederTimesError(times);
 
@@ -72,39 +88,54 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 
   const StepIcon = STEPS[step].icon;
   const blocked = step === 0 && timesError !== null;
+  const channelsOff = !popups && !desktop;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-background grid place-items-center p-4">
-      <div className="card-surface w-full max-w-lg overflow-hidden">
-        <div className="bg-primary text-primary-foreground p-6">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-lg bg-primary-foreground/10 grid place-items-center">
-              <StepIcon className="size-5" />
-            </div>
-            <div>
-              <div className="text-xs opacity-80">
-                שלב {step + 1} מתוך {STEPS.length}
-              </div>
-              <h2 className="text-lg font-semibold">{STEPS[step].title}</h2>
-            </div>
+    <div className="fixed inset-0 z-[60] bg-background grid place-items-center p-4 overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-title"
+        className="card-surface w-full max-w-lg overflow-hidden max-h-[calc(100dvh-2rem)] flex flex-col"
+      >
+        <div className="shrink-0 px-6 pt-6">
+          <div className="eyebrow flex items-center gap-2">
+            <StepIcon className="size-4 text-primary" aria-hidden="true" />
+            שלב {step + 1} מתוך {STEPS.length}
           </div>
-          <div className="mt-4 flex gap-1.5">
+          <h2
+            id="onboarding-title"
+            ref={headingRef}
+            tabIndex={-1}
+            className="title-serif mt-1 text-2xl focus:outline-none"
+          >
+            {STEPS[step].title}
+          </h2>
+          <div
+            className="mt-4 flex gap-1.5"
+            role="progressbar"
+            aria-label="התקדמות באשף"
+            aria-valuemin={1}
+            aria-valuemax={STEPS.length}
+            aria-valuenow={step + 1}
+          >
             {STEPS.map((_, i) => (
               <div
                 key={i}
-                className={`h-1 flex-1 rounded-full ${i <= step ? "bg-primary-foreground" : "bg-primary-foreground/20"}`}
+                className={`h-1 flex-1 rounded-full ${i <= step ? "bg-primary" : "bg-border"}`}
               />
             ))}
           </div>
         </div>
 
-        <div className="p-6 min-h-[280px]">
+        <div className="min-h-[260px] overflow-y-auto p-6">
           {step === 0 && (
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                כל החישובים בתוכנה — דקות חסרות, איחורים, בונוס, אוהבי ה׳ — נמדדים מול השעות האלה.
-                אפשר לשנות אותן בכל עת, ושינוי יחול מאותו יום ואילך בלבד.
-              </p>
+              <Hint>
+                זה הדבר היחיד שהתוכנה לא יכולה לנחש: כל החישובים — דקות חסרות, איחורים, בונוס —
+                נמדדים מול ארבע השעות האלה. אפשר לשנות אותן בכל עת בהגדרות, ושינוי יחול מאותו יום
+                ואילך בלבד.
+              </Hint>
               <div className="grid grid-cols-2 gap-3">
                 <TimeField
                   label="סדר א׳ — תחילה"
@@ -127,37 +158,95 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   onChange={(v) => setTimes({ ...times, s2End: v })}
                 />
               </div>
-              {timesError && <p className="text-xs text-destructive">{timesError}</p>}
+              {timesError && (
+                <p role="alert" className="text-sm text-destructive">
+                  לתיקון: {timesError}
+                </p>
+              )}
             </div>
           )}
 
           {step === 1 && (
             <div className="space-y-3">
-              <Toggle label="הודעות קופצות בתוך התוכנה" on={popups} onChange={setPopups} />
+              <Hint>
+                בחר איפה תופיע תזכורת, ואילו תזכורות בכלל. את השאר (סיכום שבועי, התראה מוקדמת על
+                הקצב ועוד) אפשר להתאים בהגדרות.
+              </Hint>
+              <Toggle
+                label={
+                  <span>
+                    הודעות קופצות בתוך התוכנה
+                    <span className="block text-2xs text-muted-foreground">
+                      מופיעות רק כשהתוכנה פתוחה
+                    </span>
+                  </span>
+                }
+                on={popups}
+                onChange={setPopups}
+              />
               <Toggle
                 label={
                   <span>
                     התראות בשולחן העבודה
                     <span className="block text-2xs text-muted-foreground">
-                      הודעות Windows — מופיעות גם כשהתוכנה מוסתרת
+                      הודעות Windows — מופיעות גם כשהתוכנה מוסתרת מאחורי חלון אחר
                     </span>
                   </span>
                 }
                 on={desktop}
                 onChange={setDesktop}
               />
-              <div className="pt-2 text-xs font-semibold text-muted-foreground">אילו תזכורות</div>
-              <Toggle label="תזכורת יומית לרישום נוכחות" on={reminder} onChange={setReminder} />
-              <Toggle label="התראה כשמתקרב למכסת האיחורים" on={lateAlert} onChange={setLateAlert} />
+              {channelsOff && (
+                <p role="status" className="text-sm text-warning-fg">
+                  שני הערוצים כבויים, ולכן לא תוצג אף תזכורת.
+                </p>
+              )}
+              <div className="eyebrow pt-2">אילו תזכורות</div>
               <Toggle
-                label="תזכורת לדיווח במערכת הטלפונית בתחילת כל חודש"
+                label={
+                  <span>
+                    תזכורת יומית לרישום נוכחות
+                    <span className="block text-2xs text-muted-foreground">
+                      כשעד תחילת סדר א׳ עוד לא נרשם דבר
+                    </span>
+                  </span>
+                }
+                on={reminder}
+                onChange={setReminder}
+              />
+              <Toggle
+                label={
+                  <span>
+                    התראה כשמתקרב למכסת האיחורים
+                    <span className="block text-2xs text-muted-foreground">
+                      כדי שעוד אפשר יהיה להגיע בזמן
+                    </span>
+                  </span>
+                }
+                on={lateAlert}
+                onChange={setLateAlert}
+              />
+              <Toggle
+                label={
+                  <span>
+                    תזכורת לדיווח במערכת הטלפונית
+                    <span className="block text-2xs text-muted-foreground">
+                      בתחילת כל חודש, על החודש שהסתיים
+                    </span>
+                  </span>
+                }
                 on={phoneReport}
                 onChange={setPhoneReport}
               />
+            </div>
+          )}
 
-              <div className="pt-2 text-xs font-semibold text-muted-foreground">
-                גם כשהתוכנה סגורה
-              </div>
+          {step === 2 && (
+            <div className="space-y-3">
+              <Hint>
+                בלי זה, תזכורת מוצגת רק כשהתוכנה פתוחה. זו בחירה מפורשת: היא מפעילה תוכנית נוספת
+                במחשב, ולכן היא כבויה עד שתבחר אחרת.
+              </Hint>
               <Toggle
                 label={
                   <span>
@@ -176,80 +265,100 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   if (v) setDesktop(true);
                 }}
               />
-              <p className="text-xs text-muted-foreground">
-                בלי זה, תזכורת מוצגת רק כשהתוכנה פתוחה. אפשר לשנות הכל בכל עת במסך ההגדרות.
-              </p>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                הנתונים נשמרים אצלך במחשב. גיבוי אוטומטי שומר עותקים נוספים, כדי שגם טעות תהיה
-                הפיכה.
-              </p>
-              <StackedField label="תדירות גיבוי אוטומטי">
-                <select
-                  value={auto}
-                  onChange={(e) => setAuto(e.target.value as "off" | "daily" | "weekly")}
-                  className="field-input w-full"
-                >
-                  <option value="off">כבוי</option>
-                  <option value="daily">יומי</option>
-                  <option value="weekly">שבועי</option>
-                </select>
-              </StackedField>
-              <StackedField label="מספר גיבויים לשמור">
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={retention}
-                  onChange={(e) => setRetention(Math.max(1, Math.min(20, +e.target.value || 1)))}
-                  className="field-input w-full"
-                />
-              </StackedField>
+              {background && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  התראות שולחן העבודה הופעלו גם הן, כי התזכורות ברקע מגיעות כהודעות Windows.
+                </p>
+              )}
+              <Hint>אפשר לכבות בכל רגע במסך ההגדרות, תחת "יעדים ותזכורות".</Hint>
             </div>
           )}
 
           {step === 3 && (
-            <div className="text-center py-6">
-              <div className="size-14 rounded-full bg-success/15 text-success grid place-items-center mx-auto">
-                <Check className="size-7" />
-              </div>
-              <h3 className="mt-4 text-lg font-semibold">הכל מוכן</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                סדר א׳ {times.s1Start}–{times.s1End} · סדר ב׳ {times.s2Start}–{times.s2End}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                את השם שיופיע בדוחות, ואת שאר ההעדפות, אפשר להגדיר בכל עת במסך ההגדרות.
+            <div className="space-y-4">
+              <Hint>
+                הנתונים נשמרים אצלך במחשב. גיבוי אוטומטי שומר עותקים נוספים בתוך התוכנה, כדי שגם
+                טעות תהיה הפיכה. עותק כזה אינו קובץ במחשב — קובץ גיבוי אפשר לייצא בכל עת ממסך
+                הגיבוי.
+              </Hint>
+              <SelectField
+                label="תדירות גיבוי אוטומטי"
+                value={auto}
+                options={[
+                  { v: "off", l: "כבוי" },
+                  { v: "daily", l: "יומי" },
+                  { v: "weekly", l: "שבועי" },
+                ]}
+                onChange={(v) => setAuto(v as "off" | "daily" | "weekly")}
+              />
+              <NumberField
+                label="מספר גיבויים לשמור"
+                min={1}
+                max={20}
+                value={retention}
+                onChange={setRetention}
+              />
+              <Hint>כשמגיעים למספר הזה, הגיבוי הישן ביותר נמחק כדי לפנות מקום לחדש.</Hint>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div>
+              <h3 className="title-serif text-xl">הכל מוכן</h3>
+              <ul className="ledger mt-3 text-sm">
+                <li className="row-pad">
+                  <span className="text-muted-foreground">שעות: </span>
+                  <span className="figure">
+                    סדר א׳ {times.s1Start}–{times.s1End} · סדר ב׳ {times.s2Start}–{times.s2End}
+                  </span>
+                </li>
+                <li className="row-pad">
+                  <span className="text-muted-foreground">תזכורות: </span>
+                  {channelsOff
+                    ? "כבויות"
+                    : [popups && "בתוך התוכנה", desktop && "בשולחן העבודה"]
+                        .filter(Boolean)
+                        .join(" ו")}
+                  {background ? " · גם כשהתוכנה סגורה" : ""}
+                </li>
+                <li className="row-pad">
+                  <span className="text-muted-foreground">גיבוי אוטומטי: </span>
+                  {AUTO_LABEL[auto]}
+                  {auto !== "off" ? ` · נשמרים ${retention} עותקים` : ""}
+                </li>
+              </ul>
+              <p className="mt-4 text-sm text-muted-foreground">
+                את השם שיופיע בדוחות, את היעדים ואת שאר ההעדפות אפשר להגדיר בכל עת במסך ההגדרות.
               </p>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-between p-5 border-t border-border bg-muted/30">
+        <div className="flex shrink-0 items-center justify-between border-t border-border px-6 py-4">
           <button
+            type="button"
             onClick={() => setStep((s) => Math.max(0, s - 1))}
             disabled={step === 0}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-30"
+            className="inline-flex h-10 items-center gap-1 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
           >
-            <ChevronRight className="size-4" /> חזור
+            <ChevronRight className="size-4" aria-hidden="true" /> חזור
           </button>
           {step < STEPS.length - 1 ? (
             <button
+              type="button"
               onClick={() => setStep((s) => s + 1)}
               disabled={blocked}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+              className="pressable inline-flex h-10 items-center gap-1 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
             >
-              המשך <ChevronLeft className="size-4" />
+              המשך <ChevronLeft className="size-4" aria-hidden="true" />
             </button>
           ) : (
             <button
+              type="button"
               onClick={finish}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              className="pressable inline-flex h-10 items-center gap-1 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
-              סיום <Check className="size-4" />
+              סיום <Check className="size-4" aria-hidden="true" />
             </button>
           )}
         </div>

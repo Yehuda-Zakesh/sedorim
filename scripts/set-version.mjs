@@ -62,4 +62,8 @@ stampJson("src-tauri/quick/tauri.conf.json");
 stampCargo("src-tauri/core/Cargo.toml");
 stampCargo("src-tauri/full/Cargo.toml");
 stampCargo("src-tauri/quick/Cargo.toml");
+// The background agent and the shared store crate carry the version too: the
+// upgrade copy is keyed on it, so all three programs must agree on one number.
+stampCargo("src-tauri/agent/Cargo.toml");
+stampCargo("src-tauri/shared/Cargo.toml");
 console.log(`Done — this build is גרסה ${major}.`);

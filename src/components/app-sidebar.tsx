@@ -2,142 +2,113 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useSidebarCollapsed } from "@/lib/sidebar-state";
 import {
   LayoutDashboard,
-  ClipboardCheck,
-  History,
+  BookMarked,
   BookOpen,
-  CalendarDays,
-  BarChart3,
-  FileText,
+  CalendarCheck,
   Settings,
-  Info,
-  DatabaseBackup,
-  Wallet,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
+import { SECTIONS, sectionForPath, type NavSection } from "@/lib/nav";
 
-// Every screen the app has, grouped. Each screen lives in exactly one place,
-// and this list is the place it lives — keep it in step with SHORTCUTS in
-// src/lib/shortcuts.ts.
+// The four working areas, then settings pinned to the bottom. The tabs inside
+// each area live in src/lib/nav.ts — keep SHORTCUTS in src/lib/shortcuts.ts in
+// step with it.
 //
-// Statistics and insights used to be two entries showing the same four
-// figures; they are one screen now. The audit log is gone entirely — see
-// src/lib/diagnostics.ts for what replaced it.
-const NAV_GROUPS = [
-  {
-    label: "מעקב",
-    items: [
-      { to: "/", label: "לוח בקרה", icon: LayoutDashboard },
-      { to: "/attendance", label: "נוכחות סדרים", icon: ClipboardCheck },
-      { to: "/calendar", label: "לוח שנה", icon: CalendarDays },
-      { to: "/history", label: "היסטוריה", icon: History },
-      { to: "/learning", label: "לימוד נוסף", icon: BookOpen },
-    ],
-  },
-  {
-    label: "ניתוח",
-    items: [
-      { to: "/statistics", label: "סטטיסטיקות ותובנות", icon: BarChart3 },
-      { to: "/stipend", label: "מחשבון מלגה", icon: Wallet },
-      { to: "/reports", label: "דוחות", icon: FileText },
-    ],
-  },
-  {
-    label: "מערכת",
-    items: [
-      { to: "/backup", label: "גיבוי ושחזור", icon: DatabaseBackup },
-      { to: "/settings", label: "הגדרות", icon: Settings },
-      { to: "/about", label: "אודות", icon: Info },
-    ],
-  },
-] as const;
+// The rail is the same colour as the page and is set off by one hairline. Open,
+// it is text; the icon is there for the collapsed rail, where it is the only
+// thing to point at. The current area is marked by a bar at the inline start
+// and heavier type — not by a filled block.
+const ICONS: Record<NavSection["id"], typeof Settings> = {
+  today: LayoutDashboard,
+  journal: BookMarked,
+  learning: BookOpen,
+  month: CalendarCheck,
+  settings: Settings,
+};
+const MAIN = SECTIONS.filter((s) => s.id !== "settings");
+const SETTINGS = SECTIONS.find((s) => s.id === "settings")!;
+
+function NavItem({
+  sec,
+  active,
+  collapsed,
+}: {
+  sec: NavSection;
+  active: boolean;
+  collapsed: boolean;
+}) {
+  const Icon = ICONS[sec.id];
+  return (
+    <li className="list-none">
+      <Link
+        to={sec.to}
+        title={sec.label}
+        aria-label={sec.label}
+        aria-current={active ? "page" : undefined}
+        className={[
+          "pressable group relative flex items-center border-s-[3px] py-2.5 text-[0.9375rem]",
+          collapsed ? "justify-center px-0" : "gap-3 ps-4 pe-3",
+          active
+            ? "border-primary font-semibold text-foreground"
+            : "border-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+        ].join(" ")}
+      >
+        <Icon className={`size-5 shrink-0 ${collapsed ? "" : "hidden"}`} aria-hidden="true" />
+        {!collapsed ? (
+          <span className="truncate">{sec.label}</span>
+        ) : (
+          <span className="pointer-events-none absolute end-full me-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 z-50">
+            {sec.label}
+          </span>
+        )}
+      </Link>
+    </li>
+  );
+}
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { collapsed, toggle } = useSidebarCollapsed();
-  const width = collapsed ? "w-[64px]" : "w-[220px]";
+  const activeId = sectionForPath(pathname)?.id;
+  const width = collapsed ? "w-[64px]" : "w-[208px]";
 
   return (
     <aside
-      className={`fixed inset-y-0 start-0 z-30 flex ${width} flex-col bg-sidebar text-sidebar-foreground border-e border-sidebar-border transition-[width] duration-200 ease-[var(--ease-out-soft)]`}
+      className={`fixed inset-y-0 start-0 z-30 flex ${width} flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-[var(--ease-out-soft)]`}
     >
       <div
-        className={`px-2 py-3 border-b border-sidebar-border flex items-center ${collapsed ? "justify-center" : "justify-between gap-2"}`}
+        className={`flex items-center px-3 pt-4 pb-3 ${collapsed ? "flex-col gap-2" : "justify-between gap-2"}`}
       >
-        {!collapsed && (
-          <div className="flex items-center gap-2 px-1 min-w-0">
-            <div className="size-9 rounded-lg bg-sidebar-primary grid place-items-center text-sidebar-primary-foreground font-bold shrink-0">
-              ס
-            </div>
-            <div className="text-sm font-semibold truncate">סדר פלוס</div>
-          </div>
-        )}
-        {collapsed && (
-          <div
-            className="size-9 rounded-lg bg-sidebar-primary grid place-items-center text-sidebar-primary-foreground font-bold"
-            title="סדר פלוס"
-          >
-            ס
-          </div>
-        )}
+        <div className="min-w-0 px-1" title="סדר פלוס">
+          <div className="title-serif truncate text-xl">{collapsed ? "ס" : "סדר פלוס"}</div>
+        </div>
         <button
           onClick={toggle}
           title={collapsed ? "הרחב סרגל" : "כווץ סרגל"}
           aria-label={collapsed ? "הרחב סרגל" : "כווץ סרגל"}
-          className={`${collapsed ? "mt-2" : ""} pressable rounded-md p-1.5 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground`}
+          className="pressable grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
         >
           {collapsed ? (
-            <PanelRightOpen className="size-4" />
+            <PanelRightOpen className="size-4" aria-hidden="true" />
           ) : (
-            <PanelRightClose className="size-4" />
+            <PanelRightClose className="size-4" aria-hidden="true" />
           )}
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-1.5 py-3">
-        {NAV_GROUPS.map((group, gi) => (
-          <div key={group.label} className={gi > 0 ? "mt-4" : ""}>
-            {collapsed ? (
-              gi > 0 && <div className="mx-2 mb-2 border-t border-sidebar-border" />
-            ) : (
-              <div className="px-2.5 pb-1.5 text-2xs font-semibold text-sidebar-foreground/60">
-                {group.label}
-              </div>
-            )}
-            <ul className="space-y-1">
-              {group.items.map(({ to, label, icon: Icon }) => {
-                const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
-                return (
-                  <li key={to}>
-                    <Link
-                      to={to}
-                      title={label}
-                      aria-label={label}
-                      aria-current={active ? "page" : undefined}
-                      className={[
-                        "pressable group relative flex items-center rounded-md p-2.5 text-sm",
-                        collapsed ? "justify-center" : "gap-3",
-                        active
-                          ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                      ].join(" ")}
-                    >
-                      <Icon className="size-5 shrink-0" />
-                      {!collapsed ? (
-                        <span className="truncate">{label}</span>
-                      ) : (
-                        <span className="pointer-events-none absolute end-full me-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-popover text-popover-foreground border border-border px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-md z-50">
-                          {label}
-                        </span>
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+      <nav aria-label="ניווט ראשי" className="flex-1 overflow-y-auto py-2">
+        <ul>
+          {MAIN.map((sec) => (
+            <NavItem key={sec.id} sec={sec} active={activeId === sec.id} collapsed={collapsed} />
+          ))}
+        </ul>
       </nav>
+      <div className="border-t border-sidebar-border py-2">
+        <ul>
+          <NavItem sec={SETTINGS} active={activeId === "settings"} collapsed={collapsed} />
+        </ul>
+      </div>
     </aside>
   );
 }

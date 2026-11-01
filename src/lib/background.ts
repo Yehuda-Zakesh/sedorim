@@ -21,6 +21,7 @@
 
 import { invoke, isDesktop } from "./tauri";
 import { saveStoreKeys } from "./store-bridge";
+import { getStoreGate, isStoreWritable, StoreBlockedError } from "./store-gate";
 import { getSettings, updateSettings } from "./settings-store";
 import { clearBackgroundPlan, refreshBackgroundPlan } from "./background-plan";
 import { logProblem } from "./diagnostics";
@@ -32,6 +33,10 @@ export function isBackgroundEnabled(): boolean {
 }
 
 export async function setBackgroundEnabled(enabled: boolean): Promise<BackgroundResult> {
+  // The agent obeys the flag in the data file; with the file unread/unwritable
+  // nothing may be changed, and starting the process would be a lie.
+  if (!isStoreWritable())
+    return { ok: false, error: new StoreBlockedError(getStoreGate()).message };
   const before = getSettings();
 
   if (enabled) {

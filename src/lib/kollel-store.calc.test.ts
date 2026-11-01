@@ -20,6 +20,12 @@ import {
   type LearningFramework,
 } from "./kollel-store";
 import { DEFAULT_SETTINGS, resetSettings, updateSettings } from "./settings-store";
+import { setStoreGate } from "@/lib/store-gate";
+
+// These tests exercise the stores as if the data file had been read: writes are
+// refused until the gate is "ready" (see store-gate.ts). In this environment the
+// real startup read finds no storage, so the gate is opened before every test.
+beforeEach(() => setStoreGate("ready"));
 
 const { s1Start, s1End, s2Start, s2End, bonusThresholdMin } = DEFAULT_SETTINGS.seder;
 const s1StartMin = hhmmToMin(s1Start)!;

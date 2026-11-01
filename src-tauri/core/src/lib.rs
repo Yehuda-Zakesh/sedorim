@@ -40,13 +40,95 @@ async fn load_store() -> Map<String, Value> {
     store::read_store()
 }
 
+/// Safe loader: tells a fresh install, a good file and a damaged one apart.
+/// See the module docs in shared/src/store.rs for the JSON shape.
 #[tauri::command]
-async fn save_store_keys(patch: Map<String, Value>) -> Result<store::SaveResult, String> {
-    let result = store::save_keys(&patch);
+async fn load_store_checked() -> store::StoreLoad {
+    let load = store::load_store_checked(env!("CARGO_PKG_VERSION"));
+    if let store::StoreLoad::Corrupt {
+        reason, message, ..
+    } = &load
+    {
+        logfile::append(
+            "error",
+            &format!("קובץ הנתונים פגום ({}): {message}", reason.as_str()),
+        );
+    }
+    load
+}
+
+#[tauri::command]
+async fn recover_store(name: String) -> Result<store::SaveResult, String> {
+    let result = store::recover_store(&name);
+    match &result {
+        Ok(_) => logfile::append("info", &format!("הנתונים שוחזרו מגיבוי {name}.")),
+        Err(err) => logfile::append("error", &format!("שחזור מגיבוי נכשל: {err}")),
+    }
+    result
+}
+
+#[tauri::command]
+async fn preview_backup(name: String) -> Result<store::BackupPreview, String> {
+    store::preview_backup(&name)
+}
+
+#[tauri::command]
+async fn start_empty_store() -> Result<store::SaveResult, String> {
+    let result = store::start_empty_store();
+    if let Err(err) = &result {
+        logfile::append("error", &format!("יצירת מאגר ריק נכשלה: {err}"));
+    }
+    result
+}
+
+#[derive(serde::Serialize)]
+struct UpgradeCopyResult {
+    files: Vec<String>,
+}
+
+#[tauri::command]
+async fn create_upgrade_copy(
+    label: String,
+    legacy: Option<Value>,
+) -> Result<UpgradeCopyResult, String> {
+    store::create_upgrade_copy(&label, legacy.as_ref()).map(|files| UpgradeCopyResult { files })
+}
+
+#[tauri::command]
+async fn open_data_folder(app: AppHandle) -> Result<(), String> {
+    let dir = store::data_dir();
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    app.opener()
+        .open_path(dir.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn save_store_keys(
+    patch: Map<String, Value>,
+    // Optional: per key, the array as this window last loaded/wrote it. With
+    // it the Rust side merges record by record (by id) instead of replacing
+    // the array, so another window's concurrent change survives. Without it:
+    // the old whole-key replace.
+    bases: Option<Map<String, Value>>,
+) -> Result<store::SaveResult, String> {
+    let result = store::save_keys_merging(&patch, bases.as_ref());
     if let Err(err) = &result {
         // Losing a write is the one failure the user must be able to find out
         // about after the fact.
         logfile::append("error", &format!("שמירת הנתונים נכשלה: {err}"));
+    }
+    if let Ok(res) = &result {
+        if !res.conflicts.is_empty() {
+            logfile::append(
+                "warn",
+                &format!(
+                    "שמירה נעצרה ב-{} רשומות שנערכו גם בחלון אחר; גרסת הקובץ נשמרה.",
+                    res.conflicts.len()
+                ),
+            );
+        }
     }
     result
 }
@@ -75,7 +157,8 @@ async fn clear_log() -> Result<(), String> {
 #[tauri::command]
 async fn open_log_folder(app: AppHandle) -> Result<(), String> {
     let dir = logfile::log_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
     app.opener()
         .open_path(dir.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| e.to_string())
@@ -189,7 +272,11 @@ async fn set_background_agent(enabled: bool) -> Result<(), String> {
     match &result {
         Ok(()) => logfile::append(
             "info",
-            if enabled { "מצב הרקע הופעל." } else { "מצב הרקע כובה." },
+            if enabled {
+                "מצב הרקע הופעל."
+            } else {
+                "מצב הרקע כובה."
+            },
         ),
         Err(err) => logfile::append("error", &format!("שינוי מצב הרקע נכשל: {err}")),
     }
@@ -417,6 +504,12 @@ pub fn run(context: tauri::Context, mode: Mode) {
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             load_store,
+            load_store_checked,
+            recover_store,
+            preview_backup,
+            start_empty_store,
+            create_upgrade_copy,
+            open_data_folder,
             save_store_keys,
             store_stamp,
             save_file_as,

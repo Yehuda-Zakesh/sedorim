@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell, APP_VERSION, BUILD_COMMIT, BUILD_TIME } from "@/components/app-shell";
 import {
   ClipboardCheck,
@@ -12,8 +12,6 @@ import {
   Shield,
   Zap,
   Sparkles,
-  Info,
-  HeartHandshake,
   Palette,
   BellRing,
   RefreshCw,
@@ -47,8 +45,8 @@ const features = [
   },
   {
     icon: BarChart3,
-    title: "סטטיסטיקות ותובנות",
-    desc: "מסך אחד שאומר במשפט איך נראה החודש, ואחריו המדדים, ההמלצות והגרפים — מגמת 12 חודשים, ימי השבוע החלשים ומפת נוכחות.",
+    title: "סטטיסטיקות",
+    desc: "מסך אחד שאומר במשפט איך נראה החודש, ואחריו הנתונים והגרפים — מגמת 12 חודשים, ימי השבוע החלשים ומפת נוכחות.",
   },
   {
     icon: History,
@@ -72,8 +70,8 @@ const features = [
   },
   {
     icon: Palette,
-    title: "עיצוב מותאם",
-    desc: "11 ערכות צבע לסרגל הצד, ערכות רקע מרובות, מצב בהיר/כהה, שינוי גודל גופן וניגודיות גבוהה.",
+    title: "מראה מותאם",
+    desc: "12 ערכות צבע (ברירת המחדל: ירוק דיו), כמה ערכות רקע, מצב בהיר/כהה, שינוי גודל גופן וניגודיות גבוהה.",
   },
   {
     icon: Shield,
@@ -104,88 +102,94 @@ const features = [
 
 function AboutPage() {
   return (
-    <AppShell title="אודות" subtitle="מידע על התוכנה והפעילות שלה">
-      <div dir="rtl" className="mx-auto max-w-5xl space-y-6">
-        {/* Hero */}
-        <section className="rounded-2xl border border-border bg-gradient-to-l from-primary/10 via-card to-card p-8 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="size-14 rounded-xl bg-primary grid place-items-center text-primary-foreground shadow-md">
-              <Info className="size-7" />
+    <AppShell title="אודות ותחזוקה" subtitle="גרסה, עדכונים ומה התוכנה יודעת לעשות">
+      <div dir="rtl" className="stack-gap max-w-4xl">
+        {/* Who and which version */}
+        <section>
+          <h2 className="title-serif text-3xl">סדר פלוס</h2>
+          <p className="mt-2 max-w-2xl text-base leading-relaxed text-muted-foreground">
+            תוכנה אישית לניהול הנוכחות והלימוד היומי בכולל. כל המידע נשמר במחשב שלך בלבד, ולא נשלח
+            לשום מקום. מותאמת לאברכי כולל כתר תורה, עם לוח עברי ודוחות מוכנים לשליחה.
+          </p>
+          <dl className="mt-4 max-w-md ledger text-sm">
+            <div className="row-pad flex justify-between gap-4">
+              <dt className="text-muted-foreground">גרסה</dt>
+              <dd className="figure font-medium">{APP_VERSION}</dd>
             </div>
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold">סדר פלוס</h2>
-              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                תוכנה אישית ומקצועית לניהול הנוכחות והלימוד היומי בכולל. כל המידע נשמר מקומית במחשב
-                שלך — שקוף, פרטי ותמיד זמין. מותאמת במיוחד לאברכי כולל כתר תורה, לוח עברי ודוחות
-                מוכנים לשליחה.
-              </p>
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-                <span className="rounded-full bg-primary/15 text-primary px-3 py-1 font-medium">
-                  גרסה {APP_VERSION}
-                </span>
-                <span className="rounded-full bg-muted px-3 py-1">עדכון אוטומטי</span>
-                {BUILD_COMMIT !== "dev" && (
-                  <span
-                    className="rounded-full bg-muted px-3 py-1 font-mono"
-                    title="השוו מול הקומיט האחרון ב-GitHub כדי לוודא שהחבילה עדכנית"
-                  >
-                    build {BUILD_COMMIT}
-                    {BUILD_TIME ? ` · ${BUILD_TIME}` : ""}
-                  </span>
-                )}
-                <span className="rounded-full bg-muted px-3 py-1">עברית · RTL</span>
-                <span className="rounded-full bg-muted px-3 py-1">אחסון מקומי</span>
-                <span className="rounded-full bg-muted px-3 py-1">ללא הרשמה</span>
+            {BUILD_COMMIT !== "dev" && (
+              <div className="row-pad flex justify-between gap-4">
+                <dt className="text-muted-foreground">בנייה</dt>
+                <dd className="figure font-mono" dir="ltr">
+                  {BUILD_COMMIT}
+                  {BUILD_TIME ? ` · ${BUILD_TIME}` : ""}
+                </dd>
               </div>
+            )}
+            <div className="row-pad flex justify-between gap-4">
+              <dt className="text-muted-foreground">אחסון</dt>
+              <dd>מקומי, בלי הרשמה</dd>
             </div>
-          </div>
+          </dl>
         </section>
 
-        {/* Features grid */}
-        <section>
-          <h3 className="mb-3 text-xs font-semibold text-muted-foreground">מה התוכנה עושה</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* Maintenance */}
+        <section aria-labelledby="about-maintenance" className="section-rule">
+          <h3 id="about-maintenance" className="mb-2 text-base font-semibold">
+            תחזוקה
+          </h3>
+          <ul className="ledger text-sm">
+            <li className="row-pad">
+              <span className="font-medium">עדכונים.</span>{" "}
+              <span className="text-muted-foreground">
+                התוכנה בודקת בעצמה פעמיים ביום, ושואלת לפני שהיא מתקינה גרסה חדשה.
+              </span>
+            </li>
+            <li className="row-pad">
+              <span className="font-medium">תקלה?</span>{" "}
+              <Link to="/settings" className="text-primary underline underline-offset-2">
+                יומן התקלות
+              </Link>{" "}
+              <span className="text-muted-foreground">נמצא בהגדרות, תחת ״תחזוקה ואודות״.</span>
+            </li>
+            <li className="row-pad">
+              <span className="font-medium">גיבוי ושחזור.</span>{" "}
+              <Link to="/backup" className="text-primary underline underline-offset-2">
+                נתונים וגיבוי
+              </Link>
+              <span className="text-muted-foreground"> — שמירת קובץ במחשב ושחזור.</span>
+            </li>
+          </ul>
+        </section>
+
+        {/* Features */}
+        <section className="section-rule">
+          <h3 className="mb-2 text-base font-semibold">מה התוכנה עושה</h3>
+          <ul className="ledger">
             {features.map(({ icon: Icon, title, desc }) => (
-              <div
-                key={title}
-                className="rounded-xl border border-border bg-card p-4 hover:shadow-sm transition-shadow"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="size-8 rounded-lg bg-primary/10 text-primary grid place-items-center shrink-0">
-                    <Icon className="size-4" />
-                  </div>
+              <li key={title} className="row-pad flex items-baseline gap-3">
+                <Icon className="size-4 shrink-0 translate-y-0.5 text-primary" aria-hidden="true" />
+                <div className="min-w-0">
                   <h4 className="text-sm font-semibold">{title}</h4>
+                  <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{desc}</p>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
 
         {/* Two apps */}
-        <section className="rounded-2xl border border-border bg-card p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Zap className="size-5 text-primary" />
-            <h3 className="text-base font-semibold">שני יישומים · אותו מסד נתונים</h3>
-          </div>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            החבילה כוללת שני יישומים נפרדים לחלוטין: התוכנה הראשית (המסך הזה) לניהול מלא של הנוכחות,
-            הלימוד, הדוחות וההגדרות; ויישום "כניסה מהירה" לרישום זריז של שעות הגעה ויציאה. שני
-            היישומים חולקים את אותו אחסון מקומי במחשב, כך שהנתונים מסתנכרנים אוטומטית ביניהם.
+        <section className="section-rule">
+          <h3 className="mb-2 text-base font-semibold">שני יישומים, אותם נתונים</h3>
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            החבילה כוללת שתי תוכנות: התוכנה הראשית (המסך הזה), לניהול מלא של הנוכחות, הלימוד, הדוחות
+            וההגדרות; ו״כניסה מהירה״, לרישום זריז של שעת הגעה. שתיהן קוראות וכותבות לאותו אחסון
+            מקומי במחשב, ולכן הנתונים זהים בשתיהן.
           </p>
         </section>
 
-        {/* License */}
-        <section className="rounded-2xl border border-border bg-card p-6 text-center">
-          <div className="flex items-center justify-center gap-2 mb-2 text-primary">
-            <HeartHandshake className="size-5" />
-            <h3 className="text-base font-semibold">שימוש חופשי</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            כל הזכויות לא שמורות — מותר להעביר, להתקין ולהשתמש בחופשיות.
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">גרסה {APP_VERSION}</p>
-        </section>
+        <p className="text-sm text-muted-foreground">
+          שימוש חופשי: מותר להעביר, להתקין ולהשתמש בחופשיות.
+        </p>
       </div>
     </AppShell>
   );

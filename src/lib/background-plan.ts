@@ -16,6 +16,7 @@
 
 import { useEffect } from "react";
 
+import { isStoreWritable } from "./store-gate";
 import { sharedValue } from "./shared-state";
 import { getSettings, getSederTimesFor } from "./settings-store";
 import { hhmmToMin, getSederSnapshot } from "./kollel-store";
@@ -156,6 +157,8 @@ export function currentPlanInputs(): PlanInputs {
  * feature on would do nothing until the next launch.
  */
 export function refreshBackgroundPlan(now = new Date()): void {
+  // Not before the file was read: the plan would be built from default settings.
+  if (!isStoreWritable()) return;
   if (!getSettings().background.enabled) return;
   const next = buildPlan(now, currentPlanInputs());
   // The days shift by one every midnight, so this does write once a day.

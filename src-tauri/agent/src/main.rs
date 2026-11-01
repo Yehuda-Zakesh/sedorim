@@ -61,6 +61,7 @@ fn main() {
         return;
     }
     init_com();
+    ensure_upgrade_copy();
 
     let exe_dir = std::env::current_exe()
         .ok()
@@ -84,6 +85,8 @@ struct State {
     /// The data file's mtime when `snapshot` was taken.
     stamp: String,
     snapshot: Option<Snapshot>,
+    /// A read of the data file is currently failing (logged once per streak).
+    read_failing: bool,
 }
 
 struct Snapshot {
@@ -110,8 +113,27 @@ fn tick(state: &mut State, exe_dir: &Path) -> bool {
         || stamp != state.stamp
         || state.snapshot.as_ref().is_some_and(|s| s.date != today)
     {
-        let raw = store::read_store();
-        if !background_enabled(&raw) {
+        // A read that FAILED is not an answer: only a store that was read
+        // successfully and says background mode is explicitly off ends the
+        // agent. On a persistent failure keep whatever we knew, say so once
+        // per streak, and try again next tick.
+        let raw = match read_store_retrying(READ_ATTEMPTS, READ_RETRY_DELAY) {
+            Ok(raw) => {
+                state.read_failing = false;
+                raw
+            }
+            Err(err) => {
+                if !state.read_failing {
+                    state.read_failing = true;
+                    logfile::append(
+                        "error",
+                        &format!("SederPlusAgent: קריאת קובץ הנתונים נכשלה, ינסה שוב: {err}"),
+                    );
+                }
+                return true;
+            }
+        };
+        if background_explicitly_off(&raw) {
             logfile::append("info", "מצב הרקע כובה — SederPlusAgent נסגר.");
             return false;
         }
@@ -158,13 +180,42 @@ fn tick(state: &mut State, exe_dir: &Path) -> bool {
 
 // ============ the data file ============
 
-fn background_enabled(store: &Map<String, Value>) -> bool {
+/// True only when the (successfully read) store says, in so many words, that
+/// background mode is off. A store with no such setting is not an "off".
+fn background_explicitly_off(store: &Map<String, Value>) -> bool {
     store
         .get("settings")
         .and_then(|s| s.get("background"))
         .and_then(|b| b.get("enabled"))
         .and_then(Value::as_bool)
-        .unwrap_or(false)
+        == Some(false)
+}
+
+const READ_ATTEMPTS: usize = 5;
+const READ_RETRY_DELAY: StdDuration = StdDuration::from_millis(200);
+
+/// The checking read, retried: a virus scanner or the app mid-rename can make
+/// one read fail for a moment, which is nothing like the file saying "off".
+fn read_store_retrying(attempts: usize, delay: StdDuration) -> Result<Map<String, Value>, String> {
+    retry_read(attempts, delay, store::read_store_verified)
+}
+
+fn retry_read(
+    attempts: usize,
+    delay: StdDuration,
+    mut read: impl FnMut() -> Result<Map<String, Value>, String>,
+) -> Result<Map<String, Value>, String> {
+    let mut last = String::new();
+    for attempt in 0..attempts.max(1) {
+        if attempt > 0 {
+            std::thread::sleep(delay);
+        }
+        match read() {
+            Ok(map) => return Ok(map),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
 }
 
 fn flag(store: &Map<String, Value>, section: &str, name: &str, default: bool) -> bool {
@@ -231,39 +282,65 @@ fn read_snapshot(store: &Map<String, Value>, now: &Civil) -> Snapshot {
 ///
 /// Read-modify-write of the one key: the app may be running and may have
 /// written other kinds into it, and `save_keys` replaces whole top-level keys.
+///
+/// The read and the write happen in one locked step on the file's CURRENT
+/// object (`update_key`), so the other kinds already in it are carried over
+/// and a failed read is an error, never an empty map that would wipe them
+/// (which is how a reminder would be raised twice).
 fn mark_sent(key: &str, token: &str) {
-    let mut sent = match store::read_store().get("notificationsSent") {
-        Some(Value::Object(map)) => map.clone(),
-        _ => Map::new(),
-    };
-    sent.insert(key.to_string(), Value::from(token));
-    let mut patch = Map::new();
-    patch.insert("notificationsSent".to_string(), Value::Object(sent));
-    if let Err(err) = store::save_keys(&patch) {
+    ensure_upgrade_copy();
+    let result = store::update_key("notificationsSent", &mut |current| {
+        let mut sent = match current {
+            Some(Value::Object(map)) => map.clone(),
+            _ => Map::new(),
+        };
+        if sent.get(key).and_then(Value::as_str) == Some(token) {
+            return None;
+        }
+        sent.insert(key.to_string(), Value::from(token));
+        Some(Value::Object(sent))
+    });
+    if let Err(err) = result {
         logfile::append("error", &format!("שמירת סימון ההתראה נכשלה: {err}"));
+    }
+}
+
+/// The agent writes the same file the app does, so it goes through the same
+/// once-per-version raw copy before its first write (a no-op after that, and
+/// when the app already made it).
+fn ensure_upgrade_copy() {
+    if !store::upgrade_marker_exists() {
+        store::ensure_upgrade_copy(env!("CARGO_PKG_VERSION"));
     }
 }
 
 /// Marks a month as reported, from the toast's button.
 fn mark_phone_reported(month: &str) {
-    let store_now = store::read_store();
-    let mut months: Vec<Value> = store_now
-        .get("phoneReport")
-        .and_then(|p| p.get("reported"))
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    if months.iter().any(|m| m.as_str() == Some(month)) {
-        return;
-    }
-    months.push(Value::from(month));
-
-    let mut report = Map::new();
-    report.insert("reported".to_string(), Value::Array(months));
-    let mut patch = Map::new();
-    patch.insert("phoneReport".to_string(), Value::Object(report));
-    match store::save_keys(&patch) {
-        Ok(_) => logfile::append("info", &format!("דווח למערכת הטלפונית סומן מההתראה — חודש {month}.")),
+    ensure_upgrade_copy();
+    // One locked step on the file's current `phoneReport`: the month is added
+    // to its list and every other field of the object is kept.
+    let mut added = false;
+    let result = store::update_key("phoneReport", &mut |current| {
+        let mut report = match current {
+            Some(Value::Object(map)) => map.clone(),
+            _ => Map::new(),
+        };
+        let mut months: Vec<Value> = report
+            .get("reported")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if months.iter().any(|m| m.as_str() == Some(month)) {
+            return None;
+        }
+        months.push(Value::from(month));
+        report.insert("reported".to_string(), Value::Array(months));
+        added = true;
+        Some(Value::Object(report))
+    });
+    match result {
+        Ok(_) if added => logfile::append("info", &format!("דווח למערכת הטלפונית סומן מההתראה — חודש {month}.")),
+        Ok(_) => {}
         Err(err) => logfile::append("error", &format!("סימון הדיווח מההתראה נכשל: {err}")),
     }
 }
@@ -394,3 +471,52 @@ fn claim_single_instance() -> bool {
 
 #[cfg(not(windows))]
 fn init_com() {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn store_of(v: Value) -> Map<String, Value> {
+        v.as_object().cloned().unwrap()
+    }
+
+    #[test]
+    fn only_an_explicit_false_switches_background_off() {
+        assert!(background_explicitly_off(&store_of(
+            json!({"settings": {"background": {"enabled": false}}})
+        )));
+        assert!(!background_explicitly_off(&store_of(
+            json!({"settings": {"background": {"enabled": true}}})
+        )));
+        // An empty or half-written store is not an answer.
+        assert!(!background_explicitly_off(&Map::new()));
+        assert!(!background_explicitly_off(&store_of(json!({"settings": {}}))));
+        assert!(!background_explicitly_off(&store_of(
+            json!({"settings": {"background": {"enabled": "no"}}})
+        )));
+    }
+
+    #[test]
+    fn a_failing_read_is_retried_then_reported_not_swallowed() {
+        let mut calls = 0;
+        let r = retry_read(5, StdDuration::from_millis(1), || {
+            calls += 1;
+            Err::<Map<String, Value>, _>("locked".to_string())
+        });
+        assert_eq!(r.unwrap_err(), "locked");
+        assert_eq!(calls, 5);
+
+        let mut calls = 0;
+        let r = retry_read(5, StdDuration::from_millis(1), || {
+            calls += 1;
+            if calls < 3 {
+                Err("transient".to_string())
+            } else {
+                Ok(Map::new())
+            }
+        });
+        assert!(r.is_ok());
+        assert_eq!(calls, 3);
+    }
+}

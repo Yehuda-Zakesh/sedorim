@@ -1,5 +1,6 @@
 import { getSettings } from "./settings-store";
 import { sharedValue } from "./shared-state";
+import { isStoreWritable } from "./store-gate";
 
 export type BackupSnapshot = {
   id: string;
@@ -38,12 +39,17 @@ function checksum(text: string): string {
   return (h >>> 0).toString(16);
 }
 
-export function createSnapshot(
-  data: { attendance: unknown; learning: unknown },
-  trigger: BackupSnapshot["trigger"] = "auto",
-): BackupSnapshot {
+type SnapshotData = { attendance: unknown; learning: unknown };
+
+/** True when there is no attendance and no learning at all. */
+export function isEmptyData(data: SnapshotData): boolean {
+  const len = (v: unknown) => (Array.isArray(v) ? v.length : 0);
+  return len(data.attendance) + len(data.learning) === 0;
+}
+
+function buildSnapshot(data: SnapshotData, trigger: BackupSnapshot["trigger"]): BackupSnapshot {
   const payloadStr = JSON.stringify(data);
-  const snap: BackupSnapshot = {
+  return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     ts: Date.now(),
     trigger,
@@ -51,8 +57,71 @@ export function createSnapshot(
     checksum: checksum(payloadStr),
     payload: data,
   };
+}
+
+/** The list as it should be once `snap` is added. The newest comes first, but a
+ *  "before-op" copy (the one taken before a delete or restore) is the user's way
+ *  back: when the retention is small, an automatic snapshot gives way before it. */
+function listWith(snap: BackupSnapshot): BackupSnapshot[] {
   const retention = Math.max(1, getSettings().data.backupRetention);
-  store.set([snap, ...store.get()].slice(0, retention));
+  const list = [snap, ...store.get()];
+  while (list.length > retention) {
+    let drop = -1;
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].trigger !== "before-op") {
+        drop = i;
+        break;
+      }
+    }
+    list.splice(drop === -1 ? list.length - 1 : drop, 1);
+  }
+  return list;
+}
+
+export type SnapshotPlan = { snap: BackupSnapshot; list: BackupSnapshot[] };
+
+/**
+ * Works out a snapshot and the resulting list WITHOUT storing anything, so a
+ * destructive operation can write the list together with its own change in
+ * one atomic save (saveStoreKeys({ snapshots: plan.list, ... })). Returns null
+ * when there is no data: a snapshot of nothing is no safety copy, and with a
+ * retention of 1 it would push a real one out.
+ */
+export function planSnapshot(
+  data: SnapshotData,
+  trigger: BackupSnapshot["trigger"] = "before-op",
+): SnapshotPlan | null {
+  if (isEmptyData(data)) return null;
+  const snap = buildSnapshot(data, trigger);
+  return { snap, list: listWith(snap) };
+}
+
+/** Adopts a plan in memory once its atomic write has succeeded. */
+export function commitSnapshotPlan(plan: SnapshotPlan) {
+  store.set(plan.list);
+}
+
+/**
+ * Stores a snapshot and resolves only when the file has it (the in-memory list
+ * is put back and this rejects otherwise). Resolves null, storing nothing,
+ * when there is no data.
+ */
+export async function createSnapshotChecked(
+  data: SnapshotData,
+  trigger: BackupSnapshot["trigger"] = "manual",
+): Promise<BackupSnapshot | null> {
+  const plan = planSnapshot(data, trigger);
+  if (!plan) return null;
+  await store.setChecked(plan.list);
+  return plan.snap;
+}
+
+export function createSnapshot(
+  data: SnapshotData,
+  trigger: BackupSnapshot["trigger"] = "auto",
+): BackupSnapshot {
+  const snap = buildSnapshot(data, trigger);
+  store.set(listWith(snap));
   return snap;
 }
 
@@ -81,8 +150,14 @@ export function getLastAutoBackupTs(): number {
 }
 
 export function maybeAutoBackup(data: { attendance: unknown; learning: unknown }) {
+  // Nothing is written until the data file has been read successfully: a
+  // backup made now would be built from an empty, not-yet-loaded store.
+  if (!isStoreWritable()) return;
   const s = getSettings();
   if (s.data.autoBackup === "off") return;
+  // An empty store has nothing to back up, and its snapshot would push a real
+  // one out when only one is kept.
+  if (isEmptyData(data)) return;
   const intervalMs = s.data.autoBackup === "daily" ? 86_400_000 : 7 * 86_400_000;
   if (Date.now() - lastAutoBackup.get() < intervalMs) return;
   // Stamped before the snapshot so a failure mid-write can't leave the clock

@@ -1,37 +1,34 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import {
-  Clock,
-  TrendingUp,
-  CalendarCheck,
-  BookOpen,
-  ChevronLeft,
-  Sparkles,
-  Bell,
-  Flame,
-  Target,
-  FileDown,
-  DatabaseBackup,
-  Award,
-  PhoneCall,
-} from "lucide-react";
-import {
   useSeder,
   useLearning,
   monthlySummary,
   attendanceScore,
   currentDayStreak,
-  todayISO,
-  calcSeder,
-  entriesInMonth,
-  scoreEntries,
-  FRAMEWORK_LABELS,
-  type LearningFramework,
 } from "@/lib/kollel-store";
-import { forecastMonthlyNetMissing } from "@/lib/insights";
-import { formatHebrewDate, isBeinHazmanim, isLearningDay } from "@/lib/hebrew-calendar";
-import { useSettings, SHAS_ARRIVAL_DEADLINE } from "@/lib/settings-store";
-import { KpiCard, StatTile, IconBadge } from "@/components/ui/stat";
+import { useToday } from "@/lib/today";
+import { attendanceBlockedReason } from "@/lib/attendance-day";
+import {
+  fastDayName,
+  formatHebrewDate,
+  hasNoSederB,
+  isBeinHazmanim,
+  isLearningDay,
+} from "@/lib/hebrew-calendar";
+import { useSettings } from "@/lib/settings-store";
+import { currentMonthKey, formatDateDots } from "@/lib/month-nav";
+import { setSelectedMonth } from "@/lib/period";
+import { Button } from "@/components/ui/button";
+import { Notice, PageSection, StatusMark } from "@/components/ui/ledger";
+import { TodaySeder } from "@/components/today-seder";
+import {
+  completionText,
+  dayCompletion,
+  fmtDur,
+  parseLocalISO,
+  weekdayName,
+} from "@/components/today-utils";
 import {
   formatMonthKey,
   reportedMonthFor,
@@ -40,470 +37,208 @@ import {
   REPORT_WINDOW_LAST_DAY,
 } from "@/lib/phone-report";
 
-// א׳–ה׳ בלבד, לפי getDay(). שישי ושבת אינם ימי לימוד ואינם נכנסים לחישוב.
-const LEARNING_WEEKDAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי"];
-
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "לוח בקרה — המעקב שלי" },
+      { title: "היום — המעקב שלי" },
       { name: "description", content: "מעקב אישי על נוכחות בסדרי הכולל" },
     ],
   }),
   component: Dashboard,
 });
 
-function fmtMin(m: number): string {
-  if (!m) return "0";
-  const h = Math.floor(m / 60),
-    r = m % 60;
-  return h > 0 ? `${h}:${String(r).padStart(2, "0")}` : `${r}`;
-}
+/** "לסיכום חודש מלא" from here means this month, whatever month was browsed last. */
+const selectCurrentMonth = () => setSelectedMonth(currentMonthKey());
 
 function Dashboard() {
   const { entries } = useSeder();
   const { items: lessons } = useLearning();
   const { settings } = useSettings();
 
-  const today = new Date();
+  // Re-renders at midnight and on returning to the window.
+  const date = useToday();
+  const today = parseLocalISO(date);
   const y = today.getFullYear(),
     m = today.getMonth();
-  const summary = monthlySummary(y, m);
-  const score = attendanceScore(y, m);
-  const streak = currentDayStreak();
-  const hasToday = entries.some((e) => e.date === todayISO());
   const hebrewDate = formatHebrewDate(today);
   const beinHazmanim = isBeinHazmanim(today);
   // Nothing is owed on a day the kollel does not sit, so nothing is chased on
   // one either — the same rule the reminder notifications already follow.
   const learningDay = isLearningDay(today);
+  // Weekends and Yom Tov: attendance cannot be recorded at all (not just not owed).
+  const blockedReason = attendanceBlockedReason(date);
+  const fastName = fastDayName(today);
+  const noSederB = hasNoSederB(today);
 
-  // Additional-learning totals for the current month, grouped by framework
-  const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
-  const monthLessons = lessons.filter((l) => l.date.startsWith(monthPrefix));
-  const learningTotalMin = monthLessons.reduce((s, l) => s + l.minutes, 0);
-  const learningByFw = (
-    ["kollel-erev", "torato-beyado", "bein-hazmanim"] as LearningFramework[]
-  ).map((fw) => ({
-    fw,
-    minutes: monthLessons.filter((l) => l.framework === fw).reduce((s, l) => s + l.minutes, 0),
-  }));
-
-  // Weekly attendance score, over the month's real calendar weeks.
-  //
-  // It used to bucket by `Math.ceil(day / 7)`, which is not a week: it puts the
-  // 1st–7th together whatever weekdays those are, and always leaves a fifth
-  // "week" holding the two or three days past the 28th — a permanently stunted
-  // last bar that read as a collapse in attendance every single month. Weeks
-  // here start on Sunday and the month spans however many of them it spans.
-  const leadingBlanks = new Date(y, m, 1).getDay(); // 0 = Sunday
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const weekCount = Math.ceil((leadingBlanks + daysInMonth) / 7);
-
-  const weekBars = Array.from({ length: weekCount }, (_, w) => {
-    let expected = 0,
-      netMissing = 0,
-      count = 0;
-    const firstDay = Math.max(1, w * 7 - leadingBlanks + 1);
-    const lastDay = Math.min(daysInMonth, (w + 1) * 7 - leadingBlanks);
-    for (const e of entries) {
-      if (!e.date.startsWith(monthPrefix)) continue;
-      const day = parseInt(e.date.slice(8, 10), 10);
-      if (day < firstDay || day > lastDay) continue;
-      const c = calcSeder(e);
-      expected += c.sederLengthMin;
-      netMissing += c.netMissingMin;
-      count++;
-    }
-    return {
-      firstDay,
-      lastDay,
-      count,
-      // null, not 0 — "nothing was recorded" and "recorded, scored zero" are
-      // different answers and the chart has to be able to tell them apart.
-      score: expected === 0 ? null : Math.max(0, 100 - Math.round((netMissing / expected) * 100)),
-    };
+  const e1 = entries.find((e) => e.date === date && e.seder === 1);
+  const e2 = entries.find((e) => e.date === date && e.seder === 2);
+  const completion = dayCompletion({
+    learningDay,
+    noSederB,
+    recorded: [e1 ? 1 : null, e2 ? 2 : null].filter((n): n is 1 | 2 => n !== null),
   });
 
-  // The three facts the quick-summary card carries. Each one is something no
-  // other card on this screen states.
-  const prev = new Date(y, m - 1, 1);
-  const prevEntries = entriesInMonth(entries, prev.getFullYear(), prev.getMonth());
-  const vsLastMonth = prevEntries.length === 0 ? null : score - scoreEntries(prevEntries);
+  const summary = monthlySummary(y, m);
+  const hasMonthData = summary.entries > 0;
+  const score = attendanceScore(y, m);
+  const streak = currentDayStreak();
 
-  const forecast = forecastMonthlyNetMissing();
+  const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
+  const learningTotalMin = lessons
+    .filter((l) => l.date.startsWith(monthPrefix))
+    .reduce((s, l) => s + l.minutes, 0);
 
-  const worstWeekday = (() => {
-    const acc = LEARNING_WEEKDAY_NAMES.map((day) => ({ day, net: 0, count: 0 }));
-    for (const e of entries) {
-      const wd = new Date(e.date).getDay();
-      if (Number.isNaN(wd) || wd > 4) continue; // שישי־שבת אינם ימי לימוד
-      acc[wd].net += calcSeder(e).netMissingMin;
-      acc[wd].count++;
-    }
-    // Two sedarim is not a pattern; don't name a day off one bad morning.
-    const ranked = acc
-      .filter((d) => d.count >= 3)
-      .map((d) => ({ day: d.day, avg: Math.round(d.net / d.count) }))
-      .sort((a, b) => b.avg - a.avg);
-    return ranked[0]?.avg ? ranked[0] : null;
-  })();
+  const { showReminders } = settings.dashboard;
+  const overLate = summary.lateCount >= settings.goals.maxLatePerMonth;
+  const overMissing = summary.netMissing > settings.seder.alertMissingMinPerMonth;
 
-  const kpis = [
-    {
-      label: "ציון נוכחות החודש",
-      value: `${score}`,
-      hint: `יעד ${settings.goals.monthlyTarget}`,
-      icon: Target,
-      tone: "primary" as const,
-    },
-    {
-      label: "דקות חסרות (נטו)",
-      value: fmtMin(summary.netMissing),
-      hint: `${summary.entries} סדרים נרשמו`,
-      icon: Clock,
-      tone:
-        summary.netMissing > settings.seder.alertMissingMinPerMonth
-          ? ("destructive" as const)
-          : ("info" as const),
-    },
-    {
-      label: "סדרי אוהבי ה׳",
-      value: summary.oheveiCount.toString(),
-      hint: "החודש",
-      icon: Award,
-      tone: "success" as const,
-    },
-    {
-      label: "רצף ימים",
-      value: streak.toString(),
-      hint: streak > 0 ? "ימים ללא חיסור" : "התחל היום",
-      icon: Flame,
-      tone: "warning" as const,
-    },
-  ];
-
-  // These three switches sit in Settings → "לוח בקרה" and, until now, changed
-  // nothing at all on this screen.
-  const { showInsights, showReminders, showQuickActions } = settings.dashboard;
+  const monthLink = (
+    <Link to="/statistics" onClick={selectCurrentMonth} className="text-primary hover:underline">
+      לסיכום חודש מלא ←
+    </Link>
+  );
 
   return (
     <AppShell
-      title="לוח בקרה"
-      subtitle={hebrewDate}
-      actions={
-        <div className="flex gap-2">
-          <Link
-            to="/attendance"
-            className="pressable inline-flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <CalendarCheck className="size-4" /> רישום סדר
-          </Link>
-        </div>
-      }
+      title="היום"
+      subtitle={`${weekdayName(today)}, ${formatDateDots(date)} · ${hebrewDate}`}
     >
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {kpis.map((k) => (
-          <KpiCard
-            key={k.label}
-            label={k.label}
-            value={k.value}
-            hint={k.hint}
-            icon={k.icon}
-            tone={k.tone}
-          />
-        ))}
-      </section>
+      <div className="stack-gap flex flex-col">
+        {blockedReason && (
+          <Notice tone="info" title={`היום ${blockedReason} — אין רישום נוכחות`}>
+            זה אינו יום לימוד רגיל. לימוד נוסף אפשר לרשום גם היום.
+          </Notice>
+        )}
 
-      {beinHazmanim && (
-        <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-info">
-          <IconBadge icon={BookOpen} tone="info" size="md" />
-          <div className="flex-1">
-            <div className="text-sm font-semibold">בין הזמנים</div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              מסגרת "ישיבת בין הזמנים" זמינה במסך לימוד נוסף.
-            </p>
-          </div>
-          <Link
-            to="/learning"
-            className="text-xs text-info hover:underline inline-flex items-center gap-1"
-          >
-            לפתיחה <ChevronLeft className="size-3" />
-          </Link>
-        </div>
-      )}
-
-      {!hasToday && showReminders && learningDay && (
-        <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-warning">
-          <IconBadge icon={Bell} tone="warning" size="md" />
-          <div className="flex-1">
-            <div className="text-sm font-semibold">לא רשמת סדר היום</div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              סמן הגעה/יציאה כדי לעקוב אחר הנוכחות.
-            </p>
-          </div>
-          <Link
-            to="/attendance"
-            className="text-xs text-warning-fg hover:underline inline-flex items-center gap-1"
-          >
-            לרישום <ChevronLeft className="size-3" />
-          </Link>
-        </div>
-      )}
-
-      {showReminders && <PhoneReportCard />}
-
-      <div className={`mt-5 grid grid-cols-1 gap-4 ${showReminders ? "lg:grid-cols-3" : ""}`}>
-        <div className={`card-surface p-5 ${showReminders ? "lg:col-span-2" : ""}`}>
-          <h2 className="text-sm font-semibold mb-3">פירוט החודש</h2>
-          {/* Five across when the חבורה is on, so the extra figure joins the
-              row instead of dropping onto one of its own. */}
-          <div
-            className={`grid grid-cols-2 gap-3 ${settings.seder.shasChavura ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}
-          >
-            <StatTile label="איחורים" value={summary.lateCount} dot="var(--status-late)" />
-            <StatTile label="היעדרויות" value={summary.absenceCount} dot="var(--status-absent)" />
-            <StatTile label="יציאה מוקדמת" value={summary.earlyDepCount} dot="var(--status-late)" />
-            <StatTile label="בונוס (דק׳)" value={summary.bonus} dot="var(--status-present)" />
-            {settings.seder.shasChavura && (
-              <StatTile
-                label="חבורת ש״ס"
-                value={summary.shasCount}
-                dot="var(--status-present)"
-                hint={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`}
-              />
+        {((!learningDay && !blockedReason) || fastName || beinHazmanim) && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="מצב היום">
+            {!learningDay && !blockedReason && (
+              <StatusMark tone="none">היום אינו יום לימוד — אין חובת רישום</StatusMark>
+            )}
+            {fastName && <StatusMark tone="excused">{fastName}</StatusMark>}
+            {beinHazmanim && (
+              <span className="inline-flex items-center gap-3 text-sm">
+                <StatusMark tone="excused">בין הזמנים</StatusMark>
+                <Link to="/learning" className="text-primary hover:underline">
+                  למסגרת ״ישיבת בין הזמנים״ בלימוד נוסף
+                </Link>
+              </span>
             )}
           </div>
-
-          <div className="mt-5">
-            <div className="flex items-baseline justify-between gap-2 mb-2">
-              <div className="text-xs text-muted-foreground">ציון נוכחות לפי שבוע</div>
-              <div className="text-2xs text-muted-foreground">
-                היעד: {settings.goals.monthlyTarget}
-              </div>
-            </div>
-            {/* The values, on their own row, so nothing sits on top of the
-                target line. */}
-            <div className="flex gap-2">
-              {weekBars.map((w, i) => (
-                <div
-                  key={i}
-                  className="flex-1 text-center text-2xs tabular-nums text-muted-foreground"
-                >
-                  {w.score === null ? "" : w.score}
-                </div>
-              ))}
-            </div>
-
-            {/* Each bar sits in its own track, so a week that scored zero still
-                shows as a measured week rather than vanishing. The old chart
-                gave every bar a 4% floor, which made a score of 0 and a score
-                of 4 exactly the same height. */}
-            <div className="relative h-24 flex items-end gap-2">
-              {/* The target, drawn where it actually falls on the scale — a
-                  solid hairline, not a dashed one: dashes read as a projection
-                  when this is a fixed threshold. */}
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 border-t border-foreground/25"
-                style={{ bottom: `${settings.goals.monthlyTarget}%` }}
-              />
-              {weekBars.map((w, i) => (
-                <div
-                  key={i}
-                  className="flex-1 h-full flex items-end rounded-md bg-muted/50"
-                  title={`${w.firstDay}–${w.lastDay} בחודש · ${w.score === null ? "אין רישומים" : `ציון ${w.score} מתוך 100`}`}
-                >
-                  {w.score !== null && (
-                    <div
-                      className="w-full rounded-md bg-primary"
-                      style={{ height: `${w.score}%`, minHeight: w.score > 0 ? 2 : 0 }}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-1.5 flex gap-2">
-              {weekBars.map((w, i) => (
-                <div
-                  key={i}
-                  className="flex-1 text-center text-2xs tabular-nums text-muted-foreground"
-                >
-                  {w.firstDay}–{w.lastDay}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {showReminders && (
-          <div className="card-surface p-5">
-            <h2 className="text-sm font-semibold mb-3">תזכורות</h2>
-            <ul className="space-y-3">
-              {/* "חסר רישום להיום" is deliberately not repeated here — the
-                  banner higher up this same screen already says it, with a
-                  link. The same sentence twice, three inches apart, doesn't
-                  make it twice as noticeable; it makes the list look like
-                  filler. */}
-              {summary.lateCount >= settings.goals.maxLatePerMonth && (
-                <li className="flex gap-3">
-                  <IconBadge icon={Clock} tone="destructive" size="sm" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">חרגת ממכסת האיחורים</div>
-                    <div className="text-xs text-muted-foreground">
-                      {summary.lateCount} מתוך {settings.goals.maxLatePerMonth}
-                    </div>
-                  </div>
-                </li>
-              )}
-              {streak >= 5 && (
-                <li className="flex gap-3">
-                  <IconBadge icon={Flame} tone="success" size="sm" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">רצף של {streak} ימים</div>
-                    <div className="text-xs text-muted-foreground">המשך כך</div>
-                  </div>
-                </li>
-              )}
-              {summary.lateCount < settings.goals.maxLatePerMonth && streak < 5 && (
-                <li className="text-xs text-muted-foreground">אין תזכורות פתוחות.</li>
-              )}
-            </ul>
-          </div>
         )}
-      </div>
 
-      <div className="mt-5 card-surface p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <BookOpen className="size-4 text-primary" />
-            <h2 className="text-sm font-semibold">לימוד נוסף החודש</h2>
-          </div>
-          <Link
-            to="/learning"
-            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-          >
-            לפרטים <ChevronLeft className="size-3" />
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatTile
-            label="סה״כ דקות"
-            value={learningTotalMin}
-            hint={`${(learningTotalMin / 60).toFixed(1)} שע׳`}
-          />
-          {learningByFw.map(({ fw, minutes }) => (
-            <StatTile key={fw} label={FRAMEWORK_LABELS[fw]} value={minutes} hint="דקות" />
-          ))}
-        </div>
-      </div>
-
-      {(showInsights || showQuickActions) && (
-        <div
-          className={`mt-5 grid grid-cols-1 gap-4 ${showInsights && showQuickActions ? "lg:grid-cols-3" : ""}`}
+        <PageSection
+          title="הסדרים של היום"
+          aside={<span role="status">{completionText(completion)}</span>}
         >
-          {showInsights && (
-            <div
-              className={`card-surface p-5 bg-gradient-to-l from-primary/5 to-transparent ${showQuickActions ? "lg:col-span-2" : ""}`}
-            >
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="size-4 text-primary" />
-                  <h2 className="text-sm font-semibold">סיכום מהיר</h2>
-                </div>
-                <Link
-                  to="/statistics"
-                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                >
-                  לסטטיסטיקות <ChevronLeft className="size-3" />
-                </Link>
-              </div>
-              {/* This card used to restate the score, the אוהבי ה׳ count and
-                  the learning minutes — all three of which are already on this
-                  screen, two of them in the KPI row at the top. A summary that
-                  summarises what is visible two inches above it is noise. It
-                  now carries the three things the screen does *not* otherwise
-                  say: where the month is heading, how it compares with the one
-                  before it, and where the time is actually being lost. */}
-              <ul className="space-y-2 text-sm">
-                <li className="flex items-start gap-2">
-                  <TrendingUp
-                    className={`size-4 mt-0.5 shrink-0 ${vsLastMonth === null || vsLastMonth >= 0 ? "text-success" : "text-destructive"}`}
-                  />
-                  <span>
-                    {vsLastMonth === null ? (
-                      "אין נתונים מהחודש שעבר להשוואה."
-                    ) : (
-                      <>
-                        מול החודש שעבר:{" "}
-                        <b className="tabular-nums">
-                          {vsLastMonth >= 0 ? "+" : ""}
-                          {vsLastMonth}
-                        </b>{" "}
-                        נקודות ציון.
-                      </>
-                    )}
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Target className="size-4 text-info mt-0.5 shrink-0" />
-                  <span>
-                    {forecast === null ? (
-                      "עוד מעט רישומים ואפשר יהיה לחזות את סוף החודש."
-                    ) : (
-                      <>
-                        בקצב הזה החודש ייסגר על <b className="tabular-nums">{fmtMin(forecast)}</b>{" "}
-                        דקות חסרות.
-                      </>
-                    )}
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Clock className="size-4 text-warning-fg mt-0.5 shrink-0" />
-                  <span>
-                    {worstWeekday === null ? (
-                      "אין עדיין מספיק רישומים כדי לזהות יום חלש."
-                    ) : (
-                      <>
-                        הכי הרבה נשמט בימי <b>{worstWeekday.day}</b> — {worstWeekday.avg} דק׳ לסדר
-                        בממוצע.
-                      </>
-                    )}
-                  </span>
-                </li>
-              </ul>
+          <div className="grid grid-cols-1 lg:grid-cols-2">
+            <div className="py-3 lg:pe-8">
+              <TodaySeder num={1} date={date} existing={e1} learningDay={learningDay} />
             </div>
-          )}
+            <div className="border-t border-border py-3 lg:border-s lg:border-t-0 lg:ps-8">
+              <TodaySeder
+                num={2}
+                date={date}
+                existing={e2}
+                learningDay={learningDay}
+                notApplicable={noSederB ? `היום ${fastName ?? "יום צום"} — אין סדר ב׳.` : undefined}
+              />
+            </div>
+          </div>
+        </PageSection>
 
-          {showQuickActions && (
-            <div className="card-surface p-5">
-              <h2 className="text-sm font-semibold mb-3">פעולות מהירות</h2>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "רישום סדר", icon: CalendarCheck, to: "/attendance" as const },
-                  { label: "לימוד נוסף", icon: BookOpen, to: "/learning" as const },
-                  { label: "ייצוא דוח", icon: FileDown, to: "/reports" as const },
-                  { label: "גיבוי ושחזור", icon: DatabaseBackup, to: "/backup" as const },
-                ].map((a) => (
-                  <Link
-                    key={a.label}
-                    to={a.to}
-                    className="rounded-lg border border-border bg-card hover:bg-accent pressable-lg p-3 text-start"
-                  >
-                    <a.icon className="size-4 text-primary mb-2" />
-                    <div className="text-xs font-medium">{a.label}</div>
-                  </Link>
-                ))}
-              </div>
-            </div>
+        {showReminders && <PhoneReportCard />}
+
+        {showReminders && overLate && (
+          <Notice
+            tone="warning"
+            title={`${summary.lateCount} איחורים החודש — המכסה היא ${settings.goals.maxLatePerMonth}`}
+            action={
+              <Link
+                to="/statistics"
+                onClick={selectCurrentMonth}
+                className="text-sm text-primary hover:underline"
+              >
+                לפירוט האיחורים
+              </Link>
+            }
+          />
+        )}
+        {showReminders && overMissing && (
+          <Notice
+            tone="warning"
+            title={`חסר נטו החודש ${fmtDur(summary.netMissing)} — מעל סף ההתראה (${fmtDur(settings.seder.alertMissingMinPerMonth)})`}
+            action={
+              <Link
+                to="/statistics"
+                onClick={selectCurrentMonth}
+                className="text-sm text-primary hover:underline"
+              >
+                לפירוט החסר
+              </Link>
+            }
+          />
+        )}
+
+        <PageSection title="החודש עד כה" aside={monthLink}>
+          {hasMonthData ? (
+            <dl className="flex flex-wrap gap-x-8 gap-y-3">
+              <MonthFigure
+                label="ציון נוכחות"
+                value={score}
+                note={`יעד ${settings.goals.monthlyTarget}`}
+              />
+              <MonthFigure label="סדרים שנרשמו" value={summary.entries} />
+              <MonthFigure
+                label="חסר נטו"
+                value={fmtDur(summary.netMissing)}
+                note="אחרי מוצדק ובונוס"
+              />
+              <MonthFigure label="איחורים" value={summary.lateCount} />
+              <MonthFigure label="היעדרויות" value={summary.absenceCount} />
+              <MonthFigure
+                label="רצף ימים"
+                value={streak}
+                note={streak > 0 ? "ללא חיסור" : "אין רצף כרגע"}
+              />
+            </dl>
+          ) : (
+            <p className="text-sm text-muted-foreground">אין עדיין רישומים החודש.</p>
           )}
-        </div>
-      )}
+          <p className="mt-3 flex flex-wrap items-baseline justify-between gap-2 text-sm text-muted-foreground">
+            <span>
+              לימוד נוסף החודש (זמן בפועל):{" "}
+              <b className="figure text-foreground">{fmtDur(learningTotalMin)}</b>
+            </span>
+            <Link to="/learning" className="text-primary hover:underline">
+              לפרטים ←
+            </Link>
+          </p>
+        </PageSection>
+      </div>
     </AppShell>
   );
 }
 
+function MonthFigure({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string | number;
+  note?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="eyebrow">{label}</dt>
+      <dd className="figure text-xl font-semibold">
+        <bdi dir="ltr">{value}</bdi>
+      </dd>
+      {note && <dd className="text-xs text-muted-foreground">{note}</dd>}
+    </div>
+  );
+}
 /**
  * דיווח למערכת הטלפונית — the one card on this screen about something the app
  * cannot check for itself.
@@ -524,44 +259,34 @@ function PhoneReportCard() {
 
   if (done) {
     return (
-      <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-success">
-        <IconBadge icon={PhoneCall} tone="success" size="md" />
-        <div className="flex-1">
-          <div className="text-sm font-semibold">חודש {formatMonthKey(month)} סומן כמדווח</div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            לא יישלחו עוד תזכורות על החודש הזה.
-          </p>
-        </div>
-        <button
-          onClick={() => setReported(month, false)}
-          className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-        >
-          ביטול הסימון
-        </button>
-      </div>
+      <Notice
+        tone="ok"
+        title={`חודש ${formatMonthKey(month)} סומן כמדווח`}
+        action={
+          <Button variant="ghost" size="sm" onClick={() => setReported(month, false)}>
+            ביטול הסימון
+          </Button>
+        }
+      >
+        לא יישלחו עוד תזכורות על החודש הזה.
+      </Notice>
     );
   }
 
   const daysLeft = REPORT_WINDOW_LAST_DAY - now.getDate();
   return (
-    <div className="mt-5 card-surface p-4 flex items-center gap-3 border-s-4 border-s-warning">
-      <IconBadge icon={PhoneCall} tone="warning" size="md" />
-      <div className="flex-1">
-        <div className="text-sm font-semibold">
-          דיווח למערכת הטלפונית — חודש {formatMonthKey(month)}
-        </div>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {daysLeft === 0
-            ? "היום היום האחרון לדווח."
-            : `נשארו ${daysLeft + 1} ימים לדווח (עד ה־${REPORT_WINDOW_LAST_DAY} בחודש).`}
-        </p>
-      </div>
-      <button
-        onClick={() => setReported(month, true)}
-        className="pressable rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-      >
-        דיווחתי
-      </button>
-    </div>
+    <Notice
+      tone="warning"
+      title={`דיווח למערכת הטלפונית — חודש ${formatMonthKey(month)}`}
+      action={
+        <Button size="sm" onClick={() => setReported(month, true)}>
+          דיווחתי
+        </Button>
+      }
+    >
+      {daysLeft === 0
+        ? "היום היום האחרון לדווח."
+        : `נשארו ${daysLeft + 1} ימים לדווח (עד ה־${REPORT_WINDOW_LAST_DAY} בחודש).`}
+    </Notice>
   );
 }

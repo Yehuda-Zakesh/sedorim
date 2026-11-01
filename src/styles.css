@@ -35,16 +35,62 @@
   src: url("/fonts/Heebo-Bold.ttf") format("truetype");
 }
 
+/* Frank Ruhl Libre (SIL OFL 1.1, see FrankRuhlLibre-OFL.txt) — the serif for
+   screen titles and the product name only. Everything operational stays in
+   Heebo. Hebrew and Latin subsets are separate files; the unicode-range keeps
+   the browser from fetching the one it does not need. */
+@font-face {
+  font-family: "Frank Ruhl Libre";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/FrankRuhlLibre-Hebrew-500.woff2") format("woff2");
+  unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: "Frank Ruhl Libre";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/FrankRuhlLibre-Hebrew-700.woff2") format("woff2");
+  unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: "Frank Ruhl Libre";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/FrankRuhlLibre-Latin-500.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215;
+}
+@font-face {
+  font-family: "Frank Ruhl Libre";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/FrankRuhlLibre-Latin-700.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
+  /* Small, deliberate radii: 3–6px on ordinary controls. Nothing in the app is
+     a pill except a status dot. */
+  --radius-sm: 0.1875rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.375rem;
+  --radius-2xl: 0.5rem;
 
   --font-sans: "Heebo", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Titles and the product name. David ships with Windows, so the fallback is
+     still a Hebrew serif with no network and no file loaded. */
+  --font-serif: "Frank Ruhl Libre", "David", "Times New Roman", serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -109,26 +155,25 @@
 
 /* Type scale — size, leading and tracking as one set.
  *
- * Tracking is size-specific on purpose: large text reads too loose at 0 and
- * wants negative tracking, small text wants a touch of positive. One global
- * `letter-spacing` is wrong at one end of the scale or the other.
+ * Tracking is zero throughout: positive letter-spacing breaks the joined look
+ * of Hebrew, and the sizes are chosen so that none is needed.
  *
  * All of it is in rem, so the "גודל טקסט" setting in Settings (which scales the
  * root font-size) actually moves it. The 61 hard-coded `text-[10px]`/`[11px]`
  * labels this replaces were pixels, and so were frozen at every setting.
  */
 @theme {
-  --text-2xs: 0.6875rem; /* 11px — the smallest size the app is allowed */
+  --text-2xs: 0.75rem; /* 12px — the smallest size the app is allowed */
   --text-2xs--line-height: 1.45;
-  --text-2xs--letter-spacing: 0.012em;
+  --text-2xs--letter-spacing: 0;
 
-  --text-xs: 0.75rem;
+  --text-xs: 0.8125rem;
   --text-xs--line-height: 1.5;
-  --text-xs--letter-spacing: 0.006em;
+  --text-xs--letter-spacing: 0;
 
   --text-sm: 0.875rem;
   --text-sm--line-height: 1.55;
-  --text-sm--letter-spacing: 0.002em;
+  --text-sm--letter-spacing: 0;
 
   --text-base: 1rem;
   --text-base--line-height: 1.6;
@@ -136,35 +181,35 @@
 
   --text-lg: 1.125rem;
   --text-lg--line-height: 1.4;
-  --text-lg--letter-spacing: -0.008em;
+  --text-lg--letter-spacing: 0;
 
   --text-xl: 1.375rem;
   --text-xl--line-height: 1.3;
-  --text-xl--letter-spacing: -0.014em;
+  --text-xl--letter-spacing: 0;
 
   --text-2xl: 1.625rem;
   --text-2xl--line-height: 1.22;
-  --text-2xl--letter-spacing: -0.018em;
+  --text-2xl--letter-spacing: 0;
 
   --text-3xl: 2rem;
   --text-3xl--line-height: 1.1;
-  --text-3xl--letter-spacing: -0.022em;
+  --text-3xl--letter-spacing: 0;
 
   --text-4xl: 2.5rem;
   --text-4xl--line-height: 1.05;
-  --text-4xl--letter-spacing: -0.026em;
+  --text-4xl--letter-spacing: 0;
 
   --text-5xl: 3.25rem;
   --text-5xl--line-height: 1;
-  --text-5xl--letter-spacing: -0.028em;
+  --text-5xl--letter-spacing: 0;
 
   --text-6xl: 4rem;
   --text-6xl--line-height: 1;
-  --text-6xl--letter-spacing: -0.03em;
+  --text-6xl--letter-spacing: 0;
 
   --text-7xl: 4.5rem;
   --text-7xl--line-height: 1;
-  --text-7xl--letter-spacing: -0.032em;
+  --text-7xl--letter-spacing: 0;
 
   /* Motion. One place, so a change of feel lands everywhere at once.
      `--ease-out-soft` is the standard outward curve; `--ease-spring` overshoots
@@ -177,35 +222,38 @@
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.375rem;
 
-  /* Surfaces */
-  --background: oklch(0.969 0 0); /* #F5F5F5 */
-  --foreground: oklch(0.22 0.02 250);
-  --card: oklch(1 0 0); /* #FFFFFF */
-  --card-foreground: oklch(0.22 0.02 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.02 250);
+  /* Surfaces — warm paper: a page, and a slightly lighter sheet on top of it. */
+  --background: #f4f1ea;
+  --foreground: #282923;
+  --card: #fffefa;
+  --card-foreground: #282923;
+  --popover: #fffefa;
+  --popover-foreground: #282923;
 
-  /* Brand */
-  --primary: oklch(0.49 0.13 252); /* #1565C0 */
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.955 0.008 250);
-  --secondary-foreground: oklch(0.28 0.04 252);
-  --muted: oklch(0.955 0.008 250);
-  --muted-foreground: oklch(0.52 0.02 250);
-  --accent: oklch(0.94 0.02 250);
-  --accent-foreground: oklch(0.28 0.04 252);
+  /* Accent — ink green. White on it is 9.6:1. The other colour themes only
+     replace --primary and --ring; nothing else in the layout depends on hue. */
+  --primary: #354a3a;
+  --primary-foreground: #fffefa;
+  --secondary: #ebe7dc;
+  --secondary-foreground: #282923;
+  --muted: #ebe7dc;
+  --muted-foreground: #5d6258; /* 5.55:1 on the page, 4.89:1 on the darkest hover surface */
+  --accent: #e8e3d6;
+  --accent-foreground: #282923;
+  /* The warm secondary detail — dates, counters, the odd rubric. 5.90:1 on the sheet, 4.65:1 on the darkest hover surface. */
+  --copper: #8c5732;
 
-  /* Sidebar - deep navy #1E3A5F */
-  --sidebar: oklch(0.31 0.06 255);
-  --sidebar-foreground: oklch(0.95 0.01 250);
-  --sidebar-primary: oklch(0.55 0.16 252);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.38 0.07 255);
-  --sidebar-accent-foreground: oklch(0.99 0 0);
-  --sidebar-border: oklch(0.38 0.06 255);
-  --sidebar-ring: oklch(0.55 0.16 252);
+  /* Side navigation — continuous with the page, separated by a hairline. */
+  --sidebar: #f4f1ea;
+  --sidebar-foreground: #282923;
+  --sidebar-primary: #354a3a;
+  --sidebar-primary-foreground: #fffefa;
+  --sidebar-accent: #e8e3d6;
+  --sidebar-accent-foreground: #282923;
+  --sidebar-border: #d9d4c8;
+  --sidebar-ring: #354a3a;
 
   /* Status */
   --destructive: oklch(0.55 0.21 27); /* #C62828 */
@@ -224,50 +272,57 @@
   --status-excused: oklch(0.65 0.16 235); /* #2196F3 */
   --status-none: oklch(0.68 0 0); /* #9E9E9E */
 
-  /* …and the readable text alongside them. Measured against the white card:
-     4.63, 4.65, 4.86, 4.64, 4.84 — all clear of AA. The marks above measured
-     2.70, 1.71, 3.59, 3.08 and 2.88, which is why they may not carry text. */
-  --status-present-fg: oklch(0.545 0.16 145);
-  --status-late-fg: oklch(0.565 0.12 75);
-  --status-absent-fg: oklch(0.575 0.21 27);
-  --status-excused-fg: oklch(0.555 0.105 235);
-  --status-none-fg: oklch(0.55 0.02 250);
-  --warning-fg: oklch(0.57 0.14 55); /* --warning itself is 3.44:1 */
+  /* …and the readable text alongside them. Measured against every light surface
+     the app draws on — page #F4F1EA, sheet, secondary, the hover tint and the
+     notice band — the worst case is 4.87:1, so all clear AA wherever a
+     StatusMark lands. The marks above measured 2.70, 1.71, 3.59, 3.08 and
+     2.88, which is why they may not carry text. */
+  --status-present-fg: oklch(0.475 0.16 145);
+  --status-late-fg: oklch(0.495 0.12 75);
+  --status-absent-fg: oklch(0.515 0.21 27);
+  --status-excused-fg: oklch(0.485 0.105 235);
+  --status-none-fg: oklch(0.49 0.02 250);
+  --warning-fg: oklch(0.505 0.14 55); /* --warning itself is 3.44:1 */
 
   --material-thin: color-mix(in oklch, var(--card) 62%, transparent);
   --material-regular: color-mix(in oklch, var(--card) 80%, transparent);
   --material-thick: color-mix(in oklch, var(--card) 93%, transparent);
 
-  --border: oklch(0.9 0.005 250);
-  --input: oklch(0.9 0.005 250);
-  --ring: oklch(0.49 0.13 252);
+  /* Two lines on purpose. --border is the hairline between rows and sections;
+     --input is the edge of a control, which has to be seen to be used. */
+  --border: #d9d4c8;
+  --input: #8f8a7b;
+  --ring: #354a3a;
 }
 
 .dark {
-  --background: oklch(0.18 0.02 255);
-  --foreground: oklch(0.96 0.005 250);
-  --card: oklch(0.23 0.025 255);
-  --card-foreground: oklch(0.96 0.005 250);
-  --popover: oklch(0.23 0.025 255);
-  --popover-foreground: oklch(0.96 0.005 250);
+  /* Warm charcoal, with surfaces separated by a step of lightness rather than
+     by borders and shadow. */
+  --background: #1d1c19;
+  --foreground: #ece8df;
+  --card: #262521;
+  --card-foreground: #ece8df;
+  --popover: #2d2b27;
+  --popover-foreground: #ece8df;
 
-  --primary: oklch(0.65 0.16 252);
-  --primary-foreground: oklch(0.15 0.02 255);
-  --secondary: oklch(0.28 0.03 255);
-  --secondary-foreground: oklch(0.96 0.005 250);
-  --muted: oklch(0.28 0.03 255);
-  --muted-foreground: oklch(0.72 0.02 250);
-  --accent: oklch(0.32 0.04 255);
-  --accent-foreground: oklch(0.96 0.005 250);
+  --primary: #9dc4a7;
+  --primary-foreground: #14201a;
+  --secondary: #302e29;
+  --secondary-foreground: #ece8df;
+  --muted: #302e29;
+  --muted-foreground: #a8a59a;
+  --accent: #38362f;
+  --accent-foreground: #ece8df;
+  --copper: #d49a6f;
 
-  --sidebar: oklch(0.22 0.04 255);
-  --sidebar-foreground: oklch(0.95 0.01 250);
-  --sidebar-primary: oklch(0.65 0.16 252);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.3 0.05 255);
-  --sidebar-accent-foreground: oklch(0.99 0 0);
-  --sidebar-border: oklch(0.3 0.05 255);
-  --sidebar-ring: oklch(0.65 0.16 252);
+  --sidebar: #1d1c19;
+  --sidebar-foreground: #ece8df;
+  --sidebar-primary: #9dc4a7;
+  --sidebar-primary-foreground: #14201a;
+  --sidebar-accent: #38362f;
+  --sidebar-accent-foreground: #ece8df;
+  --sidebar-border: #3a3832;
+  --sidebar-ring: #9dc4a7;
 
   --destructive: oklch(0.65 0.22 27);
   --destructive-foreground: oklch(0.99 0 0);
@@ -297,8 +352,20 @@
   --material-regular: color-mix(in oklch, var(--card) 82%, transparent);
   --material-thick: color-mix(in oklch, var(--card) 94%, transparent);
 
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
+  --border: #3a3832;
+  --input: #7d796c;
+  --ring: #9dc4a7;
+}
+
+/* The blue the app shipped with, kept for anyone who chose it. */
+html[data-theme="blue"] {
+  --primary: oklch(0.49 0.13 252); /* #1565C0 */
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.49 0.13 252);
+}
+html.dark[data-theme="blue"] {
+  --primary: oklch(0.65 0.16 252);
+  --primary-foreground: oklch(0.15 0.02 255);
   --ring: oklch(0.65 0.16 252);
 }
 
@@ -401,14 +468,50 @@
   }
 }
 
+/* A bounded work area — a form, a drawer body, a table that is the point of the
+   screen. Edge and radius, no shadow: fixed content leans on structure, and only
+   things that float (dialogs, menus, toasts) get a shadow. Elsewhere, prefer a
+   hairline (`ledger`, `section-rule`) to a box. */
 @utility card-surface {
   background-color: var(--color-card);
   color: var(--color-card-foreground);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow:
-    0 1px 2px oklch(0 0 0 / 0.04),
-    0 1px 3px oklch(0 0 0 / 0.06);
+  border-radius: var(--radius-lg);
+}
+
+/* The page's own grammar ───────────────────────────────────────────────── */
+
+/* A run of rows separated by hairlines — the notebook ruling. */
+@utility ledger {
+  & > * + * {
+    border-top: 1px solid var(--color-border);
+  }
+}
+
+/* The rule that opens a section: a hairline above, the title sitting on it. */
+@utility section-rule {
+  border-top: 1px solid var(--color-border);
+  padding-top: calc(var(--spacing) * 3);
+}
+
+/* Small caption that names a block of content ("סדר א׳", "החודש עד כה"). */
+@utility eyebrow {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+}
+
+/* Figures that must line up: times, minutes, money. */
+@utility figure {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Screen titles and the product name. */
+@utility title-serif {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  line-height: 1.15;
 }
 
 /* The look every text/number/date/time input and <select> in the app shares.
@@ -421,8 +524,8 @@
   color: var(--color-foreground);
   padding-block: calc(var(--spacing) * 2);
   padding-inline: calc(var(--spacing) * 3);
-  font-size: 0.875rem;
-  line-height: 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
 
   &:focus-visible {
     outline: 2px solid var(--color-ring);
@@ -441,8 +544,8 @@
   color: var(--color-foreground);
   padding-block: calc(var(--spacing) * 1.5);
   padding-inline: calc(var(--spacing) * 2);
-  font-size: 0.75rem;
-  line-height: 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
 
   &:focus-visible {
     outline: 2px solid var(--color-ring);
@@ -462,74 +565,63 @@ html.hc.dark {
   --foreground: oklch(0.98 0.005 250);
 }
 
-/* Compact mode */
-html.compact main {
-  padding: 1rem !important;
+/* Density. "צפוף" is a real setting: it shrinks the rhythm everything below is
+   built on (row padding, gap between sections, page padding) rather than
+   nudging a border radius. Components take these through `row-pad`,
+   `stack-gap` and `page-pad`; none of them hard-codes its own spacing. */
+:root {
+  --density-row: 0.8125rem;
+  --density-gap: 2rem;
+  --density-page: 1.75rem;
 }
-html.compact .card-surface {
-  border-radius: var(--radius-md);
+html.compact {
+  --density-row: 0.375rem;
+  --density-gap: 1rem;
+  --density-page: 1rem;
+}
+@utility row-pad {
+  padding-block: var(--density-row);
+}
+@utility stack-gap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-gap);
+}
+@utility page-pad {
+  padding: var(--density-page);
 }
 
-/* Color themes — override primary AND sidebar surface so the side menu takes the chosen color */
+/* Colour themes — each replaces --primary and --ring only. The sidebar, page and
+   sheet stay neutral so a theme changes the accent, never the layout. */
 /* --primary is the fill behind a near-white --primary-foreground label.
    At L 0.55 that pairing measured 4.43:1, under the 4.5 AA needs for
    normal-size text; at L 0.53 it is 4.81:1. High-contrast mode does not
    cover this — html.hc overrides only border, foreground and muted-foreground. */
 html[data-theme="emerald"] {
-  --primary: oklch(0.53 0.14 150);
-  --ring: oklch(0.53 0.14 150);
-  --sidebar: oklch(0.34 0.09 150);
-  --sidebar-accent: oklch(0.42 0.1 150);
-  --sidebar-border: oklch(0.42 0.09 150);
-  --sidebar-primary: oklch(0.62 0.16 150);
-  --sidebar-ring: oklch(0.62 0.16 150);
+  --primary: oklch(0.51 0.14 150);
+  --ring: oklch(0.51 0.14 150);
 }
 html.dark[data-theme="emerald"] {
   --primary: oklch(0.72 0.16 150);
   --ring: oklch(0.72 0.16 150);
-  --sidebar: oklch(0.24 0.06 150);
-  --sidebar-accent: oklch(0.32 0.07 150);
-  --sidebar-border: oklch(0.32 0.07 150);
-  --sidebar-primary: oklch(0.72 0.16 150);
-  --sidebar-ring: oklch(0.72 0.16 150);
 }
 
 html[data-theme="violet"] {
   --primary: oklch(0.52 0.18 295);
   --ring: oklch(0.52 0.18 295);
-  --sidebar: oklch(0.32 0.11 295);
-  --sidebar-accent: oklch(0.4 0.12 295);
-  --sidebar-border: oklch(0.4 0.11 295);
-  --sidebar-primary: oklch(0.6 0.18 295);
-  --sidebar-ring: oklch(0.6 0.18 295);
 }
 html.dark[data-theme="violet"] {
   --primary: oklch(0.7 0.18 295);
   --ring: oklch(0.7 0.18 295);
-  --sidebar: oklch(0.22 0.08 295);
-  --sidebar-accent: oklch(0.3 0.1 295);
-  --sidebar-border: oklch(0.3 0.09 295);
-  --sidebar-primary: oklch(0.7 0.18 295);
-  --sidebar-ring: oklch(0.7 0.18 295);
 }
 
 html[data-theme="rose"] {
-  --primary: oklch(0.58 0.2 15);
-  --ring: oklch(0.58 0.2 15);
-  --sidebar: oklch(0.34 0.12 15);
-  --sidebar-accent: oklch(0.42 0.14 15);
-  --sidebar-border: oklch(0.42 0.12 15);
-  --sidebar-primary: oklch(0.65 0.2 15);
-  --sidebar-ring: oklch(0.65 0.2 15);
+  --primary: oklch(0.55 0.2 15);
+  --ring: oklch(0.55 0.2 15);
 }
 html.dark[data-theme="rose"] {
   --primary: oklch(0.7 0.2 15);
   --ring: oklch(0.7 0.2 15);
-  --sidebar: oklch(0.24 0.09 15);
-  --sidebar-accent: oklch(0.32 0.1 15);
-  --sidebar-border: oklch(0.32 0.1 15);
-  --sidebar-primary: oklch(0.7 0.2 15);
-  --sidebar-ring: oklch(0.7 0.2 15);
 }
 
 /* --primary is the fill behind a near-white --primary-foreground label.
@@ -537,22 +629,12 @@ html.dark[data-theme="rose"] {
    normal-size text; at L 0.555 it is 4.75:1. High-contrast mode does not
    cover this — html.hc overrides only border, foreground and muted-foreground. */
 html[data-theme="amber"] {
-  --primary: oklch(0.555 0.16 70);
-  --ring: oklch(0.555 0.16 70);
-  --sidebar: oklch(0.36 0.09 70);
-  --sidebar-accent: oklch(0.44 0.1 70);
-  --sidebar-border: oklch(0.44 0.09 70);
-  --sidebar-primary: oklch(0.7 0.17 70);
-  --sidebar-ring: oklch(0.7 0.17 70);
+  --primary: oklch(0.535 0.16 70);
+  --ring: oklch(0.535 0.16 70);
 }
 html.dark[data-theme="amber"] {
   --primary: oklch(0.78 0.17 70);
   --ring: oklch(0.78 0.17 70);
-  --sidebar: oklch(0.26 0.07 70);
-  --sidebar-accent: oklch(0.34 0.08 70);
-  --sidebar-border: oklch(0.34 0.07 70);
-  --sidebar-primary: oklch(0.78 0.17 70);
-  --sidebar-ring: oklch(0.78 0.17 70);
 }
 
 /* --primary is the fill behind a near-white --primary-foreground label.
@@ -562,20 +644,10 @@ html.dark[data-theme="amber"] {
 html[data-theme="teal"] {
   --primary: oklch(0.525 0.12 200);
   --ring: oklch(0.525 0.12 200);
-  --sidebar: oklch(0.34 0.08 200);
-  --sidebar-accent: oklch(0.42 0.09 200);
-  --sidebar-border: oklch(0.42 0.08 200);
-  --sidebar-primary: oklch(0.6 0.13 200);
-  --sidebar-ring: oklch(0.6 0.13 200);
 }
 html.dark[data-theme="teal"] {
   --primary: oklch(0.72 0.13 200);
   --ring: oklch(0.72 0.13 200);
-  --sidebar: oklch(0.24 0.06 200);
-  --sidebar-accent: oklch(0.32 0.07 200);
-  --sidebar-border: oklch(0.32 0.07 200);
-  --sidebar-primary: oklch(0.72 0.13 200);
-  --sidebar-ring: oklch(0.72 0.13 200);
 }
 
 /* --primary is the fill behind a near-white --primary-foreground label.
@@ -583,79 +655,39 @@ html.dark[data-theme="teal"] {
    normal-size text; at L 0.575 it is 4.74:1. High-contrast mode does not
    cover this — html.hc overrides only border, foreground and muted-foreground. */
 html[data-theme="pink"] {
-  --primary: oklch(0.575 0.2 340);
-  --ring: oklch(0.575 0.2 340);
-  --sidebar: oklch(0.34 0.12 340);
-  --sidebar-accent: oklch(0.42 0.14 340);
-  --sidebar-border: oklch(0.42 0.12 340);
-  --sidebar-primary: oklch(0.66 0.2 340);
-  --sidebar-ring: oklch(0.66 0.2 340);
+  --primary: oklch(0.55 0.2 340);
+  --ring: oklch(0.55 0.2 340);
 }
 html.dark[data-theme="pink"] {
   --primary: oklch(0.72 0.2 340);
   --ring: oklch(0.72 0.2 340);
-  --sidebar: oklch(0.24 0.09 340);
-  --sidebar-accent: oklch(0.32 0.1 340);
-  --sidebar-border: oklch(0.32 0.1 340);
-  --sidebar-primary: oklch(0.72 0.2 340);
-  --sidebar-ring: oklch(0.72 0.2 340);
 }
 
 html[data-theme="slate"] {
   --primary: oklch(0.4 0.04 255);
   --ring: oklch(0.4 0.04 255);
-  --sidebar: oklch(0.28 0.03 255);
-  --sidebar-accent: oklch(0.36 0.04 255);
-  --sidebar-border: oklch(0.36 0.03 255);
-  --sidebar-primary: oklch(0.5 0.06 255);
-  --sidebar-ring: oklch(0.5 0.06 255);
 }
 html.dark[data-theme="slate"] {
   --primary: oklch(0.7 0.04 255);
   --ring: oklch(0.7 0.04 255);
-  --sidebar: oklch(0.2 0.02 255);
-  --sidebar-accent: oklch(0.28 0.03 255);
-  --sidebar-border: oklch(0.28 0.03 255);
-  --sidebar-primary: oklch(0.7 0.04 255);
-  --sidebar-ring: oklch(0.7 0.04 255);
 }
 
 html[data-theme="crimson"] {
   --primary: oklch(0.5 0.2 25);
   --ring: oklch(0.5 0.2 25);
-  --sidebar: oklch(0.32 0.12 25);
-  --sidebar-accent: oklch(0.4 0.14 25);
-  --sidebar-border: oklch(0.4 0.12 25);
-  --sidebar-primary: oklch(0.6 0.2 25);
-  --sidebar-ring: oklch(0.6 0.2 25);
 }
 html.dark[data-theme="crimson"] {
-  --primary: oklch(0.66 0.2 25);
-  --ring: oklch(0.66 0.2 25);
-  --sidebar: oklch(0.22 0.09 25);
-  --sidebar-accent: oklch(0.3 0.1 25);
-  --sidebar-border: oklch(0.3 0.1 25);
-  --sidebar-primary: oklch(0.66 0.2 25);
-  --sidebar-ring: oklch(0.66 0.2 25);
+  --primary: oklch(0.68 0.2 25);
+  --ring: oklch(0.68 0.2 25);
 }
 
 html[data-theme="indigo"] {
   --primary: oklch(0.45 0.18 275);
   --ring: oklch(0.45 0.18 275);
-  --sidebar: oklch(0.3 0.11 275);
-  --sidebar-accent: oklch(0.38 0.12 275);
-  --sidebar-border: oklch(0.38 0.11 275);
-  --sidebar-primary: oklch(0.55 0.18 275);
-  --sidebar-ring: oklch(0.55 0.18 275);
 }
 html.dark[data-theme="indigo"] {
   --primary: oklch(0.66 0.18 275);
   --ring: oklch(0.66 0.18 275);
-  --sidebar: oklch(0.22 0.08 275);
-  --sidebar-accent: oklch(0.3 0.1 275);
-  --sidebar-border: oklch(0.3 0.1 275);
-  --sidebar-primary: oklch(0.66 0.18 275);
-  --sidebar-ring: oklch(0.66 0.18 275);
 }
 
 /* --primary is the fill behind a near-white --primary-foreground label.
@@ -663,22 +695,12 @@ html.dark[data-theme="indigo"] {
    normal-size text; at L 0.535 it is 4.74:1. High-contrast mode does not
    cover this — html.hc overrides only border, foreground and muted-foreground. */
 html[data-theme="lime"] {
-  --primary: oklch(0.535 0.18 125);
-  --ring: oklch(0.535 0.18 125);
-  --sidebar: oklch(0.34 0.1 125);
-  --sidebar-accent: oklch(0.42 0.12 125);
-  --sidebar-border: oklch(0.42 0.1 125);
-  --sidebar-primary: oklch(0.68 0.19 125);
-  --sidebar-ring: oklch(0.68 0.19 125);
+  --primary: oklch(0.515 0.18 125);
+  --ring: oklch(0.515 0.18 125);
 }
 html.dark[data-theme="lime"] {
   --primary: oklch(0.78 0.19 125);
   --ring: oklch(0.78 0.19 125);
-  --sidebar: oklch(0.24 0.07 125);
-  --sidebar-accent: oklch(0.32 0.08 125);
-  --sidebar-border: oklch(0.32 0.08 125);
-  --sidebar-primary: oklch(0.78 0.19 125);
-  --sidebar-ring: oklch(0.78 0.19 125);
 }
 
 /* Background presets (light mode only — dark mode keeps its own background) */

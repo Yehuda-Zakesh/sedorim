@@ -1,8 +1,8 @@
 // מחשבון מלגה.
 //
 // The screen answers one question — "how much am I due this month, and why" —
-// so it is laid out as an answer followed by its workings: the figure, then
-// the line-by-line breakdown that adds up to it, then the two things a person
+// so it is laid out as a bill: the sum in large type, then the workings as
+// ruled rows (base, additions, deductions, total), then the two things a person
 // will want to check (the missing-minute bands, and the caps on the learning
 // frameworks).
 //
@@ -11,20 +11,9 @@
 // the app does not know about advance approvals from the Rosh Kollel, and
 // several of the rules turn on them.
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
-import {
-  Wallet,
-  ChevronRight,
-  ChevronLeft,
-  Info,
-  AlertTriangle,
-  TrendingDown,
-  TrendingUp,
-  CalendarRange,
-  X,
-  ShieldCheck,
-} from "lucide-react";
+import { CalendarRange } from "lucide-react";
 import { useSeder, useLearning } from "@/lib/kollel-store";
 import { useSettings, setMonthApproved } from "@/lib/settings-store";
 import {
@@ -33,9 +22,11 @@ import {
   type StipendBreakdown,
   type StipendLine,
 } from "@/lib/stipend";
-import { currentMonthKey, monthKeyLabel, monthsWithData, shiftMonth } from "@/lib/month-nav";
+import { monthKeyLabel, monthsWithData } from "@/lib/month-nav";
+import { MonthPicker } from "@/components/month-picker";
+import { useSelectedMonth } from "@/lib/period";
 import { hebrewFromGregorian, formatHebrewMonthYear } from "@/lib/hebrew-calendar";
-import { IconBadge, StatTile } from "@/components/ui/stat";
+import { PageSection, LedgerRow, Notice } from "@/components/ui/ledger";
 
 export const Route = createFileRoute("/stipend")({
   head: () => ({ meta: [{ title: "מחשבון מלגה — סדר פלוס" }] }),
@@ -48,89 +39,135 @@ function StipendPage() {
   const { entries } = useSeder();
   const { items: lessons } = useLearning();
   const { settings } = useSettings();
-  const [month, setMonth] = useState(currentMonthKey());
+  const [month, setMonth] = useSelectedMonth();
 
   const months = useMemo(() => monthsWithData(entries, lessons), [entries, lessons]);
   const approvedMonths = settings.stipend?.approvedMonths ?? [];
   const priorApproval = approvedMonths.includes(month);
-  const result = useMemo(
-    () =>
-      calcStipend({
-        monthKey: month,
-        entries,
-        lessons,
-        shasChavura: settings.seder.shasChavura,
-        priorApproval,
-      }),
-    [month, entries, lessons, settings.seder.shasChavura, priorApproval],
-  );
+  // Not memoised, on purpose. calcStipend reads the seder hours (and their
+  // effective-date schedule) from the settings store, none of which are in the
+  // arguments — a cache keyed on the arguments kept showing the old sum after the
+  // hours changed. It is one month of rows, and useSettings() above re-renders
+  // this on every settings change, from either window.
+  const result = calcStipend({
+    monthKey: month,
+    entries,
+    lessons,
+    shasChavura: settings.seder.shasChavura,
+    priorApproval,
+  });
 
   const [y, m] = month.split("-").map(Number);
   const hebrewLabel = formatHebrewMonthYear(hebrewFromGregorian(new Date(y, m - 1, 15)));
+  const monthLabel = monthKeyLabel(month);
+
+  const baseLines = result.lines.filter((l) => l.kind === "base");
+  const credits = result.lines.filter((l) => l.kind === "credit");
+  const debits = result.lines.filter((l) => l.kind === "debit");
+  const noRecords =
+    entries.every((e) => !e.date.startsWith(month)) &&
+    lessons.every((l) => !l.date.startsWith(month));
 
   return (
     <AppShell title="מחשבון מלגה" subtitle="כמה מלגה מגיעה החודש, לפי הנתונים שבתוכנה">
-      <MonthPicker value={month} months={months} hebrewLabel={hebrewLabel} onChange={setMonth} />
+      <div className="stack-gap">
+        <MonthPicker
+          value={month}
+          months={months}
+          onChange={setMonth}
+          sublabel={hebrewLabel}
+          leading={<CalendarRange className="size-3.5 text-muted-foreground" aria-hidden="true" />}
+        />
 
-      <Disclaimer />
+        {/* 1 — the sum, large; the caveat beside it, quiet but unmissable. */}
+        <section aria-label={`סכום המלגה, ${monthLabel}`}>
+          <div className="eyebrow">סה״כ מלגה משוערת · {monthLabel}</div>
+          <div className="figure mt-1 text-5xl font-bold">
+            <bdi dir="ltr">{nis(result.totalNis)}</bdi>
+          </div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            בסיס <bdi dir="ltr">{nis(STIPEND_POLICY.baseNis)}</bdi>
+            {result.deductionNis > 0 && (
+              <>
+                {" · הפחתה "}
+                <bdi dir="ltr">{nis(-result.deductionNis)}</bdi>
+              </>
+            )}
+            {result.totalNis > STIPEND_POLICY.baseNis - result.deductionNis && (
+              <>
+                {" · תוספות "}
+                <bdi dir="ltr">
+                  {`+${nis(result.totalNis - STIPEND_POLICY.baseNis + result.deductionNis)}`}
+                </bdi>
+              </>
+            )}
+          </div>
+          <div className="mt-4">
+            <Notice tone="info" title="להמחשה בלבד">
+              הסכום מחושב מהרישומים שבתוכנה. אישורים חריגים מראש הכולל והחלטות הנהלה אינם ידועים לה.
+              הקובע הוא תלוש המלגה.
+            </Notice>
+          </div>
+          {noRecords && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              אין רישומים ב{monthLabel}. הסכום משקף היעדר נתונים ולא נוכחות: אין חסר רשום, ולכן
+              ייתכנו בו תוספות שאינן מאומתות.
+            </p>
+          )}
+        </section>
 
-      <ApprovalToggle
-        month={month}
-        checked={priorApproval}
-        onChange={(v) => setMonthApproved(month, v)}
-      />
-
-      {/* 1 — the figure. */}
-      <section className="mt-4 card-surface p-6 border-s-4 border-s-primary">
-        <div className="flex items-start gap-4 flex-wrap">
-          <IconBadge icon={Wallet} size="lg" />
-          <div className="min-w-0 flex-1">
-            <div className="text-xs text-muted-foreground">
-              סה״כ מלגה משוערת · {monthKeyLabel(month)}
-            </div>
-            <div className="mt-1 text-4xl font-bold">{nis(result.totalNis)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              מלגת בסיס {nis(STIPEND_POLICY.baseNis)}
-              {result.deductionNis > 0 && ` · פחות ${nis(result.deductionNis)} הפחתה`}
-              {result.totalNis > STIPEND_POLICY.baseNis - result.deductionNis &&
-                ` · בתוספת ${nis(result.totalNis - STIPEND_POLICY.baseNis + result.deductionNis)}`}
+        {/* 2 — the workings, in the order the rules are written. */}
+        <PageSection title="פירוט החישוב" aside="כל שורה היא סעיף אחד בכללי הכולל">
+          <div aria-label="שורות חישוב המלגה" role="group">
+            <LineGroup label="בסיס" lines={baseLines} />
+            <LineGroup label="תוספות" lines={credits} />
+            <LineGroup label="הפחתות" lines={debits} />
+            <div className="mt-2 border-t-2 border-foreground/40">
+              <LedgerRow label="סה״כ מלגה" strong>
+                <span className="text-2xl font-bold">
+                  <bdi dir="ltr">{nis(result.totalNis)}</bdi>
+                </span>
+              </LedgerRow>
             </div>
           </div>
-        </div>
-      </section>
+        </PageSection>
 
-      {/* 2 — the workings, in the order the rules are written. */}
-      <section className="mt-4 card-surface overflow-hidden">
-        <div className="px-5 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold">פירוט החישוב</h2>
-          <p className="text-2xs text-muted-foreground mt-0.5">
-            כל שורה היא סעיף אחד בכללי הכולל, בסדר שבו הם כתובים.
-          </p>
-        </div>
-        <ul className="divide-y divide-border">
-          {result.lines.map((line) => (
-            <LineRow key={line.id} line={line} />
-          ))}
-        </ul>
-        <div className="flex items-baseline gap-3 border-t-2 border-border bg-muted/30 px-5 py-4">
-          <span className="text-sm font-semibold">סה״כ</span>
-          <span className="flex-1" />
-          <span className="text-2xl font-bold tabular-nums">{nis(result.totalNis)}</span>
-        </div>
-      </section>
+        {/* The approval belongs to the selected month, so it sits with it. */}
+        <ApprovalToggle
+          month={month}
+          checked={priorApproval}
+          onChange={(v) => setMonthApproved(month, v)}
+        />
 
-      {/* 3 — the proportional month, which quietly moves every threshold above. */}
-      <ProportionSection result={result} />
+        <ProportionSection result={result} />
 
-      <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <MissingMinutesSection result={result} />
-        <LearningSection result={result} />
+        <div className="grid grid-cols-1 gap-x-8 gap-y-[var(--density-gap)] lg:grid-cols-2">
+          <MissingMinutesSection result={result} />
+          <LearningSection result={result} />
+        </div>
       </div>
     </AppShell>
   );
 }
 
-function LineRow({ line }: { line: StipendLine }) {
+function LineGroup({ label, lines }: { label: string; lines: StipendLine[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <div className="mb-3">
+      <div className="eyebrow mb-1">{label}</div>
+      <div className="ledger">
+        {lines.map((line) => (
+          <LedgerRow key={line.id} label={line.label} note={line.detail}>
+            <LineValue line={line} />
+          </LedgerRow>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The sign is part of the figure, so the colour never carries the meaning alone. */
+function LineValue({ line }: { line: StipendLine }) {
   const zero = line.nis === 0;
   const color =
     line.kind === "base"
@@ -140,51 +177,12 @@ function LineRow({ line }: { line: StipendLine }) {
         : line.nis < 0
           ? "text-destructive"
           : "text-success";
-
+  const text =
+    line.kind === "base" || zero ? nis(line.nis) : `${line.nis > 0 ? "+" : ""}${nis(line.nis)}`;
   return (
-    <li className="flex items-start gap-3 px-5 py-3.5">
-      {line.kind !== "base" && (
-        <span className={`mt-0.5 shrink-0 ${zero ? "text-muted-foreground/50" : color}`}>
-          {line.kind === "debit" ? (
-            <TrendingDown className="size-4" />
-          ) : (
-            <TrendingUp className="size-4" />
-          )}
-        </span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium">{line.label}</span>
-        <span className="block text-2xs text-muted-foreground">{line.detail}</span>
-      </span>
-      <span className={`shrink-0 text-base font-semibold tabular-nums ${color}`}>
-        {line.kind === "base" || zero
-          ? nis(line.nis)
-          : `${line.nis > 0 ? "+" : ""}${nis(line.nis)}`}
-      </span>
-    </li>
-  );
-}
-
-/**
- * The one thing that has to be said on this screen, whatever the numbers are.
- *
- * It is not a formality: the app has no way of knowing about an advance
- * approval from the Rosh Kollel, and several of the rules turn on one.
- */
-function Disclaimer() {
-  return (
-    <div className="mt-4">
-      <div className="card-surface p-4 flex items-start gap-3 border-s-4 border-s-info">
-        <IconBadge icon={Info} tone="info" size="md" />
-        <div className="min-w-0 text-sm">
-          <div className="font-semibold">החישוב להמחשה בלבד</div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            הסכום מחושב מהרישומים שבתוכנה בלבד. אישורים חריגים מראש הכולל, זמנים חריגים והחלטות של
-            הנהלת הכולל אינם ידועים לתוכנה ואינם נכללים כאן. הקובע הוא תלוש המלגה.
-          </p>
-        </div>
-      </div>
-    </div>
+    <bdi dir="ltr" className={`font-semibold ${color}`}>
+      {text}
+    </bdi>
   );
 }
 
@@ -208,7 +206,7 @@ function ApprovalToggle({
 }) {
   return (
     <label
-      className={`mt-4 card-surface p-4 flex items-start gap-3 cursor-pointer pressable transition ${
+      className={`card-surface flex cursor-pointer items-start gap-3 p-4 pressable transition ${
         checked ? "border-s-4 border-s-success" : ""
       }`}
     >
@@ -216,23 +214,25 @@ function ApprovalToggle({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 size-4 shrink-0"
+        className="mt-0.5 size-4 shrink-0 accent-primary"
       />
       <div className="min-w-0 text-sm">
-        <div className="font-semibold flex items-center gap-1.5">
-          <ShieldCheck
-            className={`size-4 shrink-0 ${checked ? "text-success" : "text-muted-foreground"}`}
-          />
+        <div className="font-semibold">
           יש לי אישור מראש הכולל ל{monthKeyLabel(month)}
+          {checked && <span className="ms-2 text-xs font-medium text-success">מסומן לחודש זה</span>}
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {checked
-            ? "ההגבלות שתלויות באישור מיוחד מראש הכולל אינן חלות על חודש זה — דקות מוצדקות אינן מורידות מהמלגה, ללא תקרה."
+            ? "ההגבלות שתלויות באישור מיוחד מראש הכולל אינן חלות על חודש זה: דקות מוצדקות אינן מורידות מהמלגה, ללא תקרה."
             : "סמן אם ראש הכולל אישר לך מראש. הסימון נשמר לחודש זה בלבד, ומבטל את התקרה על הדקות המוצדקות."}
         </p>
       </div>
     </label>
   );
+}
+
+function Num({ children }: { children: ReactNode }) {
+  return <bdi dir="ltr">{children}</bdi>;
 }
 
 /** Why the thresholds on this screen are not always 500 and 600. */
@@ -241,32 +241,33 @@ function ProportionSection({ result }: { result: StipendBreakdown }) {
   const pct = Math.round(result.ratio * 100);
 
   return (
-    <section className="mt-4 card-surface p-5">
-      <h2 className="text-sm font-semibold">ימי הלימוד בחודש</h2>
-      <p className="text-2xs text-muted-foreground mt-0.5">
+    <PageSection
+      title="ימי הלימוד בחודש"
+      aside={partial ? "חודש חלקי: הספים מוקטנים" : "חודש לימודים מלא"}
+    >
+      <p className="mb-2 text-xs text-muted-foreground">
         {partial
-          ? "החודש קצר מחודש רגיל, ולכן הספים שנמדדים בדקות קטנים בהתאם. המלגה עצמה קשיחה — היא מתחילה תמיד מ־2,000 ₪."
-          : "חודש לימודים מלא — הספים שנמדדים בדקות בתוקפם המלא."}
+          ? "החודש קצר מחודש רגיל, ולכן הספים שנמדדים בדקות קטנים בהתאם. המלגה עצמה קשיחה: היא מתחילה תמיד מ־2,000 ₪."
+          : "הספים שנמדדים בדקות בתוקפם המלא."}
       </p>
-      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatTile
-          label="ימי לימוד בפועל"
-          value={result.sessionDays}
-          hint="ללא שישי־שבת, יו״ט, ערבי יו״ט ובין הזמנים"
-        />
-        <StatTile label="בחודש מלא" value={result.fullMonthDays} hint="כל ימי א׳–ה׳ בחודש" />
-        <StatTile
-          label="יחס"
-          value={`${pct}%`}
-          hint={partial ? "כל הספים מוקטנים ביחס זה" : "ללא הקטנה"}
-        />
-        <StatTile
+      <div className="ledger">
+        <LedgerRow label="ימי לימוד בפועל" note="ללא שישי־שבת, יו״ט, ערבי יו״ט ובין הזמנים">
+          {result.sessionDays}
+        </LedgerRow>
+        <LedgerRow label="ימי לימוד בחודש מלא" note="כל ימי א׳–ה׳ בחודש">
+          {result.fullMonthDays}
+        </LedgerRow>
+        <LedgerRow label="יחס" note={partial ? "כל הספים מוקטנים ביחס זה" : "ללא הקטנה"}>
+          {pct}%
+        </LedgerRow>
+        <LedgerRow
           label="סף החיסור החופשי"
-          value={result.scaled.freeMissingMin}
-          hint={partial ? `במקום ${STIPEND_POLICY.freeMissingMin} דק׳` : "דקות"}
-        />
+          note={partial ? `במקום ${STIPEND_POLICY.freeMissingMin} דק׳` : undefined}
+        >
+          {result.scaled.freeMissingMin} דק׳
+        </LedgerRow>
       </div>
-    </section>
+    </PageSection>
   );
 }
 
@@ -277,59 +278,71 @@ function MissingMinutesSection({ result }: { result: StipendBreakdown }) {
   const waived = missing.excusedWaived > 0;
 
   return (
-    <section className="card-surface p-5">
-      <h2 className="text-sm font-semibold">הדקות החסרות</h2>
-      <p className="text-2xs text-muted-foreground mt-0.5">
+    <PageSection title="הדקות החסרות">
+      <p className="mb-2 text-xs text-muted-foreground">
         {waived ? (
-          "יש אישור מראש הכולל לחודש זה — דקות מוצדקות אינן מורידות מהמלגה, ללא תקרה."
+          "יש אישור מראש הכולל לחודש זה: דקות מוצדקות אינן מורידות מהמלגה, ללא תקרה."
         ) : (
           <>
-            דקות מוצדקות אינן מורידות מהמלגה — עד {scaled.excusedFreeMin} דק׳. מעבר לכך, ובלי אישור
-            מראש הכולל, העודף נחשב כדקות רגילות.
+            דקות מוצדקות אינן מורידות מהמלגה, עד <Num>{scaled.excusedFreeMin}</Num> דק׳. מעבר לכך,
+            ובלי אישור מראש הכולל, העודף נחשב כדקות רגילות.
           </>
         )}
       </p>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <StatTile label="סה״כ נשמט" value={missing.total} hint="כולל מוצדקות" />
-        <StatTile
+      <div className="ledger">
+        <LedgerRow label="סה״כ נשמט" note="כולל מוצדקות">
+          {missing.total} דק׳
+        </LedgerRow>
+        <LedgerRow
           label="מתוכן מוצדקות"
-          value={missing.excused}
-          hint={
+          note={
             waived
-              ? `${missing.excusedWaived} דק׳ מעל התקרה — לא נספרו, יש אישור`
+              ? `${missing.excusedWaived} דק׳ מעל התקרה: לא נספרו, יש אישור`
               : excusedOver
-                ? `${missing.excusedCharged} דק׳ מעל התקרה — נחשבות רגילות`
+                ? `${missing.excusedCharged} דק׳ מעל התקרה: נחשבות רגילות`
                 : "כולן בתוך התקרה"
           }
-        />
-        <StatTile label="חסר נטו" value={missing.net} hint="לא מוצדק, אחרי בונוס" />
-        <StatTile label="נכנס לחישוב" value={missing.chargeable} hint="חסר נטו + מוצדק מעל התקרה" />
+        >
+          {missing.excused} דק׳
+        </LedgerRow>
+        <LedgerRow label="חסר נטו" note="לא מוצדק, אחרי בונוס">
+          {missing.net} דק׳
+        </LedgerRow>
+        <LedgerRow label="נכנס לחישוב" note="חסר נטו + מוצדק מעל התקרה" strong>
+          {missing.chargeable} דק׳
+        </LedgerRow>
       </div>
 
-      <h3 className="mt-5 text-xs font-semibold text-muted-foreground">מדרגות ההפחתה</h3>
-      <ul className="mt-2 space-y-2">
+      <h3 className="eyebrow mb-1 mt-5">מדרגות ההפחתה</h3>
+      <div className="ledger">
         {charges.map((c, i) => (
-          <li
-            key={i}
-            className="flex items-baseline gap-2 rounded-lg border border-border px-3 py-2 text-xs"
-          >
-            <span className="tabular-nums">
-              {c.fromMin}–{Number.isFinite(c.toMin) ? c.toMin : "∞"} דק׳
+          <div key={i} className="row-pad flex items-baseline gap-3 text-sm">
+            <span className="figure min-w-0">
+              <Num>
+                {c.fromMin}–{Number.isFinite(c.toMin) ? c.toMin : "∞"}
+              </Num>{" "}
+              דק׳
+              <span className="ms-2 text-xs text-muted-foreground">
+                <Num>{c.nisPer10Min}</Num> ₪ לכל 10 דק׳
+              </span>
             </span>
-            <span className="text-muted-foreground">{c.nisPer10Min} ₪ לכל 10 דק׳</span>
             <span className="flex-1" />
-            <span className="tabular-nums text-muted-foreground">{c.minutes} דק׳</span>
-            <span className={`tabular-nums font-semibold ${c.nis > 0 ? "text-destructive" : ""}`}>
-              {c.nis > 0 ? `−${c.nis} ₪` : "—"}
+            <span className="figure text-xs text-muted-foreground">
+              <Num>{c.minutes}</Num> דק׳
             </span>
-          </li>
+            <span
+              className={`figure w-16 text-end font-semibold ${c.nis > 0 ? "text-destructive" : ""}`}
+            >
+              <Num>{c.nis > 0 ? `−${c.nis} ₪` : "—"}</Num>
+            </span>
+          </div>
         ))}
-      </ul>
-      <p className="mt-2 text-2xs text-muted-foreground">
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
         בכל מדרגה נספרות רק יחידות שלמות של 10 דקות; שארית קטנה מ־10 דק׳ אינה מחויבת.
       </p>
-    </section>
+    </PageSection>
   );
 }
 
@@ -339,162 +352,73 @@ function LearningSection({ result }: { result: StipendBreakdown }) {
   const p = STIPEND_POLICY;
 
   return (
-    <section className="card-surface p-5">
-      <h2 className="text-sm font-semibold">לימוד נוסף</h2>
-      <p className="text-2xs text-muted-foreground mt-0.5">
-        הדקות המוצגות הן דקות אפקטיביות — לימוד בתענית דיבור נספר כפול, כאן כמו בכל שאר הסיכומים.
+    <PageSection title="לימוד נוסף">
+      <p className="mb-2 text-xs text-muted-foreground">
+        הדקות המוצגות הן דקות אפקטיביות: לימוד בתענית דיבור נספר כפול, כאן כמו בכל שאר הסיכומים.
       </p>
 
-      <div className="mt-3 space-y-3">
-        <div className="rounded-lg border border-border p-3">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-medium">כולל ערב</span>
-            <span className="flex-1" />
+      <div className="ledger">
+        <div>
+          <LedgerRow
+            label="כולל ערב"
+            note={
+              <>
+                {l.kollelErevCountedMin} דק׳ נספרות
+                {l.kollelErevRawMin !== l.kollelErevCountedMin &&
+                  ` (מתוך ${l.kollelErevRawMin} שנרשמו)`}
+                {" · "}
+                {p.kollelErev.nisPerHour} ₪ לשעה
+              </>
+            }
+          >
             <span
-              className={`text-base font-semibold tabular-nums ${l.kollelErevNis > 0 ? "text-success" : "text-muted-foreground"}`}
+              className={
+                l.kollelErevNis > 0 ? "text-success font-semibold" : "text-muted-foreground"
+              }
             >
               {nis(l.kollelErevNis)}
             </span>
-          </div>
-          <div className="mt-1 text-2xs text-muted-foreground tabular-nums">
-            {l.kollelErevCountedMin} דק׳ נספרות
-            {l.kollelErevRawMin !== l.kollelErevCountedMin &&
-              ` (מתוך ${l.kollelErevRawMin} שנרשמו)`}
-            {" · "}
-            {p.kollelErev.nisPerHour} ₪ לשעה
-          </div>
+          </LedgerRow>
           {l.kollelErevBelowMinimum && (
-            <div className="mt-2 flex items-start gap-1.5 text-2xs text-warning-fg">
-              <AlertTriangle className="size-3 mt-0.5 shrink-0" />
-              <span>
-                המינימום למלגה על כולל ערב החודש הוא {result.scaled.kollelErevMinMonthlyMin} דק׳.
-                חסרות {result.scaled.kollelErevMinMonthlyMin - l.kollelErevCountedMin} דק׳.
-              </span>
-            </div>
+            <p className="pb-2 text-xs font-medium text-warning-fg">
+              לא הושג המינימום: למלגה על כולל ערב נדרשות החודש{" "}
+              <Num>{result.scaled.kollelErevMinMonthlyMin}</Num> דק׳. חסרות{" "}
+              <Num>{result.scaled.kollelErevMinMonthlyMin - l.kollelErevCountedMin}</Num> דק׳.
+            </p>
           )}
           {l.kollelErevDaysOverCap > 0 && (
-            <div className="mt-2 text-2xs text-muted-foreground">
+            <p className="pb-2 text-xs text-muted-foreground">
               ב־{l.kollelErevDaysOverCap} ימים נרשם מעל התקרה של {p.kollelErev.maxDailyMin} דק׳ ליום
-              — העודף לא נספר.
-            </div>
+              והעודף לא נספר.
+            </p>
           )}
         </div>
 
-        <div className="rounded-lg border border-border p-3">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-medium">תורתו בידו</span>
-            <span className="flex-1" />
+        <div>
+          <LedgerRow
+            label="תורתו בידו"
+            note={
+              <>
+                {l.toratoCountedMin} דק׳ נספרות
+                {l.toratoCapped && ` (מתוך ${l.toratoRawMin} שנרשמו)`}
+                {" · "}
+                {p.toratoBeyado.nisPerHour} ₪ לשעה · ללא מינימום
+              </>
+            }
+          >
             <span
-              className={`text-base font-semibold tabular-nums ${l.toratoNis > 0 ? "text-success" : "text-muted-foreground"}`}
+              className={l.toratoNis > 0 ? "text-success font-semibold" : "text-muted-foreground"}
             >
               {nis(l.toratoNis)}
             </span>
-          </div>
-          <div className="mt-1 text-2xs text-muted-foreground tabular-nums">
-            {l.toratoCountedMin} דק׳ נספרות
-            {l.toratoCapped && ` (מתוך ${l.toratoRawMin} שנרשמו)`}
-            {" · "}
-            {p.toratoBeyado.nisPerHour} ₪ לשעה · ללא מינימום
-          </div>
+          </LedgerRow>
           {l.toratoCapped && (
-            <div className="mt-2 text-2xs text-muted-foreground">
-              התקרה החודשית היא {p.toratoBeyado.maxMonthlyMin / 60} שעות — העודף לא נספר.
-            </div>
+            <p className="pb-2 text-xs text-muted-foreground">
+              התקרה החודשית היא {p.toratoBeyado.maxMonthlyMin / 60} שעות והעודף לא נספר.
+            </p>
           )}
         </div>
       </div>
-    </section>
-  );
-}
-
-/** The same two arrows and month list the History screen uses. */
-function MonthPicker({
-  value,
-  months,
-  hebrewLabel,
-  onChange,
-}: {
-  value: string;
-  months: string[];
-  hebrewLabel: string;
-  onChange: (key: string) => void;
-}) {
-  const [listOpen, setListOpen] = useState(false);
-  const isCurrent = value === currentMonthKey();
-
-  return (
-    <div className="card-surface p-4">
-      <div className="flex items-center gap-2">
-        {/* Right arrow steps back in time: in an RTL layout, back is to the right. */}
-        <button
-          onClick={() => onChange(shiftMonth(value, -1))}
-          title="החודש הקודם"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition"
-        >
-          <ChevronRight className="size-4" />
-        </button>
-
-        <button
-          onClick={() => setListOpen((v) => !v)}
-          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 pressable transition"
-        >
-          <div className="flex items-center justify-center gap-2">
-            <CalendarRange className="size-3.5 text-muted-foreground" />
-            <span className="text-base font-semibold">{monthKeyLabel(value)}</span>
-          </div>
-          <div className="text-2xs text-muted-foreground">{hebrewLabel}</div>
-        </button>
-
-        <button
-          onClick={() => onChange(shiftMonth(value, 1))}
-          disabled={isCurrent}
-          title="החודש הבא"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition disabled:opacity-30"
-        >
-          <ChevronLeft className="size-4" />
-        </button>
-      </div>
-
-      {listOpen && (
-        <div className="mt-3 border-t border-border pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-muted-foreground">בחר חודש</span>
-            <button
-              onClick={() => setListOpen(false)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-auto">
-            {months.map((key) => (
-              <button
-                key={key}
-                onClick={() => {
-                  onChange(key);
-                  setListOpen(false);
-                }}
-                className={`rounded-md border px-2.5 py-2 text-xs pressable transition ${
-                  key === value
-                    ? "border-primary bg-primary/10 text-primary font-medium"
-                    : "border-border hover:bg-accent"
-                }`}
-              >
-                {monthKeyLabel(key)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!isCurrent && (
-        <button
-          onClick={() => onChange(currentMonthKey())}
-          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-2xs text-muted-foreground hover:bg-accent pressable transition"
-        >
-          חזור לחודש הנוכחי
-        </button>
-      )}
-    </div>
+    </PageSection>
   );
 }

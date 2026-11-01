@@ -35,6 +35,7 @@ class MemoryStorage {
 
 let storage: MemoryStorage;
 let bridge: typeof import("./store-bridge");
+let gate: typeof import("./store-gate");
 
 /** Whatever is sitting in the single dev key, straight off the fake storage. */
 function raw(): StoreShape | null {
@@ -47,6 +48,10 @@ beforeEach(async () => {
   vi.stubGlobal("localStorage", storage);
   vi.resetModules();
   bridge = await import("./store-bridge");
+  gate = await import("./store-gate");
+  // Most of these tests are about the transport, so they run with the file
+  // already trusted; the gate itself has its own describe block below.
+  gate.setStoreGate("ready");
 });
 
 afterEach(() => {
@@ -64,23 +69,29 @@ describe("loadStore", () => {
     expect((await bridge.loadStore()).seder).toEqual([{ id: "a" }]);
   });
 
-  it("treats unparseable contents as an empty store rather than throwing", async () => {
+  it("refuses to hand out unparseable contents as an empty store", async () => {
     storage.setItem(DEV_STORE_KEY, "{not json at all");
-    expect(await bridge.loadStore()).toEqual({});
+    await expect(bridge.loadStore()).rejects.toBeInstanceOf(bridge.StoreBlockedError);
   });
 
-  it("treats a non-object payload as an empty store", async () => {
-    for (const junk of ["null", "5", '"a string"', "true"]) {
+  it("refuses a non-object payload", async () => {
+    for (const junk of ["null", "5", '"a string"', "true", "[]"]) {
       storage.setItem(DEV_STORE_KEY, junk);
-      expect(await bridge.loadStore(), junk).toEqual({});
+      await expect(bridge.loadStore(), junk).rejects.toBeInstanceOf(bridge.StoreBlockedError);
     }
   });
 
-  it("survives localStorage itself throwing on read", async () => {
+  it("refuses when localStorage itself throws on read", async () => {
     vi.spyOn(storage, "getItem").mockImplementation(() => {
       throw new Error("SecurityError");
     });
-    expect(await bridge.loadStore()).toEqual({});
+    await expect(bridge.loadStore()).rejects.toBeInstanceOf(bridge.StoreBlockedError);
+  });
+
+  it("returns nothing while the gate is not ready, even if the file is fine", async () => {
+    await bridge.saveStoreKey("seder", ["a"]);
+    gate.setStoreGate("loading");
+    await expect(bridge.loadStore()).rejects.toBeInstanceOf(bridge.StoreBlockedError);
   });
 });
 
@@ -245,5 +256,111 @@ describe("everything lives under one key", () => {
     await bridge.saveStoreKeys({ seder: ["s"], learning: ["l"], theme: "dark" });
     const keys = Array.from({ length: storage.length }, (_, i) => storage.key(i));
     expect(keys).toEqual([DEV_STORE_KEY]);
+  });
+});
+
+describe("loadStoreChecked: missing versus corrupt", () => {
+  it("reports a file that does not exist as missing — a real fresh install", async () => {
+    expect((await bridge.loadStoreChecked()).status).toBe("missing");
+  });
+
+  it("reports a readable file as ok with its contents", async () => {
+    await bridge.saveStoreKey("seder", [{ id: "a" }]);
+    const res = await bridge.loadStoreChecked();
+    expect(res.status).toBe("ok");
+    if (res.status === "ok") expect(res.store.seder).toEqual([{ id: "a" }]);
+  });
+
+  it("reports unparseable text as corrupt and keeps the raw text", async () => {
+    storage.setItem(DEV_STORE_KEY, "{broken");
+    const res = await bridge.loadStoreChecked();
+    expect(res.status).toBe("corrupt");
+    if (res.status === "corrupt") {
+      expect(res.reason).toBe("unparseable");
+      expect(res.preservedAs).not.toBeNull();
+      expect(storage.getItem(res.preservedAs!)).toBe("{broken");
+    }
+    // The original is never touched.
+    expect(storage.getItem(DEV_STORE_KEY)).toBe("{broken");
+  });
+
+  it("reports valid JSON that is not an object as not-an-object", async () => {
+    storage.setItem(DEV_STORE_KEY, "[1,2]");
+    const res = await bridge.loadStoreChecked();
+    expect(res.status === "corrupt" && res.reason).toBe("not-an-object");
+  });
+});
+
+describe("the write gate", () => {
+  it("rejects every write with StoreBlockedError while loading, writing nothing", async () => {
+    gate.setStoreGate("loading");
+    await expect(bridge.saveStoreKey("seder", [])).rejects.toBeInstanceOf(bridge.StoreBlockedError);
+    await expect(bridge.saveStoreKeys({ theme: "dark" })).rejects.toBeInstanceOf(
+      bridge.StoreBlockedError,
+    );
+    expect(storage.getItem(DEV_STORE_KEY)).toBeNull();
+  });
+
+  it("blocks writes on a corrupt file and never replaces it with defaults", async () => {
+    storage.setItem(DEV_STORE_KEY, "{broken");
+    gate.setStoreGate("corrupt", {
+      reason: "unparseable",
+      message: "x",
+      preservedAs: null,
+      backups: [],
+    });
+    await expect(bridge.saveStoreKey("seder", [])).rejects.toBeInstanceOf(bridge.StoreBlockedError);
+    expect(storage.getItem(DEV_STORE_KEY)).toBe("{broken");
+  });
+
+  it("even a write that slipped past the gate refuses to build on a corrupt file", async () => {
+    storage.setItem(DEV_STORE_KEY, "{broken");
+    await expect(bridge.saveStoreKey("seder", [])).rejects.toThrow(/STORE_CORRUPT/);
+    expect(storage.getItem(DEV_STORE_KEY)).toBe("{broken");
+  });
+
+  it("the recovery command start-empty is the way out of a corrupt file", async () => {
+    storage.setItem(DEV_STORE_KEY, "{broken");
+    await bridge.loadStoreChecked(); // detecting it preserves the raw text
+    await bridge.startEmptyStore();
+    expect((await bridge.loadStoreChecked()).status).toBe("ok");
+    expect(storage.getItem("sedorim.devStore.corrupt.v1")).toBe("{broken");
+  });
+});
+
+describe("edit conflicts (record-level merge in the browser transport)", () => {
+  const rec = (id: string, note: string) => ({ id, note });
+
+  it("reports a record both windows changed and keeps the file's version", async () => {
+    const base = [rec("a", "0"), rec("b", "0")];
+    await bridge.saveStoreKey("seder", base);
+    await bridge.saveStoreKey("seder", [rec("a", "first"), rec("b", "0")], {
+      bases: { seder: base },
+    });
+    const res = await bridge.saveStoreKey("seder", [rec("a", "second"), rec("b", "new-b")], {
+      bases: { seder: base },
+    });
+    expect(res.conflicts).toEqual([
+      {
+        key: "seder",
+        id: "a",
+        kind: "edit-edit",
+        mine: rec("a", "second"),
+        theirs: rec("a", "first"),
+      },
+    ]);
+    expect(raw()!.seder).toEqual([rec("a", "first"), rec("b", "new-b")]);
+    expect(res.merged?.seder).toEqual(raw()!.seder);
+  });
+
+  it("has no conflicts field on a clean save", async () => {
+    const base = [rec("a", "0")];
+    await bridge.saveStoreKey("seder", base);
+    const res = await bridge.saveStoreKey("seder", [rec("a", "x")], { bases: { seder: base } });
+    expect(res.conflicts).toBeUndefined();
+  });
+
+  it("previewing a backup is not available outside the desktop app", async () => {
+    await expect(bridge.previewBackup("sedorim-data.1.json")).rejects.toThrow();
   });
 });

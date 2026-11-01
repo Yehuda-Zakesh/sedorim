@@ -1,7 +1,9 @@
 import { sharedValue, useHydrated } from "./shared-state";
+import { loadStore } from "./store-bridge";
 
 export type FontSize = "small" | "normal" | "large" | "xlarge";
 export type ColorTheme =
+  | "ink"
   | "blue"
   | "emerald"
   | "violet"
@@ -158,7 +160,7 @@ export const DEFAULT_SETTINGS: Settings = {
     fontSize: "normal",
     highContrast: false,
     compactMode: false,
-    colorTheme: "blue",
+    colorTheme: "ink",
     background: "white",
   },
   dashboard: { showInsights: true, showReminders: true, showQuickActions: true },
@@ -223,6 +225,11 @@ export function getSettings(): Settings {
 
 export function updateSettings(patch: Partial<Settings>) {
   store.set(deepMerge(store.get(), patch));
+}
+
+/** updateSettings that resolves only after the change reached the shared file. */
+export function updateSettingsChecked(patch: Partial<Settings>): Promise<void> {
+  return store.setChecked(deepMerge(store.get(), patch)).then(() => undefined);
 }
 
 export function resetSettings() {
@@ -295,8 +302,9 @@ export function getSederTimesFor(dateISO: string): SederTimes {
   return times || baseTimes(settings);
 }
 
-/** Applies new seder hours from today onwards — past records keep their original hours. */
-export function setSederTimesFromToday(times: SederTimes, effectiveFrom = todayIso()) {
+// The settings patch for "these hours, from this date". Shared by the plain and the
+// checked setter below so the schedule logic exists once.
+function sederHoursPatch(times: SederTimes, effectiveFrom: string): Partial<Settings> {
   const settings = store.get();
   const sched = [...(settings.sederSchedule || [])];
   if (sched.length === 0) {
@@ -315,7 +323,20 @@ export function setSederTimesFromToday(times: SederTimes, effectiveFrom = todayI
       effectiveFrom,
       times,
     });
-  updateSettings({ sederSchedule: sched, seder: { ...settings.seder, ...times } });
+  return { sederSchedule: sched, seder: { ...settings.seder, ...times } };
+}
+
+/** Applies new seder hours from today onwards — past records keep their original hours. */
+export function setSederTimesFromToday(times: SederTimes, effectiveFrom = todayIso()) {
+  updateSettings(sederHoursPatch(times, effectiveFrom));
+}
+
+/** The same, resolving only once the change is in the shared file (rejects, and restores, if the write fails). */
+export function setSederTimesFromTodayChecked(
+  times: SederTimes,
+  effectiveFrom = todayIso(),
+): Promise<void> {
+  return updateSettingsChecked(sederHoursPatch(times, effectiveFrom));
 }
 
 export function removeSederScheduleEntry(id: string) {
@@ -360,7 +381,7 @@ export function applyAppearance() {
   r.classList.toggle("compact", appearance.compactMode);
   // No data-fontSize attribute: the size is applied as an inline root
   // font-size below, and no stylesheet ever selected on the attribute.
-  r.dataset.theme = appearance.colorTheme || "blue";
+  r.dataset.theme = appearance.colorTheme || "ink";
   const bg = appearance.background || "white";
   if (bg === "white") delete r.dataset.bg;
   else r.dataset.bg = bg;
@@ -395,6 +416,22 @@ export function markOnboarded() {
 }
 export function resetOnboarding() {
   onboarded.set(false);
+}
+
+/**
+ * After the whole data file was replaced by a backup copy: if that copy has no
+ * `onboarded` key but this window knows the person already finished the
+ * onboarding (its own record of it), the flag is written back — a copy that
+ * predates the flag, or lacks it, must not bring the wizard back to someone
+ * who has used the app. Never invents it otherwise, and never overrides a
+ * value the copy does hold. Resolves true when it wrote.
+ */
+export async function keepOnboardedAfterRecovery(): Promise<boolean> {
+  if (!onboarded.get()) return false;
+  const stored = await loadStore();
+  if (stored.onboarded !== undefined) return false;
+  await onboarded.setChecked(true);
+  return true;
 }
 
 /**

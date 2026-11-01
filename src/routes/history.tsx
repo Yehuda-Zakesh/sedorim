@@ -1,62 +1,124 @@
-// History — one month at a time.
+// The journal's list view — one month at a time, as a ruled ledger.
 //
-// It used to render every record ever entered in one table, with a month
-// header and a closing line injected between each month. After a year that is
-// several hundred rows on one screen, and the month you actually wanted was
-// somewhere in the middle of it.
+// The month is the app-wide one (useSelectedMonth), so it survives a trip to
+// the calendar, the search or the month summary and back. Filters live in
+// journal-state (module level + sessionStorage) for the same reason, and a
+// record opens in a dialog on top of the list, so closing it leaves the list
+// exactly where it was.
 //
-// Now the screen opens on the current month and nothing else. Moving between
-// months is two arrows and a list; the closing summary belongs to the month on
-// screen, so the numbers always add up to the rows above them.
-import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+// /history?month=YYYY-MM&id=…&kind=… (and &date=…) selects that month and
+// opens that record; /history?month=…&kind=attendance&filter=exceptions shows
+// that month's attendance narrowed to the filter (see journal.ts). Every param
+// is optional; a link with no kind/filter keeps the saved view.
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { EntryDrawer, type DrawerTarget } from "@/components/entry-drawer";
+import { JournalMonthBar } from "@/components/journal-month-bar";
+import { Button } from "@/components/ui/button";
+import { EmptyNote, Figure, PageSection, StatusMark, type MarkTone } from "@/components/ui/ledger";
 import {
   Search,
   Trash2,
-  History as HistoryIcon,
-  BookOpen,
   FileDown,
   Loader2,
-  Lock,
-  LockOpen,
-  ChevronRight,
-  ChevronLeft,
   CalendarRange,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import {
   useSeder,
   useLearning,
   calcSeder,
+  effectiveLearningMin,
   monthClosing,
   FRAMEWORK_LABELS,
   type MonthClosing,
   type LearningEntry,
+  type SederCalc,
   type SederEntry,
 } from "@/lib/kollel-store";
 import { exportMonthClosingsPdf } from "@/lib/exporters";
 import { formatHebrewDate } from "@/lib/hebrew-calendar";
-import { currentMonthKey, monthKeyLabel, monthsWithData, shiftMonth } from "@/lib/month-nav";
+import { monthKeyLabel, monthsWithData } from "@/lib/month-nav";
+import {
+  activeFilterChips,
+  filterLearning,
+  formatDayDate,
+  incompleteCount,
+  notableStatusWords,
+  filterSeder,
+  filtersActive,
+  hoursState,
+  needsAttention,
+  parseJournalSearch,
+  parseLocalDate,
+  resolveOpenTarget,
+  sederStatusWords,
+  viewPatchFromSearch,
+  WEEKDAYS_HE,
+  type ExcusedFilter,
+  type JournalView,
+  type TypeFilter,
+} from "@/lib/journal";
+import { resetJournalFilters, useJournalView } from "@/lib/journal-state";
+import { setSelectedMonth, useSelectedMonth } from "@/lib/period";
 import { useSettings, SHAS_ARRIVAL_DEADLINE } from "@/lib/settings-store";
 import { logProblem } from "@/lib/diagnostics";
 import { toastUndo } from "@/lib/undo";
 import { toast } from "sonner";
+import { CONFLICT_SAVE_TEXT } from "@/lib/save-conflicts";
 
 export const Route = createFileRoute("/history")({
-  head: () => ({ meta: [{ title: "היסטוריה — סדר פלוס" }] }),
+  head: () => ({ meta: [{ title: "היומן שלי — סדר פלוס" }] }),
+  validateSearch: (search: Record<string, unknown>) => parseJournalSearch(search),
   component: HistoryPage,
 });
 
-type TypeFilter = "all" | "late" | "absent" | "early" | "ohevei" | "bonus";
-type ExcusedFilter = "all" | "excused" | "non-excused";
-
 function HistoryPage() {
-  const { entries, remove, upsert } = useSeder();
+  const { entries, removeChecked, upsertChecked } = useSeder();
   const learning = useLearning();
-  const [tab, setTab] = useState<"list" | "learning">("list");
-  const [month, setMonth] = useState(currentMonthKey());
+  const [month] = useSelectedMonth();
+  const [view, setView] = useJournalView();
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  const [target, setTarget] = useState<DrawerTarget | null>(null);
+  const search = Route.useSearch();
+  const navigate = useNavigate();
+  const monthAppliedFor = useRef("");
+
+  // Arriving from a link (a search result, the month summary): pick the month,
+  // apply an explicit kind/filter, and open the record. If the record is not
+  // loaded yet the params stay put and this runs again when the data arrives.
+  useEffect(() => {
+    const wantsRecord = !!(search.id || search.date);
+    const intent = viewPatchFromSearch(search);
+    if (!search.month && !wantsRecord && !intent) return;
+    const clear = () => void navigate({ to: "/history", search: {}, replace: true });
+    if (!wantsRecord) {
+      if (search.month) setSelectedMonth(search.month);
+      // An explicit intent beats the saved tab and filters.
+      if (intent) setView(intent);
+      clear();
+      return;
+    }
+    const hit = resolveOpenTarget(search, entries, learning.items);
+    if (hit) {
+      setSelectedMonth(hit.month);
+      resetJournalFilters();
+      setView({ tab: hit.kind });
+      setTarget({ kind: hit.kind, id: hit.id });
+      clear();
+      return;
+    }
+    const sig = JSON.stringify(search);
+    if (search.month && monthAppliedFor.current !== sig) {
+      monthAppliedFor.current = sig;
+      setSelectedMonth(search.month);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setView is a fresh closure each render
+  }, [search, entries, learning.items, navigate]);
 
   const months = useMemo(() => monthsWithData(entries, learning.items), [entries, learning.items]);
   const monthEntries = useMemo(
@@ -107,335 +169,582 @@ function HistoryPage() {
     void exportClosings(all, "__all");
   };
 
+  const filteredSeder = useMemo(() => filterSeder(monthEntries, view), [monthEntries, view]);
+  const filteredLessons = useMemo(() => filterLearning(monthLessons, view), [monthLessons, view]);
+  const isSeder = view.tab === "seder";
+  const shown = isSeder ? filteredSeder.length : filteredLessons.length;
+  const total = isSeder ? monthEntries.length : monthLessons.length;
+  const lessonMinutes = filteredLessons.reduce((s, i) => s + effectiveLearningMin(i), 0);
+
   return (
     <AppShell
-      title="היסטוריה"
+      title="היומן שלי"
       subtitle={`${entries.length} רישומי סדר · ${learning.items.length} רישומי לימוד`}
       actions={
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={exportAllMonths}
           disabled={pdfBusy !== null}
           title="ייצוא שורת סיכום לכל החודשים"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-xs hover:bg-accent disabled:opacity-50"
+          aria-label="סיכום כל החודשים ל-PDF"
         >
-          {pdfBusy === "__all" ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <CalendarRange className="size-4" />
-          )}
-          <span className="hidden sm:inline">סיכום כל החודשים</span>
-        </button>
+          {pdfBusy === "__all" ? <Loader2 className="animate-spin" /> : <CalendarRange />}
+          <span className="hidden lg:inline">סיכום כל החודשים</span>
+        </Button>
       }
     >
-      <MonthPicker value={month} months={months} onChange={setMonth} closing={closing} />
+      <div className="stack-gap">
+        <JournalMonthBar months={months} />
 
-      <div className="mt-4 mb-4 inline-flex rounded-lg border border-border bg-card p-1">
-        <button
-          onClick={() => setTab("list")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium pressable transition ${tab === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        <Controls
+          view={view}
+          setView={setView}
+          seder={monthEntries.length}
+          lessons={monthLessons.length}
+          incomplete={incompleteCount(monthEntries)}
+        />
+
+        <PageSection
+          title={`${isSeder ? "נוכחות" : "לימוד נוסף"} · ${monthKeyLabel(month)}`}
+          aside={
+            <span className="flex flex-wrap items-baseline gap-x-4 gap-y-1" aria-live="polite">
+              {!isSeder && (
+                <span>
+                  נחשב:{" "}
+                  <span className="figure font-semibold text-foreground">{lessonMinutes}</span> דק׳
+                </span>
+              )}
+              <span>
+                {filtersActive(view) ? `${shown} מתוך ${total} רישומי החודש` : `${total} רישומים`}
+              </span>
+              {filtersActive(view) && (
+                <button
+                  type="button"
+                  onClick={resetJournalFilters}
+                  className="font-medium text-primary underline underline-offset-2"
+                >
+                  נקה סינון
+                </button>
+              )}
+            </span>
+          }
         >
-          <HistoryIcon className="size-3.5" /> נוכחות ({monthEntries.length})
-        </button>
-        <button
-          onClick={() => setTab("learning")}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium pressable transition ${tab === "learning" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          <BookOpen className="size-3.5" /> לימוד נוסף ({monthLessons.length})
-        </button>
+          {isSeder ? (
+            <AttendanceList
+              entries={filteredSeder}
+              empty={
+                monthEntries.length === 0 ? (
+                  <EmptyNote title="אין רישומי סדר בחודש הזה" />
+                ) : (
+                  <EmptyNote title="אין רישומים שתואמים לסינון">
+                    <button
+                      type="button"
+                      onClick={resetJournalFilters}
+                      className="text-primary underline underline-offset-2"
+                    >
+                      נקה סינון
+                    </button>{" "}
+                    כדי לראות את כל {monthEntries.length} רישומי החודש.
+                  </EmptyNote>
+                )
+              }
+              onOpen={(e) => setTarget({ kind: "seder", id: e.id })}
+              onRemove={(e) => {
+                // The notice and its undo appear only once the deletion reached storage.
+                removeChecked(e.id).then(
+                  (outcome) =>
+                    outcome.complete
+                      ? undoSederDelete(e, upsertChecked)
+                      : toast.warning(CONFLICT_SAVE_TEXT),
+                  (err: unknown) =>
+                    toast.error(err instanceof Error ? err.message : "המחיקה נכשלה"),
+                );
+              }}
+            />
+          ) : (
+            <LearningList
+              items={filteredLessons}
+              empty={
+                monthLessons.length === 0 ? (
+                  <EmptyNote title="אין רישומי לימוד בחודש הזה" />
+                ) : (
+                  <EmptyNote title="אין רישומים שתואמים לסינון" />
+                )
+              }
+              onOpen={(l) => setTarget({ kind: "learning", id: l.id })}
+              onRemove={(item) => {
+                // The notice and its undo appear only once the deletion has reached
+                // storage; a failed write leaves the record in place and says so.
+                learning
+                  .removeChecked(item.id)
+                  .then((outcome) =>
+                    outcome.complete
+                      ? toastUndo("רישום הלימוד נמחק", () => learning.addChecked(item))
+                      : toast.warning(CONFLICT_SAVE_TEXT),
+                  )
+                  .catch((e: unknown) =>
+                    toast.error(e instanceof Error ? e.message : "המחיקה נכשלה"),
+                  );
+              }}
+            />
+          )}
+        </PageSection>
+
+        <MonthClosingSection
+          closing={closing}
+          busy={pdfBusy === month}
+          disabled={pdfBusy !== null}
+          onExport={() => exportClosings([closing], month)}
+        />
       </div>
 
-      {tab === "learning" ? (
-        <LearningHistory
-          items={monthLessons}
-          onRemove={(item) => {
-            learning.remove(item.id);
-            toastUndo("רישום הלימוד נמחק", () => learning.add(item));
-          }}
-        />
-      ) : (
-        <AttendanceHistory
-          entries={monthEntries}
-          onRemove={(e) => {
-            remove(e.id);
-            toastUndo(`הרישום מ-${e.date} נמחק`, () => upsert(e));
-          }}
-        />
-      )}
-
-      <MonthClosingCard
-        closing={closing}
-        busy={pdfBusy === month}
-        disabled={pdfBusy !== null}
-        onExport={() => exportClosings([closing], month)}
-      />
+      <EntryDrawer target={target} onClose={() => setTarget(null)} />
     </AppShell>
   );
 }
 
-/** Arrows for the month either side, and a list for anything further away. */
-function MonthPicker({
-  value,
-  months,
-  onChange,
-  closing,
+// --------------------------------------------------------------- controls
+
+function Controls({
+  view,
+  setView,
+  seder,
+  lessons,
+  incomplete,
 }: {
-  value: string;
-  months: string[];
-  onChange: (key: string) => void;
-  closing: MonthClosing;
+  view: JournalView;
+  setView: (patch: Partial<JournalView>) => void;
+  seder: number;
+  lessons: number;
+  incomplete: number;
 }) {
-  const [listOpen, setListOpen] = useState(false);
-  const isCurrent = value === currentMonthKey();
+  const isSeder = view.tab === "seder";
+  const [open, setOpen] = useState(false);
+  const chips = activeFilterChips(view);
+  const fixOn = isSeder && view.type === "incomplete";
+  const tab = (on: boolean) =>
+    `pressable -mb-px border-b-2 px-1 pb-1.5 text-sm ${on ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`;
 
   return (
-    <div className="card-surface p-4">
-      <div className="flex items-center gap-2">
-        {/* Right arrow steps back in time: in an RTL layout, back is to the right. */}
-        <button
-          onClick={() => onChange(shiftMonth(value, -1))}
-          title="החודש הקודם"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition"
-        >
-          <ChevronRight className="size-4" />
-        </button>
-
-        <button
-          onClick={() => setListOpen((v) => !v)}
-          className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-center hover:bg-accent/40 pressable transition"
-        >
-          <div className="flex items-center justify-center gap-2">
-            {closing.closed ? (
-              <Lock className="size-3.5 text-muted-foreground" />
-            ) : (
-              <LockOpen className="size-3.5 text-primary" />
-            )}
-            <span className="text-base font-semibold">{closing.gregorianLabel}</span>
-          </div>
-          <div className="text-2xs text-muted-foreground">
-            {closing.hebrewLabel}
-            {!closing.closed && " · חודש פתוח"}
-          </div>
-        </button>
-
-        <button
-          onClick={() => onChange(shiftMonth(value, 1))}
-          disabled={isCurrent}
-          title="החודש הבא"
-          className="size-9 rounded-lg border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent pressable transition disabled:opacity-30"
-        >
-          <ChevronLeft className="size-4" />
-        </button>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-end gap-x-5 gap-y-2 border-b border-border">
+        <div className="flex gap-5" role="group" aria-label="סוג הרישומים">
+          <button
+            type="button"
+            onClick={() => setView({ tab: "seder" })}
+            aria-pressed={isSeder}
+            className={tab(isSeder)}
+          >
+            נוכחות <span className="figure">({seder})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setView({ tab: "learning" })}
+            aria-pressed={!isSeder}
+            className={tab(!isSeder)}
+          >
+            לימוד נוסף <span className="figure">({lessons})</span>
+          </button>
+        </div>
+        <div className="relative mb-1.5 min-w-[160px] flex-1">
+          <Search
+            className="absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={view.q}
+            onChange={(e) => setView({ q: e.target.value })}
+            aria-label="חיפוש ברישומי החודש"
+            placeholder={
+              isSeder
+                ? "חיפוש לפי תאריך, הערה, סיבה או תגית..."
+                : "חיפוש לפי תאריך, מסגרת או הערה..."
+            }
+            className="field-input w-full ps-9"
+          />
+        </div>
+        <div className="mb-1.5 flex items-center gap-2">
+          {isSeder && (incomplete > 0 || fixOn) && (
+            <button
+              type="button"
+              aria-pressed={fixOn}
+              onClick={() => setView({ type: fixOn ? "all" : "incomplete" })}
+              title="רשומות ללא שעות או ללא שעת הגעה. אין כאן הנחה שהייתה היעדרות."
+              className={`pressable rounded-md border px-2.5 py-1.5 text-sm ${fixOn ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground hover:bg-accent"}`}
+            >
+              דורש תיקון <span className="figure">({incomplete})</span>
+            </button>
+          )}
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls="journal-filters"
+            onClick={() => setOpen((o) => !o)}
+            className="pressable inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent"
+          >
+            <SlidersHorizontal className="size-3.5" aria-hidden="true" />
+            סינון <span className="figure">({chips.length})</span>
+          </button>
+        </div>
       </div>
 
-      {listOpen && (
-        <div className="mt-3 border-t border-border pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-muted-foreground">בחר חודש</span>
-            <button
-              onClick={() => setListOpen(false)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-auto">
-            {months.map((key) => (
+      {chips.length > 0 && (
+        <ul className="flex flex-wrap items-center gap-1.5" aria-label="סינונים פעילים">
+          {chips.map((c) => (
+            <li key={c.key}>
               <button
-                key={key}
-                onClick={() => {
-                  onChange(key);
-                  setListOpen(false);
-                }}
-                className={`rounded-md border px-2.5 py-2 text-xs pressable transition ${
-                  key === value
-                    ? "border-primary bg-primary/10 text-primary font-medium"
-                    : "border-border hover:bg-accent"
-                }`}
+                type="button"
+                onClick={() => setView(c.clear)}
+                aria-label={`הסר סינון: ${c.label}`}
+                className="pressable inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs hover:bg-accent"
               >
-                {monthKeyLabel(key)}
+                {c.label}
+                <X className="size-3" aria-hidden="true" />
               </button>
-            ))}
-          </div>
-        </div>
+            </li>
+          ))}
+        </ul>
       )}
 
-      {!isCurrent && (
-        <button
-          onClick={() => onChange(currentMonthKey())}
-          className="mt-3 w-full rounded-md border border-dashed border-border py-1.5 text-2xs text-muted-foreground hover:bg-accent pressable transition"
-        >
-          חזור לחודש הנוכחי
-        </button>
+      {open && (
+        <div id="journal-filters" className="flex flex-wrap items-center gap-2">
+          {isSeder ? (
+            <>
+              <select
+                aria-label="סינון לפי סדר"
+                value={view.seder}
+                onChange={(e) => setView({ seder: e.target.value as JournalView["seder"] })}
+                className="field-input"
+              >
+                <option value="all">כל הסדרים</option>
+                <option value="1">סדר א׳</option>
+                <option value="2">סדר ב׳</option>
+              </select>
+              <select
+                aria-label="סינון לפי סוג"
+                value={view.type}
+                onChange={(e) => setView({ type: e.target.value as TypeFilter })}
+                className="field-input"
+              >
+                <option value="all">כל הסוגים</option>
+                <option value="exceptions">חריגות (איחור, היעדרות, יציאה מוקדמת)</option>
+                <option value="late">איחור</option>
+                <option value="absent">היעדרות</option>
+                <option value="early">יציאה מוקדמת</option>
+                <option value="incomplete">דורש תיקון (חסר פירוט שעות)</option>
+                <option value="ohevei">אוהבי ה׳</option>
+                <option value="bonus">בונוס</option>
+              </select>
+              <select
+                aria-label="סינון לפי הצדקה"
+                value={view.excused}
+                onChange={(e) => setView({ excused: e.target.value as ExcusedFilter })}
+                className="field-input"
+              >
+                <option value="all">מוצדק ולא מוצדק</option>
+                <option value="excused">מוצדק בלבד</option>
+                <option value="non-excused">לא מוצדק בלבד</option>
+              </select>
+            </>
+          ) : (
+            <select
+              aria-label="סינון לפי מסגרת"
+              value={view.framework}
+              onChange={(e) => setView({ framework: e.target.value as JournalView["framework"] })}
+              className="field-input"
+            >
+              <option value="all">כל המסגרות</option>
+              <option value="kollel-erev">כולל ערב</option>
+              <option value="torato-beyado">תורתו בידו</option>
+              <option value="bein-hazmanim">ישיבת בין הזמנים</option>
+            </select>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-function AttendanceHistory({
-  entries,
-  onRemove,
-}: {
-  entries: SederEntry[];
-  onRemove: (e: SederEntry) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [sederFilter, setSederFilter] = useState<"all" | "1" | "2">("all");
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [excusedFilter, setExcusedFilter] = useState<ExcusedFilter>("all");
+// ------------------------------------------------------------- shared rows
 
-  const filtered = entries.filter((e) => {
-    if (sederFilter !== "all" && String(e.seder) !== sederFilter) return false;
-    const c = calcSeder(e);
-    if (typeFilter === "late" && !c.isLate) return false;
-    if (typeFilter === "absent" && !e.absent) return false;
-    if (typeFilter === "early" && !c.isEarlyDeparture) return false;
-    if (typeFilter === "ohevei" && !c.isOhevei) return false;
-    if (typeFilter === "bonus" && c.bonusMin === 0) return false;
-    if (excusedFilter === "excused" && c.excusedMin === 0) return false;
-    if (excusedFilter === "non-excused" && c.excusedMin > 0) return false;
-    if (
-      q &&
-      !(
-        e.date.includes(q) ||
-        (e.note || "").includes(q) ||
-        (e.excusedReason || "").includes(q) ||
-        (e.tags || []).some((t) => t.includes(q))
-      )
-    )
-      return false;
-    return true;
-  });
+/** Groups records by day, newest day first. */
+function groupByDay<T extends { date: string }>(list: readonly T[]): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  for (const x of list) map.set(x.date, [...(map.get(x.date) ?? []), x]);
+  return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0));
+}
 
-  const filtersOn =
-    q !== "" || sederFilter !== "all" || typeFilter !== "all" || excusedFilter !== "all";
-
+/** One day: the date and weekday as the anchor, the day's records beside it. */
+function DayGroup({ date, children }: { date: string; children: React.ReactNode }) {
+  const d = parseLocalDate(date);
   return (
-    <>
-      <div className="card-surface p-4 mb-4 space-y-3">
-        <div className="relative">
-          <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="חיפוש לפי תאריך, הערה, סיבה או תגית..."
-            className="w-full rounded-md border border-input bg-card ps-9 pe-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+    <li className="row-pad grid gap-x-6 gap-y-1 md:grid-cols-[11rem_1fr]">
+      <div>
+        <div className="text-base font-semibold">{WEEKDAYS_HE[d.getDay()]}</div>
+        <div className="text-sm text-muted-foreground">
+          <span className="figure" dir="ltr">
+            {formatDayDate(date)}
+          </span>{" "}
+          · {formatHebrewDate(d)}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-          <select
-            value={sederFilter}
-            onChange={(e) => setSederFilter(e.target.value as "all" | "1" | "2")}
-            className="field-input-sm"
-          >
-            <option value="all">כל הסדרים</option>
-            <option value="1">סדר א׳</option>
-            <option value="2">סדר ב׳</option>
-          </select>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-            className="field-input-sm"
-          >
-            <option value="all">כל הסוגים</option>
-            <option value="late">איחור</option>
-            <option value="absent">היעדרות</option>
-            <option value="early">יציאה מוקדמת</option>
-            <option value="ohevei">אוהבי ה׳</option>
-            <option value="bonus">בונוס</option>
-          </select>
-          <select
-            value={excusedFilter}
-            onChange={(e) => setExcusedFilter(e.target.value as ExcusedFilter)}
-            className="field-input-sm"
-          >
-            <option value="all">מוצדק ולא מוצדק</option>
-            <option value="excused">מוצדק בלבד</option>
-            <option value="non-excused">לא מוצדק בלבד</option>
-          </select>
-        </div>
-        {filtersOn && (
-          <div className="flex items-center justify-between text-2xs text-muted-foreground">
-            <span>
-              {filtered.length} מתוך {entries.length} רישומי החודש
-            </span>
-            <button
-              onClick={() => {
-                setQ("");
-                setSederFilter("all");
-                setTypeFilter("all");
-                setExcusedFilter("all");
-              }}
-              className="hover:text-foreground"
-            >
-              נקה סינון
-            </button>
-          </div>
-        )}
       </div>
-
-      <div className="card-surface overflow-x-auto">
-        <table className="w-full text-sm min-w-[760px]">
-          <thead className="bg-muted/50 text-xs text-muted-foreground">
-            <tr>
-              <th className="text-start px-3 py-3 font-medium">תאריך</th>
-              <th className="text-start px-3 py-3 font-medium">סדר</th>
-              <th className="text-start px-3 py-3 font-medium">הגעה</th>
-              <th className="text-start px-3 py-3 font-medium">יציאה</th>
-              <th className="text-start px-3 py-3 font-medium">חסר נטו</th>
-              <th className="text-start px-3 py-3 font-medium">בונוס</th>
-              <th className="text-start px-3 py-3 font-medium">מוצדק</th>
-              <th className="text-start px-3 py-3 font-medium">סטטוס</th>
-              <th className="px-3 py-3 w-12"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((e) => {
-              const c = calcSeder(e);
-              const tags: string[] = [];
-              if (e.absent) tags.push("היעדרות");
-              if (c.isLate) tags.push("איחור");
-              if (c.isEarlyDeparture) tags.push("יצא מוקדם");
-              if (c.isOhevei) tags.push("אוהבי ה׳");
-              return (
-                <tr key={e.id} className="border-t border-border hover:bg-accent/40">
-                  <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(e.date))}>
-                    {e.date}
-                  </td>
-                  <td className="px-3 py-3">{e.seder === 1 ? "א׳" : "ב׳"}</td>
-                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : e.arrival || "—"}</td>
-                  <td className="px-3 py-3 tabular-nums">{e.absent ? "—" : e.departure || "—"}</td>
-                  <td className="px-3 py-3 tabular-nums">{c.netMissingMin}</td>
-                  <td className="px-3 py-3 tabular-nums">{c.bonusMin}</td>
-                  <td className="px-3 py-3 tabular-nums">{c.excusedMin}</td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground">
-                    {tags.join(", ") || "מלא"}
-                  </td>
-                  <td className="px-3 py-3">
-                    <button
-                      title="מחק רישום"
-                      onClick={() => onRemove(e)}
-                      className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {!filtered.length && (
-          <div className="p-10 text-center text-sm text-muted-foreground">
-            {entries.length === 0 ? "אין רישומי סדר בחודש הזה" : "אין רישומים שתואמים לסינון"}
-          </div>
-        )}
-      </div>
-    </>
+      <div className="min-w-0">{children}</div>
+    </li>
   );
 }
 
+/** Edit weighs more than delete: a labelled button against a muted icon. */
+function RowActions({
+  label,
+  onOpen,
+  onRemove,
+}: {
+  label: string;
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="ms-auto flex items-center gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8"
+        onClick={onOpen}
+        aria-label={`פרטים ועריכה: ${label}`}
+      >
+        פרטים
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-8 text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive"
+        onClick={onRemove}
+        aria-label={`מחק רישום: ${label}`}
+        title="מחק רישום"
+      >
+        <Trash2 aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
+function ExpandButton({
+  open,
+  onToggle,
+  label,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={`${open ? "הסתר" : "הצג"} פרטים נוספים: ${label}`}
+      className="pressable grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      {open ? (
+        <ChevronUp className="size-4" aria-hidden="true" />
+      ) : (
+        <ChevronDown className="size-4" aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
+const lineClass = "flex flex-wrap items-baseline gap-x-4 gap-y-1 py-[calc(var(--density-row)/3)]";
+
+// ------------------------------------------------------------- attendance
+
+function statusTone(e: SederEntry, c: SederCalc): MarkTone {
+  const fullyExcused = c.excusedMin > 0 && c.netMissingMin === 0;
+  if (fullyExcused) return "excused";
+  return e.absent ? "absent" : "late";
+}
+
+/** Undo goes through the checked write: "restored" is said only once it is saved. */
+function undoSederDelete(
+  e: SederEntry,
+  upsertChecked: (e: SederEntry, o?: { restore?: boolean }) => Promise<unknown>,
+) {
+  toast(`הרישום מ-${formatDayDate(e.date)} נמחק`, {
+    duration: 8000,
+    action: {
+      label: "בטל",
+      onClick: () => {
+        upsertChecked(e, { restore: true }).then(
+          (outcome) =>
+            (outcome as { complete?: unknown } | undefined)?.complete === false
+              ? toast.warning("הרישום לא שוחזר במלואו: נערך גם בחלון אחר")
+              : toast.success("הרישום שוחזר"),
+          (err) => toast.error(err instanceof Error ? err.message : "השחזור נכשל"),
+        );
+      },
+    },
+  });
+}
+
+function sederName(e: SederEntry) {
+  return e.seder === 1 ? "סדר א׳" : "סדר ב׳";
+}
+
+function AttendanceList({
+  entries,
+  empty,
+  onOpen,
+  onRemove,
+}: {
+  entries: SederEntry[];
+  empty: React.ReactNode;
+  onOpen: (e: SederEntry) => void;
+  onRemove: (e: SederEntry) => void;
+}) {
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (id: string) =>
+    setExpanded((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const days = useMemo(
+    () =>
+      groupByDay(entries).map(
+        ([date, list]) => [date, [...list].sort((a, b) => a.seder - b.seder)] as const,
+      ),
+    [entries],
+  );
+  if (!entries.length) return empty;
+
+  return (
+    <ul className="ledger border-y border-border">
+      {days.map(([date, list]) => (
+        <DayGroup key={date} date={date}>
+          {list.map((e) => {
+            const c = calcSeder(e);
+            const words = notableStatusWords(e, c).join(" · ");
+            const attention = needsAttention(e, c);
+            const h = hoursState(e);
+            const extras = extraDetails(e, c);
+            const label = `${sederName(e)} ${formatDayDate(e.date)}`;
+            const open = expanded.has(e.id);
+            return (
+              <div key={e.id}>
+                <div className={lineClass}>
+                  <span className="w-14 shrink-0 font-medium">{sederName(e)}</span>
+                  <span className="figure w-36 shrink-0" dir="ltr" style={{ textAlign: "end" }}>
+                    {h === "absent" ? "—" : `${e.arrival || "—"} – ${e.departure || "—"}`}
+                  </span>
+                  <span
+                    className="figure w-24 shrink-0 text-end font-semibold"
+                    title="חסר נטו, בדקות"
+                  >
+                    {c.netMissingMin > 0 && (
+                      <>
+                        {c.netMissingMin}
+                        <span className="ms-1 text-xs font-normal text-muted-foreground">
+                          דק׳ חסר
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    {attention && words && <StatusMark tone={statusTone(e, c)}>{words}</StatusMark>}
+                  </span>
+                  <ExpandButton open={open} onToggle={() => toggle(e.id)} label={label} />
+                  <RowActions label={label} onOpen={() => onOpen(e)} onRemove={() => onRemove(e)} />
+                </div>
+                {open && (
+                  <ul className="mb-1 ms-[4.5rem] space-y-0.5 text-sm text-muted-foreground">
+                    {extras.map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </DayGroup>
+      ))}
+    </ul>
+  );
+}
+
+/** The detail that stays folded until asked for. */
+function extraDetails(e: SederEntry, c: SederCalc): string[] {
+  const out: string[] = [sederStatusWords(e, c).join(" · ")];
+  out.push(`חסר נטו ${c.netMissingMin} דק׳ (גולמי ${c.missingMin}, לא מוצדק ${c.nonExcusedMin})`);
+  if (c.excusedMin > 0)
+    out.push(`מוצדק ${c.excusedMin} דק׳${e.excusedReason ? ` — ${e.excusedReason}` : ""}`);
+  if (c.bonusMin > 0) out.push(`בונוס הגעה מוקדמת ${c.bonusMin} דק׳`);
+  if (e.manualAdjustMin)
+    out.push(`התאמה ידנית ${e.manualAdjustMin > 0 ? "+" : ""}${e.manualAdjustMin} דק׳`);
+  if (e.tags?.length) out.push(`תגיות: ${e.tags.join(", ")}`);
+  if (e.note) out.push(`הערה: ${e.note}`);
+  return out;
+}
+
+// --------------------------------------------------------------- learning
+
+function sourceLabel(l: LearningEntry) {
+  return l.source === "timer" ? "טיימר" : l.source === "range" ? "טווח שעות" : "ידני";
+}
+
+function LearningList({
+  items,
+  empty,
+  onOpen,
+  onRemove,
+}: {
+  items: LearningEntry[];
+  empty: React.ReactNode;
+  onOpen: (l: LearningEntry) => void;
+  onRemove: (l: LearningEntry) => void;
+}) {
+  const days = useMemo(() => groupByDay(items), [items]);
+  if (!items.length) return empty;
+
+  return (
+    <ul className="ledger border-y border-border">
+      {days.map(([date, list]) => (
+        <DayGroup key={date} date={date}>
+          {list.map((l) => {
+            const label = `${FRAMEWORK_LABELS[l.framework]} ${formatDayDate(l.date)}`;
+            return (
+              <div key={l.id} className={lineClass}>
+                <span className="w-36 shrink-0 font-medium">{FRAMEWORK_LABELS[l.framework]}</span>
+                <span className="figure w-36 shrink-0 text-end font-semibold">
+                  {effectiveLearningMin(l)}
+                  <span className="ms-1 text-xs font-normal text-muted-foreground">דק׳ נחשבות</span>
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                  {l.tanitDibur && (
+                    <span className="figure me-2 font-medium text-foreground">
+                      ({l.minutes} ×2 תענית דיבור)
+                    </span>
+                  )}
+                  {sourceLabel(l)}
+                  {l.note ? ` · ${l.note}` : ""}
+                </span>
+                <RowActions label={label} onOpen={() => onOpen(l)} onRemove={() => onRemove(l)} />
+              </div>
+            );
+          })}
+        </DayGroup>
+      ))}
+    </ul>
+  );
+}
+
+// ---------------------------------------------------------------- closing
+
 /** The month's closing line: seder totals plus the learning minutes in it. */
-function MonthClosingCard({
+function MonthClosingSection({
   closing,
   busy,
   disabled,
@@ -449,179 +758,47 @@ function MonthClosingCard({
   const { seder, learning } = closing;
   const { settings } = useSettings();
   const shasChavura = settings.seder.shasChavura;
-  const erevTitle =
+  const erevNote =
     learning.kollelErev !== learning.kollelErevRaw
       ? `${learning.kollelErevRaw} דק׳ בפועל · תענית דיבור נספרת כפול`
       : undefined;
 
   return (
-    <div className="mt-4 card-surface border-t-2 border-t-primary/40 p-5">
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {closing.closed ? "סיכום החודש" : "סיכום עד כה"} — {closing.gregorianLabel}
-          </h3>
-          <p className="text-2xs text-muted-foreground">
-            {closing.hebrewLabel} · {seder.entries} רישומי סדר
-            {!closing.closed && " · החודש טרם הסתיים"}
-          </p>
-        </div>
-        <button
-          onClick={onExport}
-          disabled={disabled}
-          className="inline-flex items-center gap-1.5 rounded-md border border-input bg-card px-3 py-2 text-xs font-medium hover:bg-accent disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <FileDown className="size-3.5" />}
+    <PageSection
+      title={`${closing.closed ? "סיכום החודש" : "סיכום עד כה"} · ${closing.gregorianLabel}`}
+      aside={
+        <Button variant="outline" size="sm" onClick={onExport} disabled={disabled}>
+          {busy ? <Loader2 className="animate-spin" /> : <FileDown />}
           ייצוא סיכום החודש ל-PDF
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        <ClosingStat label="סה״כ דקות" value={seder.totalMissing} />
-        <ClosingStat label="מוצדקות" value={seder.excused} />
-        <ClosingStat label="חסר נטו" value={seder.netMissing} />
-        <ClosingStat label="איחורים" value={seder.lateCount} />
-        <ClosingStat label="חיסורים" value={seder.absenceCount} />
-        <ClosingStat label="אוהבי ה׳" value={seder.oheveiCount} />
-        <ClosingStat label="כולל ערב" value={learning.kollelErev} title={erevTitle} />
+        </Button>
+      }
+    >
+      <p className="mb-4 text-sm text-muted-foreground">
+        {closing.hebrewLabel} · {seder.entries} רישומי סדר
+        {!closing.closed && " · החודש טרם הסתיים"}
+      </p>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 lg:grid-cols-7">
+        <Figure label="חסר נטו" value={seder.netMissing} unit="דק׳" />
+        <Figure label="סה״כ חסר" value={seder.totalMissing} unit="דק׳" />
+        <Figure label="מוצדק" value={seder.excused} unit="דק׳" />
+        <Figure label="איחורים" value={seder.lateCount} />
+        <Figure label="חיסורים" value={seder.absenceCount} />
+        <Figure label="אוהבי ה׳" value={seder.oheveiCount} />
+        <Figure label="כולל ערב" value={learning.kollelErev} unit="דק׳" note={erevNote} />
+        {learning.toratoBeyado > 0 && (
+          <Figure label="תורתו בידו" value={learning.toratoBeyado} unit="דק׳" />
+        )}
+        {learning.beinHazmanim > 0 && (
+          <Figure label="בין הזמנים" value={learning.beinHazmanim} unit="דק׳" />
+        )}
         {shasChavura && (
-          <ClosingStat
+          <Figure
             label="חבורת ש״ס"
             value={seder.shasCount}
-            title={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`}
+            note={`הגעות לסדר ב׳ עד ${SHAS_ARRIVAL_DEADLINE}`}
           />
         )}
       </div>
-      {learning.toratoBeyado > 0 || learning.beinHazmanim > 0 ? (
-        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {learning.toratoBeyado > 0 && (
-            <ClosingStat label="תורתו בידו" value={learning.toratoBeyado} />
-          )}
-          {learning.beinHazmanim > 0 && (
-            <ClosingStat label="בין הזמנים" value={learning.beinHazmanim} />
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ClosingStat({ label, value, title }: { label: string; value: number; title?: string }) {
-  return (
-    <div className="rounded-lg border border-border p-3" title={title}>
-      <div className="text-2xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-xl font-bold tabular-nums">{value}</div>
-    </div>
-  );
-}
-
-function LearningHistory({
-  items,
-  onRemove,
-}: {
-  items: LearningEntry[];
-  onRemove: (item: LearningEntry) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [framework, setFramework] = useState<string>("all");
-
-  const filtered = items.filter((i) => {
-    if (framework !== "all" && i.framework !== framework) return false;
-    if (
-      q &&
-      !(
-        i.date.includes(q) ||
-        (i.note || "").includes(q) ||
-        FRAMEWORK_LABELS[i.framework].includes(q)
-      )
-    )
-      return false;
-    return true;
-  });
-
-  const totalMin = filtered.reduce((s, i) => s + i.minutes, 0);
-
-  return (
-    <>
-      <div className="card-surface p-4 mb-4 space-y-3">
-        <div className="relative">
-          <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="חיפוש לפי תאריך, מסגרת או הערה..."
-            className="w-full rounded-md border border-input bg-card ps-9 pe-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-          <select
-            value={framework}
-            onChange={(e) => setFramework(e.target.value)}
-            className="field-input-sm"
-          >
-            <option value="all">כל המסגרות</option>
-            <option value="kollel-erev">כולל ערב</option>
-            <option value="torato-beyado">תורתו בידו</option>
-            <option value="bein-hazmanim">ישיבת בין הזמנים</option>
-          </select>
-          <div className="rounded-md border border-border px-2 py-1.5 text-center">
-            סה״כ: <span className="font-semibold tabular-nums">{totalMin}</span> דק׳ ·{" "}
-            {filtered.length} רישומים
-          </div>
-        </div>
-      </div>
-
-      <div className="card-surface overflow-x-auto">
-        <table className="w-full text-sm min-w-[600px]">
-          <thead className="bg-muted/50 text-xs text-muted-foreground">
-            <tr>
-              <th className="text-start px-3 py-3 font-medium">תאריך</th>
-              <th className="text-start px-3 py-3 font-medium">מסגרת</th>
-              <th className="text-start px-3 py-3 font-medium">דקות</th>
-              <th className="text-start px-3 py-3 font-medium">נחשב</th>
-              <th className="text-start px-3 py-3 font-medium">מקור</th>
-              <th className="text-start px-3 py-3 font-medium">הערה</th>
-              <th className="px-3 py-3 w-12"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((i) => (
-              <tr key={i.id} className="border-t border-border hover:bg-accent/40">
-                <td className="px-3 py-3 tabular-nums" title={formatHebrewDate(new Date(i.date))}>
-                  {i.date}
-                </td>
-                <td className="px-3 py-3">{FRAMEWORK_LABELS[i.framework]}</td>
-                <td className="px-3 py-3 tabular-nums">{i.minutes}</td>
-                <td className="px-3 py-3 tabular-nums">
-                  {i.tanitDibur ? (
-                    <span className="text-primary">{i.minutes * 2} ×2</span>
-                  ) : (
-                    i.minutes
-                  )}
-                </td>
-                <td className="px-3 py-3 text-xs text-muted-foreground">
-                  {i.source === "timer" ? "טיימר" : i.source === "range" ? "טווח שעות" : "ידני"}
-                </td>
-                <td className="px-3 py-3 text-xs text-muted-foreground">{i.note || "—"}</td>
-                <td className="px-3 py-3">
-                  <button
-                    onClick={() => onRemove(i)}
-                    title="מחק רישום"
-                    className="size-7 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive grid place-items-center"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!filtered.length && (
-          <div className="p-10 text-center text-sm text-muted-foreground">
-            {items.length === 0 ? "אין רישומי לימוד בחודש הזה" : "אין רישומים שתואמים לסינון"}
-          </div>
-        )}
-      </div>
-    </>
+    </PageSection>
   );
 }

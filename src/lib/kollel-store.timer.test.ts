@@ -10,7 +10,17 @@ import {
   resumeTimer,
   timerElapsedMs,
   isTimerPaused,
+  sameTimerSession,
+  removeTimerLimit,
+  getTimerGeneration,
+  type TimerSession,
 } from "./kollel-store";
+import { setStoreGate } from "@/lib/store-gate";
+
+// These tests exercise the stores as if the data file had been read: writes are
+// refused until the gate is "ready" (see store-gate.ts). In this environment the
+// real startup read finds no storage, so the gate is opened before every test.
+beforeEach(() => setStoreGate("ready"));
 
 beforeEach(() => {
   cancelTimer();
@@ -264,5 +274,80 @@ describe("pauseTimer / resumeTimer", () => {
     const t = startTimer("kollel-erev");
     const twoHoursLater = t.startedAt + 2 * 60 * 60_000;
     expect(timerElapsedMs(t, twoHoursLater)).toBe(2 * 60 * 60_000);
+  });
+});
+
+describe("previewStopTimer (finding 14)", () => {
+  it("reads the result without ending the session", async () => {
+    const { previewStopTimer } = await import("./kollel-store");
+    startTimer("kollel-erev");
+    vi.advanceTimersByTime(30 * 60000);
+    expect(previewStopTimer()?.minutes).toBe(30);
+    expect(getTimer()).not.toBe(null);
+    expect(stopTimer()?.minutes).toBe(30);
+    expect(getTimer()).toBe(null);
+  });
+});
+
+describe("sameTimerSession — a session replaced by another is never 'the same'", () => {
+  const MIN = 60000;
+  const fresh = (startedAt: number): TimerSession => ({ framework: "kollel-erev", startedAt });
+  const paused = (startedAt: number, accumulatedMs: number, pausedAt: number): TimerSession => ({
+    framework: "kollel-erev",
+    startedAt,
+    accumulatedMs,
+    pausedAt,
+  });
+
+  it("keeps the identity across pause and resume", () => {
+    const a = fresh(1000);
+    const p = paused(1000, 10 * MIN, 1000 + 10 * MIN);
+    const r: TimerSession = {
+      framework: "kollel-erev",
+      startedAt: 1000 + 20 * MIN,
+      accumulatedMs: 10 * MIN,
+    };
+    expect(sameTimerSession(a, p)).toBe(true);
+    expect(sameTimerSession(p, r)).toBe(true);
+    expect(sameTimerSession(a, r)).toBe(true);
+    // paused again after the resume: banked 10 + 5 minutes
+    const p2 = paused(r.startedAt, 15 * MIN, r.startedAt + 5 * MIN);
+    expect(sameTimerSession(p, p2)).toBe(true);
+    expect(sameTimerSession(r, p2)).toBe(true);
+  });
+
+  it("two different paused sessions are different (the old edge case)", () => {
+    const first = paused(1000, 40 * MIN, 1000 + 40 * MIN);
+    // cancelled, a new one started later and paused after 5 minutes
+    const second = paused(5_000_000, 5 * MIN, 5_000_000 + 5 * MIN);
+    expect(sameTimerSession(first, second)).toBe(false);
+  });
+
+  it("a fresh session replacing a banked one is different, and so is another start time", () => {
+    expect(sameTimerSession(paused(1000, 10 * MIN, 1000 + 10 * MIN), fresh(9_000_000))).toBe(false);
+    expect(sameTimerSession(fresh(1000), fresh(2000))).toBe(false);
+    expect(sameTimerSession(fresh(1000), { ...fresh(1000), framework: "torato-beyado" })).toBe(
+      false,
+    );
+    expect(sameTimerSession(null, null)).toBe(true);
+    expect(sameTimerSession(fresh(1), null)).toBe(false);
+  });
+});
+
+describe("removeTimerLimit", () => {
+  it("keeps the session (same generation, same clock) and drops only the limit", () => {
+    startTimer("kollel-erev", { limitMinutes: 10 });
+    vi.advanceTimersByTime(5 * 60000);
+    pauseTimer();
+    const before = getTimer()!;
+    const gen = getTimerGeneration();
+    const after = removeTimerLimit()!;
+    expect(after).toEqual({ ...before, limitMinutes: undefined });
+    expect("limitMinutes" in after).toBe(false);
+    expect(getTimerGeneration()).toBe(gen);
+  });
+  it("is a no-op without a limit", () => {
+    const t = startTimer("kollel-erev");
+    expect(removeTimerLimit()).toBe(t);
   });
 });

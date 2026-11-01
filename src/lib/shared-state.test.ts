@@ -36,6 +36,9 @@ let sharedState: typeof import("./shared-state");
 /** Fresh module registry each time, so `slots` and the hydration flag reset. */
 async function reload() {
   vi.resetModules();
+  // The gate is a module-level switch; these tests are about sharedValue, not
+  // about the startup read, so they run with the file already trusted.
+  (await import("./store-gate")).setStoreGate("ready");
   sharedState = await import("./shared-state");
 }
 
@@ -269,5 +272,25 @@ describe("isHydrated", () => {
   it("stays false when there is no window to sync from", () => {
     stringValue();
     expect(sharedState.isHydrated()).toBe(false);
+  });
+});
+
+// ============================================================================
+// setChecked
+// ============================================================================
+
+describe("setChecked", () => {
+  it("resolves with the new value in place once the write has gone through", async () => {
+    const v = stringValue();
+    await v.setChecked("dark");
+    expect(v.get()).toBe("dark");
+  });
+
+  it("puts the previous value back and rejects when the write fails", async () => {
+    const v = stringValue();
+    await v.setChecked("light");
+    storage.failWrites = true;
+    await expect(v.setChecked("dark")).rejects.toBeDefined();
+    expect(v.get()).toBe("light");
   });
 });
